@@ -62,3 +62,20 @@ func TestReport(t *testing.T) {
 		t.Errorf("json = %s", raw)
 	}
 }
+
+// TestReportUnit checks a report names what its tally counts, and a
+// merge into a report with no unit carries it.
+func TestReportUnit(t *testing.T) {
+	r := NewReport("doc")
+	r.Unit = "roots and steps"
+	r.Line(LineMapped)
+	total := NewReport("doc")
+	total.Merge(r)
+	var b strings.Builder
+	if err := total.WriteText(&b); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(b.String(), "doc: 1 roots and steps: mapped 1") {
+		t.Errorf("text:\n%s", b.String())
+	}
+}
