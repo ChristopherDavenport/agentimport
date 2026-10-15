@@ -7,15 +7,19 @@ versions may break the API.
 
 ## Unreleased
 
+- Dependencies: agentsession v0.0.26, whose jsonl store refuses a
+  session ID or working directory that would put a file outside its
+  root; the command's own check, which did the same, is gone.
 - Added: the `agentimport` command. `convert -o <store>` writes every
   session a conversion makes into an agentsession jsonl store and
   prints the report; `report` converts without writing and adds the
   findings up per source, for surveying a corpus. Each file's source is
   detected from its name and first lines, or named with `-from`;
   `-strict` fails on dropped or gap findings, `-slim` drops what the
-  model never saw, `-force` replaces a session the store holds. A
-  session ID or working directory that would put a file outside the
-  store is refused.
+  model never saw, `-force` replaces a session the store holds. The
+  store keeps every file under `-o` whatever the native log names: it
+  refuses an ID that is not a file name, and files a working directory
+  of `/..` under `default`.
 - Added: `claudecode`, a reader for Claude Code session transcripts
   (written from 2.1.271 to 2.1.300 and the Agent SDK's typings): line
   types that keep every member they do not declare and round-trip;

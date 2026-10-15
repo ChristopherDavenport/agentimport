@@ -217,9 +217,11 @@ transcript is converted with its main session, and an agentsession file
 is skipped.
 
 The store names a session's file by its ID and its directory by its
-working directory, both taken from the native log; the command refuses
-an ID that is not a single file name and a working directory whose
-project key is `.` or `..`, so a crafted log cannot write outside `-o`.
+working directory, both taken from the native log. The jsonl store
+keeps both under its root (agentsession v0.0.26): it refuses an ID
+that is not a file name with `jsonl.ErrBadName` and files a working
+directory of `/..` under `default`, so a crafted log cannot write
+outside `-o`.
 
 ## Tests
 
