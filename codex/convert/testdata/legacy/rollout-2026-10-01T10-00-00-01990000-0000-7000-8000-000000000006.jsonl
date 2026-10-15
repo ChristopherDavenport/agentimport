@@ -1,0 +1,8 @@
+{"id":"01990000-0000-7000-8000-000000000006","timestamp":"2025-08-01T09:00:00.000Z","instructions":"Prefer Go.","git":{"commit_hash":"def456","branch":"dev"}}
+{"record_type":"state"}
+{"type":"message","role":"user","content":[{"type":"input_text","text":"Hello."}]}
+{"type":"reasoning","id":"rs_9","summary":[],"encrypted_content":"gAAAAold"}
+{"type":"function_call","name":"shell","arguments":"{\"command\": [\"pwd\"]}","call_id":"call_9"}
+{"type":"function_call_output","call_id":"call_9","output":"/work"}
+{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Hi."}]}
+{"record_type":"state"}

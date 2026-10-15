@@ -1,0 +1,13 @@
+codex: 14 lines: mapped 14 kept 0 dropped 0 malformed 0
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  gap      agentimport/vcs-branch                            1  the git branch is the vcs member codex:branch; the format's vcs has no branch (at 1)
+  lossy    codex/output-truncation                           1  the output is 80 bytes; Codex cut what it sent to about 40 bytes by the model's truncation policy, and the output is written whole, as recorded (at 9)
+  lossy    codex/response-id                                 1  the rollout names no response ids (only the token usage records of newer rollouts do); a response is named codex-line-<n> after its first item's line (at 4)
+  lossy    codex/tools-unrecorded                            1  Codex does not record the tool definitions it sends the model; the session's config has none (at 1)
+  kept     codex/custom-tool-call                            2  a Responses custom_tool_call is a function call, marked codex:tool_kind "custom"; its free-form input is the arguments {"input": …} (at 4, 8)
+  kept     codex/openai-item                                 2  an OpenAI item type openresponses does not type is the extension item openai.local_shell_call, its body verbatim (at 5, 6)
+  kept     codex/rate-limits                                 3  the rate limits reported with the usage are kept in codex:rate_limits (at 7, 11, 14)
+  kept     codex/repository-url                              1  the repository URL is the vcs member codex:repository_url (at 1)
+  kept     codex/session-meta-members                        1  kept in the header member codex:session_meta: model_provider, originator, source (at 1)
+  kept     codex/token-count                                 3  the thread's running total and context window are kept in codex:token_count (at 7, 11, 14)
+  kept     codex/turn-context                                1  the turn's other settings (approval and sandbox policy and the like), which reach the model as messages the rollout records, are kept in codex:turn_context (at 2)
