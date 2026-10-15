@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -19,7 +20,9 @@ import (
 var update = flag.Bool("update", false, "rewrite the golden files")
 
 // fixtures lists the fixture directories under testdata, each holding
-// one rollout.
+// one rollout, or a sessions tree filed as Codex files one,
+// sessions/YYYY/MM/DD/, whose earliest rollout is the one converted and
+// the others its relatives.
 func fixtures(t *testing.T) map[string]string {
 	t.Helper()
 	dirs, err := os.ReadDir("testdata")
@@ -32,6 +35,12 @@ func fixtures(t *testing.T) map[string]string {
 			continue
 		}
 		matches, err := filepath.Glob(filepath.Join("testdata", d.Name(), "*.jsonl"))
+		if err == nil && len(matches) == 0 {
+			matches, err = filepath.Glob(filepath.Join("testdata", d.Name(), "sessions", "*", "*", "*", "rollout-*.jsonl"))
+			if len(matches) > 1 {
+				matches = matches[:1]
+			}
+		}
 		if err != nil || len(matches) != 1 {
 			t.Fatalf("%s: want one rollout, have %v", d.Name(), matches)
 		}
@@ -41,19 +50,48 @@ func fixtures(t *testing.T) map[string]string {
 }
 
 // convertFixture converts a fixture and checks what every conversion
-// must hold: every line accounted for, every code documented.
+// must hold: every line accounted for, every code documented, every
+// link agreeing with the session it names. A fixture's relatives, the
+// rollouts of the threads it spawned, sit beside it at any depth and
+// convert with it.
 func convertFixture(t *testing.T, path string, opts Options) *agentimport.Result {
 	t.Helper()
-	f, err := codex.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
 	res, err := ConvertFile(path, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := res.Report.Lines(), f.LineCount(); got != want {
-		t.Errorf("the report accounts for %d lines; the file holds %d", got, want)
+	want := 0
+	for _, s := range res.Sessions {
+		p := path
+		if s != res.Sessions[0] {
+			x, err := codex.IndexFor(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			rs := x.Rollouts(s.ID())
+			if len(rs) == 0 {
+				t.Fatalf("session %s converted from no rollout of the fixture", s.ID())
+			}
+			p = rs[len(rs)-1].Path
+		}
+		f, err := codex.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want += f.LineCount()
+	}
+	if got := res.Report.Lines(); got != want {
+		t.Errorf("the report accounts for %d lines; the files converted hold %d", got, want)
+	}
+	byID := map[string]*agentsession.Session{}
+	for _, s := range res.Sessions {
+		byID[s.ID()] = s
+	}
+	resolve := func(id string) (*agentsession.Session, error) { return byID[id], nil }
+	for _, s := range res.Sessions {
+		if err := s.VerifyLinks(resolve); err != nil {
+			t.Errorf("session %s: %v", s.ID(), err)
+		}
 	}
 	for _, fd := range res.Report.Findings {
 		if fd.Code == "codex/unreached" {
@@ -455,5 +493,197 @@ func TestRecordOrderGuess(t *testing.T) {
 	resps, tied := responses(t, res.Sessions[0])
 	if len(resps) != 2 || tied[resps[0].ResponseID] != 3 || resps[0].Usage == nil || resps[0].Usage.InputTokens != 50 {
 		t.Errorf("responses = %+v, %v", resps, tied)
+	}
+}
+
+// TestSubagentLinks converts the family fixtures: each spawn's output is
+// preceded by a peer link naming the thread it started, every thread
+// the index holds converts after its parent, a fork's copied spawn links
+// nothing, and a spawn whose rollout is absent keeps its link.
+func TestSubagentLinks(t *testing.T) {
+	const (
+		parent = "01990000-0000-7000-8000-0000000000f0"
+		plain  = "01990000-0000-7000-8000-0000000000f1"
+		fork   = "01990000-0000-7000-8000-0000000000f2"
+		grand  = "01990000-0000-7000-8000-0000000000f3"
+		absent = "01990000-0000-7000-8000-0000000000f4"
+	)
+	type link struct{ rel, session, call string }
+	links := func(s *agentsession.Session) []link {
+		var out []link
+		for _, e := range s.Entries() {
+			if l, ok := e.(*agentsession.LinkEntry); ok {
+				out = append(out, link{l.Rel, l.Session, l.CallID})
+			}
+		}
+		return out
+	}
+	res := convertFixture(t, fixtures(t)["family"], Options{})
+	var ids []string
+	for _, s := range res.Sessions {
+		ids = append(ids, s.ID())
+	}
+	if got := strings.Join(ids, " "); got != strings.Join([]string{parent, plain, grand, fork}, " ") {
+		t.Fatalf("sessions = %s", got)
+	}
+	for i, want := range [][]link{
+		{{agentsession.RelPeer, plain, "call_a"}, {agentsession.RelPeer, fork, "call_b"}, {agentsession.RelPeer, absent, "call_d"}},
+		{{agentsession.RelPeer, grand, "call_g"}},
+		nil,
+		{{agentsession.RelForkOf, parent, ""}},
+	} {
+		if got := links(res.Sessions[i]); !reflect.DeepEqual(got, want) {
+			t.Errorf("session %d links = %v, want %v", i, got, want)
+		}
+	}
+	for i, wantParent := range []string{"", parent, plain, parent} {
+		if h := res.Sessions[i].Header(); h.ParentSession != wantParent || h.SpawnedBy != "" {
+			t.Errorf("session %d header: parent_session %q, spawned_by %q", i, h.ParentSession, h.SpawnedBy)
+		}
+	}
+	// The link follows the spawn's output, the harness's
+	// acknowledgement, so a reader does not take the child to have
+	// answered the call.
+	entries := res.Sessions[0].Entries()
+	for i, e := range entries {
+		if l, ok := e.(*agentsession.LinkEntry); ok {
+			prev, ok := entries[i-1].(*agentsession.ItemEntry)
+			out, isOut := prev.Item.(*openresponses.FunctionCallOutput)
+			if !ok || !isOut || out.CallID != l.CallID {
+				t.Errorf("the link for %s does not follow its call's output", l.CallID)
+			}
+		}
+	}
+	codes := map[string]int{}
+	for _, f := range res.Report.Findings {
+		codes[f.Code]++
+	}
+	if codes["codex/subagent-missing"] != 1 || codes["codex/subagent-unlinked"] != 0 {
+		t.Errorf("codes = %v", codes)
+	}
+
+	// Alone: the one rollout, its links kept, every child missing.
+	alone := convertFixture(t, fixtures(t)["family"], Options{Alone: true})
+	if len(alone.Sessions) != 1 || len(links(alone.Sessions[0])) != 3 {
+		t.Errorf("alone: %d sessions, links %v", len(alone.Sessions), links(alone.Sessions[0]))
+	}
+
+	// MultiAgentV2: the output names the task, the record the thread.
+	v2 := convertFixture(t, fixtures(t)["family-v2"], Options{})
+	if len(v2.Sessions) != 2 {
+		t.Fatalf("v2: %d sessions", len(v2.Sessions))
+	}
+	if got := links(v2.Sessions[0]); !reflect.DeepEqual(got, []link{{agentsession.RelPeer, "01990000-0000-7000-8000-0000000000e1", "call_c"}}) {
+		t.Errorf("v2 links = %v", got)
+	}
+
+	// MultiAgentV2 at 0.130: one spawn named by its collab_agent_spawn_end
+	// event, one by its output's task name alone.
+	v130 := convertFixture(t, fixtures(t)["family-v2-0130"], Options{})
+	if len(v130.Sessions) != 3 {
+		t.Fatalf("0.130: %d sessions", len(v130.Sessions))
+	}
+	if got := links(v130.Sessions[0]); !reflect.DeepEqual(got, []link{
+		{agentsession.RelPeer, "01990000-0000-7000-8000-0000000000d1", "call_e"},
+		{agentsession.RelPeer, "01990000-0000-7000-8000-0000000000d2", "call_f"},
+	}) {
+		t.Errorf("0.130 links = %v", got)
+	}
+
+	// Alone converts the one rollout whatever the index holds.
+	x, err := codex.IndexFor(fixtures(t)["family"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res := convertFixture(t, fixtures(t)["family"], Options{Index: x, Alone: true}); len(res.Sessions) != 1 {
+		t.Errorf("alone with an index: %d sessions", len(res.Sessions))
+	}
+}
+
+// TestSubagentFails checks a sub-agent that cannot be converted costs
+// only itself: the parent and its other sub-agents convert, the failure
+// is reported, and the failed one's own sub-agent converts still.
+func TestSubagentFails(t *testing.T) {
+	src := filepath.Join("testdata", "family", "sessions")
+	dst := filepath.Join(t.TempDir(), "sessions")
+	err := filepath.WalkDir(src, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, _ := filepath.Rel(src, p)
+		if d.IsDir() {
+			return os.MkdirAll(filepath.Join(dst, rel), 0o755)
+		}
+		data, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(filepath.Join(dst, rel), data, 0o600)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	main := filepath.Join(dst, "2026", "10", "02", "rollout-2026-10-02T10-00-00-01990000-0000-7000-8000-0000000000f0.jsonl")
+	x, err := codex.IndexFor(main)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The plain child vanishes after the index was made.
+	plain := "01990000-0000-7000-8000-0000000000f1"
+	if err := os.Remove(x.Rollouts(plain)[0].Path); err != nil {
+		t.Fatal(err)
+	}
+	res, err := ConvertFile(main, Options{Index: x})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, s := range res.Sessions {
+		ids = append(ids, s.ID())
+	}
+	if want := []string{"01990000-0000-7000-8000-0000000000f0", "01990000-0000-7000-8000-0000000000f3", "01990000-0000-7000-8000-0000000000f2"}; !reflect.DeepEqual(ids, want) {
+		t.Errorf("sessions = %v, want %v", ids, want)
+	}
+	failed := 0
+	for _, f := range res.Report.Findings {
+		if f.Code == "codex/subagent-failed" {
+			failed++
+		}
+	}
+	if failed != 1 {
+		t.Errorf("%d subagent-failed findings", failed)
+	}
+	doccheck.Check(t, Source, res.Report)
+}
+
+// TestRepeatedSpawnID checks two spawn calls sharing a native call id
+// each link the thread their own output names, once.
+func TestRepeatedSpawnID(t *testing.T) {
+	line := func(ts, payload string) string {
+		return `{"timestamp":"2026-10-02T10:00:` + ts + `.000Z","type":"response_item","payload":` + payload + "}\n"
+	}
+	in := `{"timestamp":"2026-10-02T10:00:00.000Z","type":"session_meta","payload":{"id":"01990000-0000-7000-8000-0000000000b0","timestamp":"2026-10-02T10:00:00.000Z","cwd":"/w","cli_version":"0.160.0","source":"cli"}}` + "\n" +
+		line("01", `{"type":"message","role":"user","content":[{"type":"input_text","text":"Go."}]}`) +
+		line("02", `{"type":"function_call","name":"spawn_agent","namespace":"multi_agent_v1","arguments":"{}","call_id":"c"}`) +
+		line("03", `{"type":"function_call_output","call_id":"c","output":"{\"agent_id\":\"t-one\"}"}`) +
+		line("04", `{"type":"function_call_output","call_id":"c","output":"{\"agent_id\":\"t-one\"}"}`) +
+		line("05", `{"type":"function_call","name":"spawn_agent","namespace":"multi_agent_v1","arguments":"{}","call_id":"c"}`) +
+		line("06", `{"type":"function_call_output","call_id":"c","output":"{\"agent_id\":\"t-two\"}"}`)
+	f, err := codex.Read(strings.NewReader(in))
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := Convert(f, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, e := range res.Sessions[0].Entries() {
+		if l, ok := e.(*agentsession.LinkEntry); ok {
+			got = append(got, l.Session+"@"+l.CallID)
+		}
+	}
+	if len(got) != 2 || !strings.HasPrefix(got[0], "t-one@c") || !strings.HasPrefix(got[1], "t-two@") || got[1] == "t-two@c" {
+		t.Errorf("links = %v", got)
 	}
 }

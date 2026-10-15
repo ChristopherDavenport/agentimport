@@ -13,6 +13,8 @@ import (
 // accounts for every line.
 func FuzzConvert(f *testing.F) {
 	matches, _ := filepath.Glob("testdata/*/*.jsonl")
+	trees, _ := filepath.Glob("testdata/*/sessions/*/*/*/rollout-*.jsonl")
+	matches = append(matches, trees...)
 	for _, m := range matches {
 		data, err := os.ReadFile(m)
 		if err != nil {

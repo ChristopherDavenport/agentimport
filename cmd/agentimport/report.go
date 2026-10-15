@@ -50,16 +50,15 @@ func reportCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	t := newTotals()
 	var files []fileJSON
-	for _, in := range ins {
-		o := convertOne(in, c.slim)
+	newRunner(c.slim, &skip).each(ins, func(o outcome) {
 		t.add(o)
-		f := fileJSON{Path: in.path, Source: in.source.name, Error: errString(o.err)}
+		f := fileJSON{Path: o.in.path, Source: o.in.source.name, Error: errString(o.err)}
 		if o.res != nil {
 			sum := summarise(o.res.Report)
 			f.Sessions, f.Report = len(o.res.Sessions), &sum
 		}
 		files = append(files, f)
-	}
+	})
 	if *asJSON {
 		err = writeJSON(stdout, struct {
 			Files     []fileJSON         `json:"files"`

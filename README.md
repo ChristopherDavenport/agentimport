@@ -20,10 +20,14 @@ agentimport convert -o ~/sessions -report json ~/.codex/sessions
 ```
 
 Each file's source is told from its name and first lines; `-from
-claudecode|pi|codex` names it instead. A Claude Code session is
-converted with its sub-agents, each a session of its own linked to its
-parent. A session already in the store is refused unless `-force`
-replaces it. `-slim` drops what the model never saw rather than keep it
+claudecode|pi|codex` names it instead. A Claude Code session, and a
+Codex rollout, is converted with its sub-agents, each a session of its
+own linked to its parent; a Codex sub-agent's rollout given beside an
+ancestor's is converted with it, not again on its own, and on its own
+when the ancestor's conversion did not produce it. A session already in
+the store is kept as it is, listed, and is no failure, unless `-force`
+replaces it; the other sessions of the same conversion are written all
+the same, so converting a tree again adds what is new since. `-slim` drops what the model never saw rather than keep it
 in namespaced members, and `-strict` exits 1 when anything was dropped
 or had no place in the format. A Codex rollout compressed with zstd is
 refused; decompress it with `zstd -d` first.

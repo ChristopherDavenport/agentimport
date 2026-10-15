@@ -32,6 +32,12 @@ func TestRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The rollouts of the fixtures filed as a sessions tree.
+	relatives, err := filepath.Glob("convert/testdata/*/sessions/*/*/*/rollout-*.jsonl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	files = append(files, relatives...)
 	if len(files) < 9 {
 		t.Fatalf("found %d fixture files", len(files))
 	}

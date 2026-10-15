@@ -179,6 +179,12 @@ func (c *converter) item(l *codex.Line) error {
 	if err := c.emit(e, l); err != nil {
 		return err
 	}
+	c.countSpawn(l, it)
+	if answerTypes[it.Type] && !output && it.CallID != "" {
+		if err := c.linkSpawn(l, it); err != nil {
+			return err
+		}
+	}
 	c.mark(l, agentimport.LineMapped)
 	return nil
 }

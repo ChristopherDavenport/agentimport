@@ -25,29 +25,29 @@ type source struct {
 	name string
 	// find returns the sessions under a directory, or the file itself.
 	find    func(root string) ([]string, error)
-	convert func(path string, slim bool) (*agentimport.Result, error)
+	convert func(path string, r *runner) (*agentimport.Result, error)
 }
 
 var sources = []source{
 	{
 		name: ccconvert.Source,
 		find: claudecode.FindSessions,
-		convert: func(path string, slim bool) (*agentimport.Result, error) {
-			return ccconvert.ConvertFile(path, ccconvert.Options{Slim: slim})
+		convert: func(path string, r *runner) (*agentimport.Result, error) {
+			return ccconvert.ConvertFile(path, ccconvert.Options{Slim: r.slim})
 		},
 	},
 	{
 		name: piconvert.Source,
 		find: pi.FindSessions,
-		convert: func(path string, slim bool) (*agentimport.Result, error) {
-			return piconvert.ConvertFile(path, piconvert.Options{Slim: slim})
+		convert: func(path string, r *runner) (*agentimport.Result, error) {
+			return piconvert.ConvertFile(path, piconvert.Options{Slim: r.slim})
 		},
 	},
 	{
 		name: codexconvert.Source,
 		find: codex.FindSessions,
-		convert: func(path string, slim bool) (*agentimport.Result, error) {
-			return codexconvert.ConvertFile(path, codexconvert.Options{Slim: slim})
+		convert: func(path string, r *runner) (*agentimport.Result, error) {
+			return r.convertCodex(path)
 		},
 	},
 }

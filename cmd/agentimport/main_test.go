@@ -111,6 +111,7 @@ type convertResult struct {
 		Path    string
 		Source  string
 		Written []written
+		Kept    []string
 		Error   string
 	}
 	Aggregate map[string]summary
@@ -140,7 +141,8 @@ func TestConvertFixtures(t *testing.T) {
 		}
 		bySource[in.Source]++
 		s, _ := sourceNamed(in.Source)
-		want, err := s.convert(in.Path, false)
+		var ignored []skipped
+		want, err := s.convert(in.Path, newRunner(false, &ignored))
 		if err != nil {
 			t.Fatalf("%s: %v", in.Path, err)
 		}
@@ -165,7 +167,8 @@ func TestConvertFixtures(t *testing.T) {
 		}
 	}
 	for _, s := range res.Skipped {
-		if !strings.Contains(s.Path, "golden") && !strings.Contains(s.Path, "/subagents/agent-") {
+		if !strings.Contains(s.Path, "golden") && !strings.Contains(s.Path, "/subagents/agent-") &&
+			s.Reason != "a Codex sub-agent's rollout, converted with its parent" {
 			t.Errorf("skipped %s: %s", s.Path, s.Reason)
 		}
 	}
@@ -232,8 +235,10 @@ func TestConvertOverwrite(t *testing.T) {
 	if code, out, errOut := runCmd(t, "convert", "-o", store, in); code != 0 {
 		t.Fatalf("first convert: exit %d\n%s%s", code, out, errOut)
 	}
+	// A session the store holds is kept and listed, and is no failure:
+	// converting a tree again adds what is new.
 	code, out, _ := runCmd(t, "convert", "-o", store, in)
-	if code != 1 || !strings.Contains(out, "already in the store; -force replaces it") {
+	if code != 0 || !strings.Contains(out, "already in the store; -force replaces it") || strings.Contains(out, "wrote ") {
 		t.Errorf("second convert: exit %d\n%s", code, out)
 	}
 	code, out, _ = runCmd(t, "convert", "-force", "-o", store, in)
@@ -359,5 +364,99 @@ func TestNoEscape(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+// TestCodexFamily checks a Codex sub-agent's rollout converts with its
+// ancestor when both are inputs, and on its own when no ancestor is.
+func TestCodexFamily(t *testing.T) {
+	root := "../../codex/convert/testdata/family/sessions"
+	run := func(args ...string) (converted []string, kids int) {
+		t.Helper()
+		ins, skip, err := collect(args, "auto")
+		if err != nil {
+			t.Fatal(err)
+		}
+		newRunner(false, &skip).each(ins, func(o outcome) {
+			if o.err != nil {
+				t.Errorf("%s: %v", o.in.path, o.err)
+				return
+			}
+			converted = append(converted, filepath.Base(o.in.path))
+		})
+		for _, s := range skip {
+			if s.Reason == "a Codex sub-agent's rollout, converted with its parent" {
+				kids++
+			}
+		}
+		return converted, kids
+	}
+	// The whole tree: the parent converts its family; its three
+	// descendants, a grandchild among them, are not converted again.
+	if got, kids := run(root); len(got) != 1 || !strings.HasSuffix(got[0], "0000000000f0.jsonl") || kids != 3 {
+		t.Errorf("tree: converted %v, %d skipped", got, kids)
+	}
+	// One day: the children filed on it convert on their own, their
+	// parent not being an input.
+	if got, kids := run(filepath.Join(root, "2026", "10", "03")); len(got) != 2 || kids != 0 {
+		t.Errorf("day: converted %v, %d skipped", got, kids)
+	}
+	// The grandparent and the grandchild, not its parent: the grandchild
+	// waits for its grandparent, whose family holds it.
+	gp := filepath.Join(root, "2026", "10", "02", "rollout-2026-10-02T10-00-00-01990000-0000-7000-8000-0000000000f0.jsonl")
+	gc := filepath.Join(root, "2026", "10", "03", "rollout-2026-10-02T10-00-40-01990000-0000-7000-8000-0000000000f3.jsonl")
+	if got, kids := run(gc, gp); len(got) != 1 || kids != 1 {
+		t.Errorf("grandparent and grandchild: converted %v, %d skipped", got, kids)
+	}
+
+	// Converting again writes nothing new and fails nothing.
+	store := t.TempDir()
+	for i := range 2 {
+		code, out, errOut := runCmd(t, "convert", "-o", store, "-report", "json", root)
+		if code != 0 {
+			t.Fatalf("run %d: exit %d: %s\n%s", i, code, errOut, out)
+		}
+		var res convertResult
+		if err := json.Unmarshal([]byte(out), &res); err != nil {
+			t.Fatal(err)
+		}
+		if len(res.Sessions) != 1 {
+			t.Fatalf("run %d: %+v", i, res.Sessions)
+		}
+		if w, k := len(res.Sessions[0].Written), len(res.Sessions[0].Kept); i == 0 && (w != 4 || k != 0) || i == 1 && (w != 0 || k != 4) {
+			t.Errorf("run %d: wrote %d, kept %d", i, w, k)
+		}
+	}
+}
+
+// TestCodexCycle checks a rollout naming itself as its parent, and two
+// naming each other, each convert once and are never lost.
+func TestCodexCycle(t *testing.T) {
+	dir := t.TempDir()
+	meta := func(id, parent string) string {
+		return `{"timestamp":"2026-10-02T10:00:00.000Z","type":"session_meta","payload":{"id":"` + id + `","timestamp":"2026-10-02T10:00:00.000Z","cwd":"/w","cli_version":"0.160.0","source":{"subagent":{"thread_spawn":{"parent_thread_id":"` + parent + `","depth":1}}}}}` + "\n" +
+			`{"timestamp":"2026-10-02T10:00:01.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Hi."}]}}` + "\n"
+	}
+	const self, a, b = "01990000-0000-7000-8000-0000000000c0", "01990000-0000-7000-8000-0000000000c1", "01990000-0000-7000-8000-0000000000c2"
+	for id, parent := range map[string]string{self: self, a: b, b: a} {
+		if err := os.WriteFile(filepath.Join(dir, "rollout-2026-10-02T10-00-00-"+id+".jsonl"), []byte(meta(id, parent)), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ins, skip, err := collect([]string{dir}, "auto")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessions := map[string]int{}
+	newRunner(false, &skip).each(ins, func(o outcome) {
+		if o.err != nil {
+			t.Fatalf("%s: %v", o.in.path, o.err)
+		}
+		for _, s := range o.res.Sessions {
+			sessions[s.ID()]++
+		}
+	})
+	if len(sessions) != 3 || sessions[self] != 1 || sessions[a] != 1 || sessions[b] != 1 {
+		t.Errorf("sessions = %v", sessions)
 	}
 }
