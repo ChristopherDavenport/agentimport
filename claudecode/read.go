@@ -277,6 +277,11 @@ func Open(path string) (*Session, error) {
 // FindSessions returns the main transcripts under root: every
 // <session-id>.jsonl, at any depth, its name a UUID as session IDs are. root
 // may be ~/.claude/projects, one project directory, or a single file.
+// A session's own directory beside its transcript, <session-id>/, holds
+// its sub-agents and stored tool results and no main transcript, so it
+// is not searched, even as root. No directory is skipped for its name
+// alone: a project or fixture directory called "subagents" or "memory"
+// is searched like any other.
 func FindSessions(root string) ([]string, error) {
 	info, err := os.Stat(root)
 	if err != nil {
@@ -291,7 +296,7 @@ func FindSessions(root string) ([]string, error) {
 			return err
 		}
 		if d.IsDir() {
-			if p != root && d.Name() == "subagents" || d.Name() == "tool-results" || d.Name() == "memory" {
+			if sessionDir(p) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -302,6 +307,16 @@ func FindSessions(root string) ([]string, error) {
 		return nil
 	})
 	return out, err
+}
+
+// sessionDir reports whether dir is a session's own directory: named
+// by a session ID, beside that session's transcript.
+func sessionDir(dir string) bool {
+	if !isUUID(filepath.Base(dir)) {
+		return false
+	}
+	info, err := os.Stat(dir + ".jsonl")
+	return err == nil && !info.IsDir()
 }
 
 // isUUID reports whether s has the shape of a UUID.

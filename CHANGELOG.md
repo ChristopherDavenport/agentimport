@@ -7,6 +7,11 @@ versions may break the API.
 
 ## Unreleased
 
+- Fixed: `claudecode.FindSessions` skipped every directory named
+  `subagents`, `tool-results` or `memory`, wherever it was, so a
+  project or fixture directory of that name, or a root of that name,
+  hid its transcripts. It now skips only a session's own directory, the
+  `<session-id>/` beside its transcript.
 - Dependencies: agentsession v0.0.26, whose jsonl store refuses a
   session ID or working directory that would put a file outside its
   root; the command's own check, which did the same, is gone.
