@@ -39,12 +39,22 @@ func (c *converter) response(r *claudecode.Response, tail string, st *pathState)
 			continue
 		}
 		var parents []agentsession.EntryRef
+		var peer *claudecode.Agent
 		if a := c.agents[call.Use.ID]; a != nil && !c.cv.done[a.ID] && !c.linked(a) {
-			if tail, parents, err = c.link(a, call, callID, tail); err != nil {
-				return "", err
+			if waitedFor(a, call.Result) {
+				if tail, parents, err = c.link(a, call, callID, tail); err != nil {
+					return "", err
+				}
+			} else {
+				peer = a
 			}
 		}
 		if call.Result == nil {
+			if peer != nil {
+				if tail, err = c.peerLink(peer, call, callID, tail); err != nil {
+					return "", err
+				}
+			}
 			continue
 		}
 		if tail, err = c.decision(call, callID, tail); err != nil {
@@ -60,9 +70,18 @@ func (c *converter) response(r *claudecode.Response, tail string, st *pathState)
 			return "", err
 		}
 		tail = id
+		if peer != nil {
+			// The output is the CLI's acknowledgement that the agent
+			// started, not the agent's answer: its peer link follows
+			// it, so a reader does not take the agent to have answered
+			// the call (RFC 0001, link).
+			if tail, err = c.peerLink(peer, call, callID, tail); err != nil {
+				return "", err
+			}
+		}
 		written[call.Result] = true
 		c.mark(call.Result, agentimport.LineMapped)
-		c.bind(call.Result, id)
+		c.bind(call.Result, tail)
 	}
 	for _, l := range r.Extra {
 		if tail, err = c.resultExtra(l, tail, written[l]); err != nil {
@@ -610,27 +629,14 @@ func (c *converter) resultExtra(l *claudecode.Line, tail string, wrote bool) (st
 	return c.append(tail, e, l)
 }
 
-// link writes the link to the agent a call spawned. An agent the call
-// waited for, whose result is the call's output, is a subsession: it is
-// converted here, so the output can name its leaf. One the call only
-// started, in the background or as a team member, does work that
-// outlives the call: a peer, converted after this transcript.
+// link writes the link to an agent the call waited for, whose result is
+// the call's output: a subsession, linked before the output and
+// converted here, so the output can name its leaf.
 func (c *converter) link(a *claudecode.Agent, call *claudecode.Call, callID, tail string) (string, []agentsession.EntryRef, error) {
 	child := agentsession.SubsessionID(c.t.id, callID)
 	ts := call.Line.Time()
 	if call.Result != nil {
 		ts = call.Result.Time()
-	}
-	if !waitedFor(a, call.Result) {
-		link := agentsession.NewLinkEntry(agentsession.RelPeer, child)
-		link.CallID = callID
-		link.Timestamp = ts
-		id, err := c.append(tail, link, nil)
-		if err != nil {
-			return "", nil, err
-		}
-		c.spawned = append(c.spawned, spawn{agent: a, id: child, callID: callID})
-		return id, nil, nil
 	}
 	link := agentsession.NewSubsessionLink(child, callID)
 	link.Timestamp = ts
@@ -650,6 +656,27 @@ func (c *converter) link(a *claudecode.Agent, call *claudecode.Call, callID, tai
 		parents = []agentsession.EntryRef{{Session: child, Entry: leaf}}
 	}
 	return id, parents, nil
+}
+
+// peerLink writes the link to an agent the call only started, in the
+// background or as a team member, whose work outlives the call: a peer,
+// converted after this transcript. It follows the call's output, which
+// is the CLI's acknowledgement, not the agent's answer.
+func (c *converter) peerLink(a *claudecode.Agent, call *claudecode.Call, callID, tail string) (string, error) {
+	child := agentsession.SubsessionID(c.t.id, callID)
+	ts := call.Line.Time()
+	if call.Result != nil {
+		ts = call.Result.Time()
+	}
+	link := agentsession.NewLinkEntry(agentsession.RelPeer, child)
+	link.CallID = callID
+	link.Timestamp = ts
+	id, err := c.append(tail, link, nil)
+	if err != nil {
+		return "", err
+	}
+	c.spawned = append(c.spawned, spawn{agent: a, id: child, callID: callID})
+	return id, nil
 }
 
 // waitedFor reports whether the call that spawned an agent waited for

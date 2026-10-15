@@ -17,7 +17,9 @@ const convertUsage = `usage: agentimport convert -o <store> [-from auto|claudeco
 Converts each session and writes every session the conversion makes,
 the main session and its subsessions, into the agentsession jsonl store
 rooted at -o: <store>/<project-key>/<created-at>_<session-id>.jsonl.
-A session already in the store is refused unless -force replaces it.
+A session already in the store is kept as it is, and listed, unless
+-force replaces it; the other sessions of its conversion are written
+all the same, so converting a tree again adds what is new.
 Prints the report: in full for one input, and a line per input with
 the reports added up per source for several. Exits 1 when a conversion
 or a write failed, or with -strict when a report holds a dropped or gap
@@ -32,9 +34,11 @@ type written struct {
 
 // convertJSON is one input in convert -report json.
 type convertJSON struct {
-	Path    string              `json:"path"`
-	Source  string              `json:"source"`
-	Written []written           `json:"written,omitempty"`
+	Path    string    `json:"path"`
+	Source  string    `json:"source"`
+	Written []written `json:"written,omitempty"`
+	// Kept lists the sessions already in the store, left as they are.
+	Kept    []string            `json:"kept,omitempty"`
 	Report  *agentimport.Report `json:"report,omitempty"`
 	Summary *summary            `json:"summary,omitempty"`
 	Error   string              `json:"error,omitempty"`
@@ -87,14 +91,14 @@ func convertCmd(args []string, stdout, stderr io.Writer) int {
 	ctx := context.Background()
 	t := newTotals()
 	var results []convertJSON
-	for _, in := range ins {
-		o := convertOne(in, c.slim)
+	newRunner(c.slim, &skip).each(ins, func(o outcome) {
 		var ws []written
+		var kept []string
 		if o.err == nil {
-			ws, o.err = writeAll(ctx, st, o.res, *force)
+			ws, kept, o.err = writeAll(ctx, st, o.res, *force)
 		}
 		t.add(o)
-		r := convertJSON{Path: in.path, Source: in.source.name, Written: ws, Error: errString(o.err)}
+		r := convertJSON{Path: o.in.path, Source: o.in.source.name, Written: ws, Kept: kept, Error: errString(o.err)}
 		if o.res != nil {
 			if len(ins) == 1 {
 				r.Report = o.res.Report
@@ -104,7 +108,7 @@ func convertCmd(args []string, stdout, stderr io.Writer) int {
 			}
 		}
 		results = append(results, r)
-	}
+	})
 
 	if *format == "json" {
 		err = writeJSON(stdout, struct {
@@ -126,6 +130,11 @@ func writeConvertText(w io.Writer, results []convertJSON, ins []input, t *totals
 	for _, r := range results {
 		for _, s := range r.Written {
 			if _, err := fmt.Fprintf(w, "wrote %s\n", displayPath(s.File)); err != nil {
+				return err
+			}
+		}
+		for _, id := range r.Kept {
+			if _, err := fmt.Fprintf(w, "kept %s: already in the store; -force replaces it\n", id); err != nil {
 				return err
 			}
 		}
@@ -157,26 +166,37 @@ func writeConvertText(w io.Writer, results []convertJSON, ins []input, t *totals
 }
 
 // writeAll writes every session of a result into the store, the main
-// session first. A session's entries are appended in the order the
-// converter wrote them, so the store computes the same IDs and moves
-// the leaf the same way.
-func writeAll(ctx context.Context, st *jsonl.Store, res *agentimport.Result, force bool) ([]written, error) {
-	var ws []written
+// session first, each on its own: a session already in the store is
+// kept as it is unless force, and listed, and a session that fails to
+// write does not stop the others, so importing a tree again writes the
+// sub-agents spawned since. A session's entries are appended in the
+// order the converter wrote them, so the store computes the same IDs
+// and moves the leaf the same way.
+func writeAll(ctx context.Context, st *jsonl.Store, res *agentimport.Result, force bool) (ws []written, kept []string, err error) {
+	var errs []error
 	for _, s := range res.Sessions {
 		w, err := write(ctx, st, s, force)
-		if err != nil {
-			return ws, err
+		switch {
+		case errors.Is(err, errStored):
+			kept = append(kept, s.ID())
+		case err != nil:
+			errs = append(errs, err)
+		default:
+			ws = append(ws, w)
 		}
-		ws = append(ws, w)
 	}
-	return ws, nil
+	return ws, kept, errors.Join(errs...)
 }
+
+// errStored is a session the store already holds, written without
+// force.
+var errStored = errors.New("already in the store")
 
 func write(ctx context.Context, st *jsonl.Store, s *agentsession.Session, force bool) (written, error) {
 	h := s.Header()
 	if _, err := st.Path(h.ID); err == nil {
 		if !force {
-			return written{}, fmt.Errorf("session %s is already in the store; -force replaces it", h.ID)
+			return written{}, errStored
 		}
 		if err := st.Delete(ctx, h.ID); err != nil {
 			return written{}, err

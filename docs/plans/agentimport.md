@@ -187,11 +187,14 @@ session replays through the same provider adapter:
 
 A sub-agent with its own transcript (Claude Code `subagents/`, Codex
 child rollouts) becomes its own session with `parent_session`, and the
-parent gets a link before the spawning call's output. Which link follows
-RFC 0001's lifetime rule: an agent the call waited for, whose result is
-the call's output, is a `subsession`, and its header carries
+parent gets a link to it. Which link follows RFC 0001's lifetime rule:
+an agent the call waited for, whose result is the call's output, is a
+`subsession`, linked before the output, and its header carries
 `spawned_by`; an agent the call only started, which works on after the
-call returns, is a `peer`, and its `parent_session` is provenance alone.
+call returns, is a `peer`, linked after the output, which is the
+harness's acknowledgement and not the agent's answer (the RFC reads an
+output that follows a link as the callee's answer), and its
+`parent_session` is provenance alone.
 Codex's `spawn_agent` always returns once the agent is started, so its
 sub-agents are peers. One conversion returns the main session and its
 sub-agents' sessions, each after its parent's; the command writes each
@@ -210,7 +213,10 @@ agentimport report [-from auto|claudecode|pi|codex] [-strict] [-slim] [-json] <f
 rooted at `-o` through the store's own API, so the result is a store
 `agentsession` and dax read, and prints the report: in full for one
 input, a line per input and the reports added up per source for
-several. A session the store holds is refused unless `-force`.
+several. Each session is written on its own: one the store holds is
+kept as it is and listed, and is no failure, unless `-force` replaces
+it, and a session that fails to write does not stop its siblings, so
+converting a tree again adds the sub-agents spawned since.
 `report` converts without writing and adds the findings up per source,
 which is how a corpus is surveyed. `-strict` exits 1 on any `dropped`
 or `gap` finding; a failed conversion exits 1 either way.
@@ -221,8 +227,12 @@ its `rollout-*` name, a `session_meta` or `record_type` line or the 2025
 bare layout's first object; a pi session by a first line of type
 `session` that is not an agentsession header; a Claude Code transcript
 by a `sessionId` on one of its first lines. A Claude Code sub-agent
-transcript is converted with its main session, as is a Codex sub-agent's
-rollout whose parent is among the inputs and in the same sessions tree;
+transcript is converted with its main session. A Codex rollout whose
+thread has an ancestor among the inputs, at any depth, waits for it:
+it is skipped when the ancestor's result holds its session, and
+converted on its own when none does, so no input is lost. The command
+indexes each Codex sessions tree once and passes the index to every
+conversion in it;
 an agentsession file is skipped.
 
 The store names a session's file by its ID and its directory by its

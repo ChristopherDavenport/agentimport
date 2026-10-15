@@ -9,20 +9,36 @@ versions may break the API.
 
 - Added: Codex sub-agents are linked. A thread converts with the
   threads it spawned, at any depth, each a session of its own after its
-  parent's, and the parent gets a `peer` link before each `spawn_agent`
+  parent's, and the parent gets a `peer` link after each `spawn_agent`
   output naming the thread it started, read from the output
-  (`multi_agent_v1`) or the `sub_agent_activity` / `item_completed`
-  record beside it (MultiAgentV2). `spawn_agent` returns once the agent
-  starts and the agent works on until closed, so by the RFC's lifetime
-  rule it is a peer. `codex.IndexDir`, `codex.ReadMeta` and
-  `codex.SessionsRoot` index a sessions tree by session meta;
-  `ConvertFile` indexes the tree a rollout is in, and `Options.Index`
-  and `Options.Alone` choose otherwise. The command converts a sub-agent's
-  rollout with its parent when both are among its inputs.
+  (`multi_agent_v1`, 0.98's collab tool), the `collab_agent_spawn_end`,
+  `sub_agent_activity` or `item_completed` record beside it, or, for
+  MultiAgentV2's output alone, the child spawned at the agent path it
+  names. `spawn_agent` returns once the agent starts and the agent works
+  on until closed, so by the RFC's lifetime rule it is a peer. A child
+  that cannot be converted is a finding and costs only itself.
+  `codex.IndexDir`, `codex.IndexFlat`, `codex.IndexFor`,
+  `codex.ReadMeta` and `codex.SessionsRoot` index a sessions tree by
+  each rollout's session meta line; `ConvertFile` indexes the tree a
+  rollout is in, and `Options.Index` and `Options.Alone` choose
+  otherwise.
+- Changed: the command writes each session of a conversion on its own:
+  a session already in the store is kept, listed, and is no failure
+  unless `-force` replaces it, and a session that fails to write does
+  not stop its siblings, so converting a tree again adds what is new.
+  It indexes each Codex sessions tree once, and converts a Codex
+  sub-agent's rollout with an ancestor among its inputs, or on its own
+  when the ancestor's conversion did not produce it.
+- Changed: a Claude Code background agent's or teammate's `peer` link
+  now follows the call's output, which is the CLI's acknowledgement,
+  rather than preceding it: RFC 0001 reads an output that follows a link
+  as the callee's answer.
 - Changed: `codex/subagent-unlinked` now marks only a sub-agent
   converted without its parent, or whose parent's rollout names no spawn
-  of it; new codes `codex/subagent-missing`, `codex/subagent-foreign` and
-  `codex/subagent-rollouts`.
+  of it; new codes `codex/subagent-missing`, `codex/subagent-foreign`,
+  `codex/subagent-rollouts`, `codex/subagent-failed`,
+  `codex/spawn-unresolved`, `codex/index-failed` and
+  `codex/index-skipped`.
 - Fixed: `claudecode.FindSessions` skipped every directory named
   `subagents`, `tool-results` or `memory`, wherever it was, so a
   project or fixture directory of that name, or a root of that name,

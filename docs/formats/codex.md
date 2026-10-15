@@ -92,7 +92,7 @@ rollouts' session meta lines instead (see Sub-agents and forks).
 | --- | --- |
 | `session_meta` | the header: `id` the thread id, `created_at`, `cwd`, `harness` `{codex, cli_version}`, `parent_session` the parent or fork origin; `base_instructions` a first `config`; `git` an `env` with `vcs`; the rest the header member `codex:session_meta` |
 | `forked_from_id` | a `fork_of` link, the session's first entry |
-| a `spawn_agent` call's output, or the `sub_agent_activity` or `item_completed` record naming the thread it started | a `peer` link to the thread's session before the output; the thread's rollout converts into that session, after this one (see below) |
+| a `spawn_agent` call's output, or the record naming the thread it started | a `peer` link to the thread's session after the output; the thread's rollout converts into that session, after this one (see below) |
 | `response_item` that is model output (assistant message, reasoning, calls, compaction items) | `item` entries tied to a `response` entry written after them |
 | `response_item` that is input (user, developer messages, outputs, harness-written assistant messages) | `item` entries |
 | a type openresponses types (`message`, `function_call`, `function_call_output`, `reasoning`, `compaction`) | that item; members it has no place for in `codex:item` |
@@ -226,38 +226,74 @@ Codex rebuilds it in its replay.
 A thread spawned by another names its parent in its session meta, in
 `parent_thread_id` or its `thread_spawn` source, and converts to a
 session whose `parent_session` is the parent's. The parent's rollout
-records the spawn as a `spawn_agent` function call, and names the
-thread it started in one of three places, by version and history mode:
+records the spawn as a call of Codex's own `spawn_agent`, with no
+namespace (0.98's collab tool, MultiAgentV2's) or in the
+`multi_agent_v1` namespace; a tool of that name in another namespace,
+an MCP server's, is not one. It names the thread it started in one of
+these, by version and persistence:
 
-- the call's output, `{"agent_id": "<thread id>", ...}`, written by the
-  spawn tool of 0.98 and of the `multi_agent_v1` namespace since;
+- the call's output, `{"agent_id": "<thread id>", ...}`: the collab tool
+  of 0.98 and `multi_agent_v1` since;
+- a `collab_agent_spawn_end` event, whose `call_id` and `new_thread_id`
+  name both (0.120 to 0.130, written in extended persistence only);
 - a `sub_agent_activity` event of kind `started`, whose `event_id` is
-  the call's id (MultiAgentV2, legacy history);
+  the call's id (MultiAgentV2 from 0.140, legacy history);
 - an `item_completed` event holding a `SubAgentActivity` item of kind
   `started` whose `id` is the call's (MultiAgentV2, paginated history),
   or a `CollabAgentToolCall` item of tool `spawn_agent` whose
-  `receiver_thread_ids` name the thread (`multi_agent_v1`, paginated).
+  `receiver_thread_ids` name the thread (`multi_agent_v1`, paginated);
+- MultiAgentV2's output alone, `{"task_name": "/root/<task>", ...}`,
+  when no record does (0.120 to 0.130 in default persistence): the
+  thread is the indexed child whose `thread_spawn.agent_path` is that
+  path. With none, `codex/spawn-unresolved`.
+
+A record names the call by its native id, and belongs to the last spawn
+call of that id before it, so two calls sharing an id link their own
+threads. A spawn made from code mode is no `spawn_agent` call of the
+thread's own, and its child converts unlinked.
 
 `spawn_agent` returns as soon as the agent is started; the agent works
 on until `close_agent` ends it, and the parent learns its result later,
 from `wait_agent` or a message. By RFC 0001's lifetime rule that makes
-it a `peer`, not a `subsession`: the parent gets a `peer` link before
-the call's output, naming the call by its recorded id and the child by
-its thread id, which is its session's ID. The child's header keeps
-`parent_session` as provenance and has no `spawned_by`, which only a
-subsession's carries.
+it a `peer`, not a `subsession`. The parent gets a `peer` link naming
+the call by its recorded id and the child by its thread id, which is its
+session's ID, after the call's output: the output is the harness's
+acknowledgement, from which the caller learns the agent's id, and the
+RFC reads an output that follows a link as the callee's answer. The
+child's header keeps `parent_session` as provenance and has no
+`spawned_by`, which only a subsession's carries.
 
-`ConvertFile` finds a thread's children by indexing the sessions tree
-the rollout is in (the nearest enclosing directory named `sessions`, or
-else the rollout's own directory), reading each rollout's session meta
-line alone (`codex.IndexDir`). Each child, and each of its children at
-any depth, converts into a session of its own after its parent's, in
-the same result and report; a finding about a child names its file. A
-thread with several rollouts, a reverted one, converts from its last,
-which Codex continues. `Options.Index` supplies an index instead, and
-`Options.Alone` converts the one rollout. A spawn whose child is not in
-the index still gets its link: the call's output names the thread, and
-the RFC lets a peer link name a session the reader does not hold.
+**Finding the children.** `ConvertFile` indexes the tree the rollout's
+relatives are in (`codex.IndexFor`), reading each rollout's first line
+alone, its session meta (`codex.ReadMeta`, at most `codex.MaxMetaSize`,
+8 MiB, for the meta carries the base instructions). A rollout Codex
+filed, `sessions/YYYY/MM/DD/`, indexes the whole sessions tree, since a
+sub-agent may be filed under another day; any other rollout indexes its
+own directory alone. Paths are made absolute and symbolic links
+resolved first. A directory that cannot be read or vanishes, and a
+rollout whose first line is no readable session meta, are left out and
+reported (`codex/index-skipped`); a fork copies its ancestors' metas
+after its own, so a damaged first line is never taken for an
+ancestor's. An index that cannot be built at all is reported
+(`codex/index-failed`) and the rollout converts alone. `Options.Index`
+supplies an index instead, and `Options.Alone` converts the one
+rollout whatever the index holds.
+
+Each child, and each of its children at any depth, converts into a
+session of its own after its parent's, in the same result and report;
+a finding about a child names its file. A thread with several
+rollouts, a reverted one, converts from its last, which Codex
+continues. Each thread converts once: a thread naming itself as its
+parent, or a cycle, ends there. A child that cannot be read, converted
+or verified, or whose conversion panics, is reported
+(`codex/subagent-failed`) and left out; the parent's link names it
+still, and its own children convert. A spawn whose child is not in the
+index keeps its link too: the call's records name the thread, and the
+RFC lets a peer link name a session the reader does not hold.
+
+A family's sessions are held in one result until it is returned, so a
+thread with hundreds of sub-agents holds hundreds of sessions at once;
+a converter's rollout is let go before its sub-agents convert.
 
 A fork made with `fork_context` copies the parent's history up to the
 spawn into its own rollout. The copied records are converted as its own
@@ -270,6 +306,12 @@ keeps its usage in `codex:usage` and is marked `codex:copied`, so
 summing usage over the parent and its forks counts it once; without one
 the copies cannot be told apart, and a copied spawn's output links its
 child from the fork too.
+
+**The command** indexes each tree once, however many of its rollouts
+are inputs, and converts a rollout whose thread has an ancestor among
+the inputs, at any depth, after the inputs it descends from: when one
+of their results holds its session it is listed as skipped, and when
+none does it converts on its own, so no input is lost.
 
 ## Extension types
 
@@ -357,6 +399,10 @@ every converter can report are in [README.md](README.md).
 | `codex/rollback-pre-turn` | lossy | A rollback undoes a compaction written before the dropped turn's first item; items written between them, which Codex keeps, are left on the branch left. |
 | `codex/rollback-nothing` | kept | A rollback with no user turn to drop changes nothing; it is a custom entry. |
 | `codex/session-meta-members` | kept, or dropped | Session meta members the header does not map, the base instructions' provenance among them, are the header member `codex:session_meta`. |
+| `codex/index-failed` | lossy | The tree the rollout is in could not be indexed (its directory unreadable, say); the rollout converts without its sub-agents. |
+| `codex/index-skipped` | lossy | The index left a rollout or a directory out: a session meta it could not read (damaged, compressed, longer than `codex.MaxMetaSize`), a directory it could not walk. A sub-agent there is not converted with its parent; the command lists these with its skipped inputs instead. |
+| `codex/spawn-unresolved` | lossy | A MultiAgentV2 spawn's output names an agent path and no record names its thread, and no indexed child of the thread was spawned at that path (or none was looked for): no link names it. |
+| `codex/subagent-failed` | dropped | A sub-agent's rollout could not be read, converted or verified, or its conversion panicked; it is left out, the parent's link names it all the same, and its own sub-agents convert. |
 | `codex/subagent-foreign` | lossy | A spawn's output names a thread whose session meta names another parent; the peer link names it, and it converts with that parent, if at all. |
 | `codex/subagent-missing` | lossy | A spawn names a thread whose rollout is not in the index, or none was looked for; the peer link names it, and no session for it is in the result. |
 | `codex/subagent-rollouts` | dropped | A sub-agent thread has several rollouts, a reverted thread's; the last, which Codex continues, is converted and the earlier are not. |

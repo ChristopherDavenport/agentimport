@@ -105,7 +105,7 @@ the parent's response that spawned it.
 | --- | --- | --- |
 | main transcript | session, `id` the native session ID | `created_at` the earliest timestamp, `cwd` the first, `harness` `claude-code` and the first `version`; header members `agentimport:source` and `claudecode:envelope` (`entrypoint`, `userType`) |
 | sub-agent the call waited for | session, `id` `SubsessionID(parent, call_id)`, `parent_session`, `spawned_by`; a `subsession` link before the call's output, which names the child's leaf in `parents` | meta file in header member `claudecode:agent_meta` |
-| sub-agent the call only started, team member | session, same `id`, `parent_session` as provenance and no `spawned_by`; a `peer` link with `call_id` and `session` before the call's output | its work outlives the call, which is the RFC's test for a peer |
+| sub-agent the call only started, team member | session, same `id`, `parent_session` as provenance and no `spawned_by`; a `peer` link with `call_id` and `session` after the call's output | its work outlives the call, which is the RFC's test for a peer; the output is the CLI's acknowledgement that the agent started, and RFC 0001 reads an output that follows a link as the callee's answer, so the link comes after it and a reader concludes nothing of it |
 | sub-agent no call spawned | session, `parent_session` alone, no link | |
 | first model below a root | `config` with `model`, first entry of the root | `requestedModel` when the line has it |
 | model change between responses | `config` delta with `model` | |

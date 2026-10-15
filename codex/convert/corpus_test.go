@@ -35,7 +35,18 @@ func TestCorpus(t *testing.T) {
 	}
 	total := agentimport.NewReport(Source)
 	failed, compressed := 0, 0
+	// A sub-agent whose parent the index holds waits for it, and
+	// converts on its own if its parent's family did not produce it.
+	var first, later []string
 	for _, p := range paths {
+		if m, err := codex.ReadMeta(p); err == nil && m != nil && len(x.Ancestors(m.ID)) > 0 {
+			later = append(later, p)
+		} else {
+			first = append(first, p)
+		}
+	}
+	produced := map[string]bool{}
+	for _, p := range append(first, later...) {
 		f, err := codex.ReadFile(p)
 		if errors.Is(err, codex.ErrCompressed) {
 			compressed++
@@ -46,8 +57,8 @@ func TestCorpus(t *testing.T) {
 			failed++
 			continue
 		}
-		if m := f.MetaLine(); m != nil && len(x.Rollouts(m.Meta.ParentThread())) > 0 {
-			continue // converted with its parent
+		if m := f.MetaLine(); m != nil && produced[m.Meta.ID] {
+			continue // converted with an ancestor
 		}
 		res, err := Convert(f, Options{Index: x})
 		if err != nil {
@@ -59,6 +70,7 @@ func TestCorpus(t *testing.T) {
 		byID := map[string]*agentsession.Session{}
 		for _, s := range res.Sessions {
 			byID[s.ID()] = s
+			produced[s.ID()] = true
 			if s == res.Sessions[0] {
 				continue
 			}

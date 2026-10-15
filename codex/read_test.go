@@ -32,8 +32,8 @@ func TestRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// A fixture's relatives, the rollouts of the threads it spawned.
-	relatives, err := filepath.Glob("convert/testdata/*/relatives/*.jsonl")
+	// The rollouts of the fixtures filed as a sessions tree.
+	relatives, err := filepath.Glob("convert/testdata/*/sessions/*/*/*/rollout-*.jsonl")
 	if err != nil {
 		t.Fatal(err)
 	}

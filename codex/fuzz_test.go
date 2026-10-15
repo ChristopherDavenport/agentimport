@@ -12,6 +12,8 @@ import (
 // must write back.
 func FuzzRead(f *testing.F) {
 	matches, _ := filepath.Glob("convert/testdata/*/*.jsonl")
+	trees, _ := filepath.Glob("convert/testdata/*/sessions/*/*/*/rollout-*.jsonl")
+	matches = append(matches, trees...)
 	for _, m := range matches {
 		data, err := os.ReadFile(m)
 		if err != nil {

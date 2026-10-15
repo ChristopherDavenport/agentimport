@@ -35,39 +35,74 @@ type Options struct {
 	Slim bool
 	// Index finds the rollouts of the threads a thread spawned, which
 	// are converted with it, each its own session after its parent's.
-	// ConvertFile indexes the sessions tree the rollout is in when it is
-	// nil; Convert converts the one rollout.
+	// ConvertFile indexes the tree the rollout is in when it is nil
+	// (codex.IndexFor); Convert converts the one rollout. A family's
+	// sessions are all held in the result, so a thread with hundreds of
+	// sub-agents holds hundreds of sessions at once.
 	Index *codex.Index
-	// Alone converts the rollout without its sub-agents, and ConvertFile
-	// indexes nothing.
+	// Alone converts the rollout without its sub-agents, whatever Index
+	// holds, and ConvertFile indexes nothing.
 	Alone bool
 }
 
 // ConvertFile reads the rollout at path and converts it, with the
-// sub-agents it spawned that the sessions tree holding it has: the
-// nearest enclosing directory named "sessions", or the rollout's own.
+// sub-agents it spawned that the tree holding it has: the sessions tree
+// when Codex filed it there, sessions/YYYY/MM/DD/, else its own
+// directory (see codex.SessionsRoot). An index that cannot be built, or
+// that left rollouts out, is reported.
 func ConvertFile(path string, opts Options) (*agentimport.Result, error) {
 	f, err := codex.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
+	var notes []agentimport.Finding
 	if opts.Index == nil && !opts.Alone {
-		if x, err := codex.IndexDir(codex.SessionsRoot(path)); err == nil {
+		x, err := codex.IndexFor(path)
+		if err != nil {
+			notes = append(notes, agentimport.Finding{Code: "codex/index-failed", Kind: agentimport.Lossy,
+				Detail: fmt.Sprintf("the tree the rollout is in could not be indexed (%v); it is converted without its sub-agents", err)})
+		} else {
 			opts.Index = x
+			notes = append(notes, IndexFindings(x)...)
 		}
 	}
-	return Convert(f, opts)
+	res, err := Convert(f, opts)
+	if err != nil {
+		return nil, err
+	}
+	for _, n := range notes {
+		res.Report.Add(n)
+	}
+	return res, nil
+}
+
+// IndexFindings reports what an index left out: each rollout whose
+// session meta could not be read and each directory that could not be
+// walked. A sub-agent among them is not converted with its parent.
+func IndexFindings(x *codex.Index) []agentimport.Finding {
+	var out []agentimport.Finding
+	for _, sk := range x.Skipped {
+		out = append(out, agentimport.Finding{Code: "codex/index-skipped", Kind: agentimport.Lossy,
+			Detail: fmt.Sprintf("%s was left out of the index (%v); a sub-agent there is not converted with its parent", sk.Path, sk.Err)})
+	}
+	return out
 }
 
 // Convert converts a rollout into a session and, with an index, each
 // sub-agent it spawned that the index holds into one of its own, at any
 // depth: the main session first, every other after its parent's. One
-// report covers them all; a sub-agent's findings name its file.
+// report covers them all; a sub-agent's findings name its file. Only
+// the main rollout's failure fails the conversion: a sub-agent that
+// cannot be read or converted is a finding, and its own sub-agents are
+// converted still.
 func Convert(f *codex.File, opts Options) (*agentimport.Result, error) {
 	fam := &family{opts: opts, report: agentimport.NewReport(Source), done: map[string]bool{}}
-	if err := fam.convert(f, "", nil); err != nil {
+	c, s, err := fam.one(f, "", nil, fam.report)
+	if err != nil {
 		return nil, err
 	}
+	fam.sessions = append(fam.sessions, s)
+	fam.children(s.ID(), c.links)
 	return &agentimport.Result{Report: fam.report, Sessions: fam.sessions}, nil
 }
 
@@ -76,7 +111,8 @@ type family struct {
 	opts     Options
 	report   *agentimport.Report
 	sessions []*agentsession.Session
-	// done marks the threads converted, so a cycle of parents ends.
+	// done marks the threads converted or tried, so each converts once
+	// and a cycle of parents ends.
 	done map[string]bool
 }
 
@@ -87,12 +123,12 @@ type parentRef struct {
 	linked bool
 }
 
-// convert converts one rollout, then the sub-agents it spawned. file
-// names the rollout in findings; empty for the main one.
-func (fam *family) convert(f *codex.File, file string, parent *parentRef) error {
+// one converts one rollout into one session, its findings in report.
+// file names the rollout in findings; empty for the main one.
+func (fam *family) one(f *codex.File, file string, parent *parentRef, report *agentimport.Report) (*converter, *agentsession.Session, error) {
 	c := &converter{
 		opts:      fam.opts,
-		report:    fam.report,
+		report:    report,
 		file:      file,
 		parent:    parent,
 		f:         f,
@@ -101,7 +137,10 @@ func (fam *family) convert(f *codex.File, file string, parent *parentRef) error 
 		once:      map[string]bool{},
 		reported:  map[string]bool{},
 		copyBound: -1,
-		spawns:    map[string]string{},
+		spawns:    map[spawnKey]string{},
+		tasks:     map[spawnKey]string{},
+		calls:     map[string]int{},
+		linked:    map[spawnKey]bool{},
 		links:     map[string]string{},
 
 		turnStarts:  map[string]bool{},
@@ -111,33 +150,32 @@ func (fam *family) convert(f *codex.File, file string, parent *parentRef) error 
 	}
 	h, err := c.header()
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	fam.done[h.ID] = true
 	c.b = agentimport.NewBuilder(h, Source, c.report)
 	c.b.File = file
 	if err := c.run(); err != nil {
-		if file != "" {
-			return fmt.Errorf("%s: %w", file, err)
-		}
-		return err
+		return nil, nil, err
 	}
 	s, err := agentimport.Finish(c.b.S)
 	if err != nil {
-		return fmt.Errorf("converted session does not verify: %w", err)
+		return nil, nil, fmt.Errorf("converted session does not verify: %w", err)
 	}
-	fam.sessions = append(fam.sessions, s)
-	return fam.children(c, h.ID)
+	return c, s, nil
 }
 
 // children converts the threads a converted thread spawned: those the
-// index names as its children and those a spawn record names, each
-// once. A thread with several rollouts, a reverted one, converts from
-// its last, which Codex continues.
-func (fam *family) children(c *converter, id string) error {
+// index names as its children and those its links name, each once,
+// depth first. A thread with several rollouts, a reverted one, converts
+// from its last, which Codex continues. A child that cannot be read,
+// converted or verified, or whose conversion panics, is reported, and
+// its own children are converted still. links maps the threads the
+// parent's peer links name to the call that names them.
+func (fam *family) children(id string, links map[string]string) {
 	x := fam.opts.Index
-	if x == nil {
-		return nil
+	if x == nil || fam.opts.Alone {
+		return
 	}
 	seen := map[string]bool{}
 	var kids []string
@@ -147,7 +185,7 @@ func (fam *family) children(c *converter, id string) error {
 			kids = append(kids, k)
 		}
 	}
-	for _, k := range c.linkedThreads() {
+	for k := range links {
 		if !seen[k] {
 			seen[k] = true
 			kids = append(kids, k)
@@ -161,24 +199,49 @@ func (fam *family) children(c *converter, id string) error {
 		}
 		last := rs[len(rs)-1]
 		if last.Parent != id {
-			// A spawn record names a thread whose session meta names
-			// another parent; it is that parent's to convert.
+			// A link names a thread whose session meta names another
+			// parent; it is that parent's to convert.
 			continue
 		}
+		fam.done[k] = true
 		file := fam.relative(last.Path)
 		if len(rs) > 1 {
 			fam.report.Addf(agentimport.Dropped, "codex/subagent-rollouts", file, 0,
 				"thread %s has %d rollouts, a reverted thread's; the last, which Codex continues, is converted and the earlier are not", k, len(rs))
 		}
-		f, err := codex.ReadFile(last.Path)
+		rep := agentimport.NewReport(Source)
+		kidLinks, s, err := fam.safeOne(last.Path, file, &parentRef{id: id, linked: links[k] != ""}, rep)
 		if err != nil {
-			return fmt.Errorf("sub-agent %s: %w", k, err)
+			fam.report.Addf(agentimport.Dropped, "codex/subagent-failed", file, 0,
+				"sub-agent %s could not be converted (%s); the parent's link names it all the same, and its own sub-agents are converted", k, agentimport.ErrorText(err))
+			fam.children(k, nil)
+			continue
 		}
-		if err := fam.convert(f, file, &parentRef{id: id, linked: c.links[k] != ""}); err != nil {
-			return err
-		}
+		fam.report.Merge(rep)
+		fam.sessions = append(fam.sessions, s)
+		fam.children(k, kidLinks)
 	}
-	return nil
+}
+
+// safeOne reads and converts a sub-agent's rollout, turning a panic
+// into an error, so one bad sub-agent costs only itself. It returns the
+// threads the sub-agent's links name, not the converter, so a
+// converter's rollout is not held while its descendants convert.
+func (fam *family) safeOne(path, file string, parent *parentRef, rep *agentimport.Report) (links map[string]string, s *agentsession.Session, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			links, s, err = nil, nil, fmt.Errorf("the converter panicked: %v", r)
+		}
+	}()
+	f, err := codex.ReadFile(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	c, s, err := fam.one(f, file, parent, rep)
+	if err != nil {
+		return nil, nil, err
+	}
+	return c.links, s, nil
 }
 
 // relative names a sub-agent's rollout by its path under the index's
@@ -205,9 +268,16 @@ type converter struct {
 	b      *agentimport.Builder
 	meta   *codex.Line
 
-	// spawns maps a spawn call's native id to the thread it started, as
-	// the call's output or a record beside it names it.
-	spawns map[string]string
+	// spawns maps a spawn call to the thread it started, as the call's
+	// output or a record beside it names it; tasks to the agent path a
+	// MultiAgentV2 output names, when nothing names the thread.
+	spawns map[spawnKey]string
+	tasks  map[spawnKey]string
+	// calls counts the spawn calls converted per native id, which
+	// spawnKey's n is, so two calls sharing an id are told apart.
+	calls map[string]int
+	// linked marks the spawn calls whose link is written.
+	linked map[spawnKey]bool
 	// links maps a spawned thread to the recorded id of the call whose
 	// peer link names it.
 	links map[string]string
@@ -569,44 +639,106 @@ func (c *converter) start() error {
 	return nil
 }
 
+// spawnKey names one spawn call: its native id, and which call of that
+// id it is, counted from one in file order. Codex may repeat a call id,
+// and a native id alone would hang two spawns on one.
+type spawnKey struct {
+	native string
+	n      int
+}
+
 // findSpawns reads which thread each spawn call started, from the
 // call's output or the record beside it, before any line is converted,
-// since that record may come after the output. A call a fork copied
-// from its parent is the parent's spawn, not this thread's, and links
-// nothing.
+// since that record may come after the output. A record names the call
+// by its native id and belongs to the last spawn call of that id before
+// it. A call a fork copied from its parent is the parent's spawn, not
+// this thread's, and links nothing.
 func (c *converter) findSpawns() {
-	calls := map[string]bool{}
-	for _, l := range c.f.Lines {
-		if l.Item.IsSpawnCall() && l.Item.CallID != "" && !c.copiedLine(l) {
-			calls[l.Item.CallID] = true
+	n := map[string]int{}
+	key := func(id string) (spawnKey, bool) {
+		if id == "" || n[id] == 0 {
+			return spawnKey{}, false
 		}
+		return spawnKey{id, n[id]}, true
 	}
 	for _, l := range c.f.Lines {
 		if c.copiedLine(l) {
 			continue
 		}
-		if l.Item != nil && calls[l.Item.CallID] {
-			if t := l.Item.SpawnedThread(); t != "" {
-				c.spawns[l.Item.CallID] = t
+		if it := l.Item; it.IsSpawnCall() && it.CallID != "" {
+			n[it.CallID]++
+			continue
+		}
+		if it := l.Item; it != nil && it.Type == codex.ItemFunctionCallOutput {
+			if k, ok := key(it.CallID); ok {
+				if t := it.SpawnedThread(); t != "" {
+					c.spawns[k] = t
+				} else if task := it.SpawnedTask(); task != "" {
+					c.tasks[k] = task
+				}
 			}
 		}
-		if id, t, ok := l.Spawn(); ok && calls[id] {
-			c.spawns[id] = t
+		if id, t, ok := l.Spawn(); ok {
+			if k, ok := key(id); ok {
+				c.spawns[k] = t
+			}
 		}
 	}
 }
 
-// linkSpawn writes, before a spawn call's output, the peer link to the
+// countSpawn counts a spawn call as it is converted, so its output finds
+// its spawnKey.
+func (c *converter) countSpawn(l *codex.Line, it *codex.Item) {
+	if it.IsSpawnCall() && it.CallID != "" && !c.copiedLine(l) {
+		c.calls[it.CallID]++
+	}
+}
+
+// linkSpawn writes, after a spawn call's output, the peer link to the
 // thread the call started. spawn_agent returns as soon as the agent is
 // started, and the agent works on until it is closed, so by the RFC's
-// lifetime rule it is a peer, not a subsession; the link carries the
-// call's recorded id and the thread's id, which is its session's.
+// lifetime rule it is a peer, not a subsession. The output is the
+// harness's acknowledgement, from which the caller learns the agent's
+// id, not the agent's answer: RFC 0001 reads an output that follows a
+// link as the callee's answer, so the link comes after it. It carries
+// the call's recorded id and the thread's id, which is its session's.
+// A MultiAgentV2 output names the agent's path, not its thread, when no
+// record beside it does (0.120 to 0.130 in default persistence): the
+// thread is the indexed child spawned at that path.
 func (c *converter) linkSpawn(l *codex.Line, it *codex.Item) error {
-	child := c.spawns[it.CallID]
-	rec, ok := c.st.calls[it.CallID]
-	if child == "" || !ok {
+	if c.copiedLine(l) {
 		return nil
 	}
+	k := spawnKey{it.CallID, c.calls[it.CallID]}
+	rec, ok := c.st.calls[it.CallID]
+	if k.n == 0 || !ok || c.linked[k] {
+		return nil
+	}
+	self := c.b.S.Header().ID
+	x := c.opts.Index
+	child := c.spawns[k]
+	if child == "" {
+		task := c.tasks[k]
+		if task == "" {
+			return nil
+		}
+		for _, kid := range x.Children(self) {
+			if rs := x.Rollouts(kid); rs[len(rs)-1].AgentPath == task {
+				child = kid
+				break
+			}
+		}
+		if child == "" {
+			why := "no child of this thread in the index carries it"
+			if x == nil {
+				why = "its children were not looked for"
+			}
+			c.addf(agentimport.Lossy, "codex/spawn-unresolved", l,
+				"the spawn's output names agent path %s and no record names its thread; %s, so no link names it", task, why)
+			return nil
+		}
+	}
+	c.linked[k] = true
 	link := agentsession.NewLinkEntry(agentsession.RelPeer, child)
 	link.CallID = rec
 	if err := c.emit(link, l); err != nil {
@@ -615,30 +747,18 @@ func (c *converter) linkSpawn(l *codex.Line, it *codex.Item) error {
 	if _, ok := c.links[child]; !ok {
 		c.links[child] = rec
 	}
-	self := c.b.S.Header().ID
-	x := c.opts.Index
 	switch rs := x.Rollouts(child); {
 	case x == nil:
 		c.addf(agentimport.Lossy, "codex/subagent-missing", l,
 			"the call spawned thread %s, which was not looked for and is not converted with this session; the peer link names it", child)
 	case len(rs) == 0:
 		c.addf(agentimport.Lossy, "codex/subagent-missing", l,
-			"the call spawned thread %s, whose rollout is not in the sessions tree indexed; the peer link names it", child)
+			"the call spawned thread %s, whose rollout is not in the tree indexed; the peer link names it", child)
 	case rs[len(rs)-1].Parent != self:
 		c.addf(agentimport.Lossy, "codex/subagent-foreign", l,
 			"the call spawned thread %s, whose session meta names %q as its parent; the peer link names it, and it converts with that parent, if at all", child, rs[len(rs)-1].Parent)
 	}
 	return nil
-}
-
-// linkedThreads lists the threads this session's peer links name.
-func (c *converter) linkedThreads() []string {
-	out := make([]string, 0, len(c.links))
-	for k := range c.links {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
 }
 
 // tally accounts for every line of the file.

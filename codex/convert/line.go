@@ -165,11 +165,6 @@ func (c *converter) item(l *codex.Line) error {
 	if err := c.itemMembers(e, l, item, extra, hm); err != nil {
 		return err
 	}
-	if answerTypes[it.Type] && !output && it.CallID != "" {
-		if err := c.linkSpawn(l, it); err != nil {
-			return err
-		}
-	}
 	if output {
 		if c.pending == nil {
 			c.pending = &pending{first: l}
@@ -183,6 +178,12 @@ func (c *converter) item(l *codex.Line) error {
 	}
 	if err := c.emit(e, l); err != nil {
 		return err
+	}
+	c.countSpawn(l, it)
+	if answerTypes[it.Type] && !output && it.CallID != "" {
+		if err := c.linkSpawn(l, it); err != nil {
+			return err
+		}
 	}
 	c.mark(l, agentimport.LineMapped)
 	return nil
