@@ -1,0 +1,7 @@
+{"type":"session","id":"01a00009-0000-7000-8000-000000000009","timestamp":"2026-09-08T10:00:00.000Z","cwd":"/work/old"}
+{"type":"message","timestamp":"2026-09-08T10:00:01.000Z","message":{"role":"user","content":"Old first.","timestamp":1788861601000}}
+{"type":"message","timestamp":"2026-09-08T10:00:02.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Old reply."}],"api":"anthropic-messages","provider":"anthropic","model":"claude-sonnet-4-5","usage":{"input":1,"output":1,"cacheRead":0,"cacheWrite":0,"totalTokens":2,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"stop","timestamp":1788861602000}}
+{"type":"message","timestamp":"2026-09-08T10:00:03.000Z","message":{"role":"user","content":"Old second.","timestamp":1788861603000}}
+{"type":"message","timestamp":"2026-09-08T10:00:04.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Second reply."}],"api":"anthropic-messages","provider":"anthropic","model":"claude-sonnet-4-5","usage":{"input":1,"output":1,"cacheRead":0,"cacheWrite":0,"totalTokens":2,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"stop","timestamp":1788861604000}}
+{"type":"compaction","timestamp":"2026-09-08T10:00:05.000Z","summary":"Old first was answered.","firstKeptEntryIndex":3,"tokensBefore":900}
+{"type":"message","timestamp":"2026-09-08T10:00:06.000Z","message":{"role":"hookMessage","customType":"hook","content":"Hook said hi.","display":true,"timestamp":1788861606000}}

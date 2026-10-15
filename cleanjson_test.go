@@ -16,6 +16,9 @@ func TestCleanJSON(t *testing.T) {
 		{"{\"a\xffb\":\"x\xfe\"}", `{"a` + "�" + `b":"x` + "�" + `"}`, true},
 		{`{"n":12345678901234567890}`, `{"n":12345678901234567890}`, false},
 		{`{"s":"\\ud800"}`, `{"s":"\\ud800"}`, false},
+		{`{"":0,"":{}}`, `{"":{}}`, true},
+		{`{"a":[{"b":1,"b":2}],"c":{"b":3}}`, `{"a":[{"b":2}],"c":{"b":3}}`, true},
+		{`{"a":{"b":1},"b":{"a":2}}`, `{"a":{"b":1},"b":{"a":2}}`, false},
 	} {
 		got, changed, err := CleanJSON(json.RawMessage(tc.in))
 		if err != nil {

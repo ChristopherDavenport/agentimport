@@ -1,0 +1,6 @@
+{"type":"session","version":3.0,"id":"01a00010-0000-7000-8000-000000000010","timestamp":"2026-09-15T10:00:00.000Z","cwd":"/work/demo","model":5}
+{"type":"message","id":"q0000001","parentId":null,"timestamp":"2026-09-15T10:00:01.000Z","message":{"role":"system","content":"Base.","sections":{"b":"B.","2":"Two.","a":"A.","10":"Ten."},"timestamp":1789466401000}}
+{"type":"message","id":"q0000002","parentId":"q0000001","timestamp":"2026-09-15T10:00:02.000Z","message":{"role":"system","content":"New base.","sections":{"a":null},"replace":true,"timestamp":1789466402000}}
+{"type":"message","id":"q0000003","parentId":"q0000002","timestamp":"2026-09-15T10:00:03.000Z","message":{"role":"user","content":"Go.","timestamp":1789466403000}}
+{"type":"message","id":"q0000004","parentId":"q0000003","timestamp":"2026-09-15T10:00:04.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Gone."}],"api":"anthropic-messages","provider":"anthropic","model":"claude-sonnet-4-5","usage":{"input":1,"output":1,"cacheRead":0,"cacheWrite":0,"totalTokens":2,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"stop","timestamp":1789466404000}}
+{"type":"message","id":"q0000005","parentId":"q0000002","timestamp":"2026-09-15T10:00:05.000Z","message":{"role":"user","content":"Branch.","timestamp":1789466405000}}

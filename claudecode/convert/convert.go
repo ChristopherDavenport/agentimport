@@ -175,10 +175,11 @@ func (cv *conversion) transcript(tr *claudecode.Transcript, file string, t targe
 	if err := c.run(); err != nil {
 		return nil, "", fmt.Errorf("%s: %w", displayFile(file), err)
 	}
-	if err := agentimport.Verify(b.S); err != nil {
+	read, err := agentimport.Finish(b.S)
+	if err != nil {
 		return nil, "", fmt.Errorf("%s: converted session does not verify: %w", displayFile(file), err)
 	}
-	out := []*agentsession.Session{b.S}
+	out := []*agentsession.Session{read}
 	for _, ch := range c.spawned {
 		if ch.sessions == nil {
 			more, _, err := cv.transcript(ch.agent.Transcript, agentFile(ch.agent.ID), target{
@@ -258,10 +259,10 @@ func (cv *conversion) header(tr *claudecode.Transcript, file string, t target) (
 			}
 			h.Extra[Source+":agent_meta"] = raw
 			cv.report.Addf(agentimport.Kept, "claudecode/agent-meta-undecodable", file, 0,
-				"the sub-agent's meta file does not decode (%v); it is the header member %s:agent_meta, and the agent is linked as if it had none", t.agent.MetaErr, Source)
+				"the sub-agent's meta file does not decode (%s); it is the header member %s:agent_meta, and the agent is linked as if it had none", agentimport.ErrorText(t.agent.MetaErr), Source)
 		} else {
 			cv.report.Addf(agentimport.Dropped, "claudecode/agent-meta-undecodable", file, 0,
-				"the sub-agent's meta file does not decode (%v) and is left out", t.agent.MetaErr)
+				"the sub-agent's meta file does not decode (%s) and is left out", agentimport.ErrorText(t.agent.MetaErr))
 		}
 	}
 	if t.agent != nil && t.agent.Meta != nil {

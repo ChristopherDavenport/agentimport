@@ -4,7 +4,7 @@ claudecode: 10 lines: mapped 5 kept 3 dropped 0 malformed 2
   gap      agentimport/vcs-branch                            2  the git branch is the vcs member claudecode:branch; the format's vcs has no branch (at 1, 9)
   kept     claudecode/anthropic-block                        2  a server_tool_use block is an anthropic.server_tool_use item (at 3, 6)
   kept     claudecode/line-members                           2  kept in claudecode:line: effort (at 3, 6)
-  kept     claudecode/undecodable-line                       1  a line that does not decode as its type (json: cannot unmarshal number into Go struct field plainLine.aiTitle of type string) is a custom entry (at 10)
+  kept     claudecode/undecodable-line                       1  a line that does not decode as its type (json: member "aiTitle" is a JSON number, not string) is a custom entry (at 10)
   kept     claudecode/unknown-line-type                      2  a side record of unknown type "future-record" is a custom entry (at 7, 8)
   repaired claudecode/dangling-parent                        1  parent missing-parent is not in the transcript; the line starts a root (at 9)
   repaired claudecode/malformed-line                         2  skipped: empty line (at 2, 4)

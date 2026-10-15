@@ -1,0 +1,18 @@
+pi: 19 lines: mapped 14 kept 4 dropped 1 malformed 0
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  gap      agentimport/usage-detail                          2  cache writes are folded into input_tokens; the native usage and its cost are pi:usage (at 10, 11)
+  dropped  pi/system-unchanged                               1  a system message that changes neither the prompt nor the tools in force (at 19)
+  lossy    pi/system-update                                  1  a system message during the conversation is a config delta; a provider that takes system messages mid-conversation was sent it there, as an update, and kept the earlier prompt (at 12)
+  lossy    pi/thinking-level                                 2  thinking level max has no Responses effort; it is xhigh, and the level is pi:thinking_level (at 14, 17)
+  lossy    pi/tool-order                                     1  a tool redeclared in place keeps its position in pi and moves to the end in the session format (at 12)
+  kept     pi/bash-excluded                                  1  a command the user ran and kept out of context is a custom entry (at 9)
+  kept     pi/bash-execution                                 1  a command the user ran is the user message pi renders from it; the record is pi:bash_execution (at 8)
+  kept     pi/custom                                         1  a custom entry (my-ext) is a custom entry of namespace pi holding the line (at 5)
+  kept     pi/custom-message                                 2  an extension's message (my-ext) is a user message; its type is pi:custom_type (at 6, 7)
+  kept     pi/details                                        1  an extension's details, which pi does not send the model, are pi:details (at 6)
+  kept     pi/header-members                                 1  kept in the header member pi:header: origin (at 1)
+  kept     pi/line-members                                   1  kept in pi:line: tag (at 18)
+  kept     pi/message-members                                1  kept in pi:message: api, provider, thinkingLevel (at 10)
+  kept     pi/tool-members                                   1  tool declaration members a function tool has no place for are pi:tool_members (at 3)
+  kept     pi/unknown-entry-type                             1  an entry of unknown type "bookmark" is a custom entry (at 15)
+  kept     pi/unknown-role                                   1  a message of unknown role "weird" is a custom entry (at 16)

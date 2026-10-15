@@ -1,0 +1,7 @@
+pi: 13 lines: mapped 13 kept 0 dropped 0 malformed 0
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  gap      agentimport/reasoning-provider                    1  a thinking signature from anthropic-messages in encrypted_content, tagged pi:provider (at 6)
+  gap      agentimport/tool-error                            1  isError is the member pi:is_error; function_call_output has no error flag (at 10)
+  gap      agentimport/usage-detail                          3  cache writes are folded into input_tokens; the native usage and its cost are pi:usage (at 6, 9, 11)
+  kept     pi/details                                        1  a tool's details, which pi does not send the model, are pi:details (at 8)
+  kept     pi/message-members                                3  kept in pi:message: api, provider, rawStopReason (at 6, 9, 11)

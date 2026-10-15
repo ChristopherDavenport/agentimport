@@ -1,0 +1,12 @@
+pi: 8 lines: mapped 8 kept 0 dropped 0 malformed 0
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  gap      agentimport/reasoning-provider                    3  a thinking signature from google-generative-ai in encrypted_content, tagged pi:provider (at 4, 4, 4)
+  gap      agentimport/usage-detail                          5  cache writes are folded into input_tokens; the native usage and its cost are pi:usage (at 3, 4, 6, 7, 8)
+  lossy    pi/failed-turn                                    1  an attempt that ended aborted is written and left out of context by omit, as pi leaves it out of every later request (at 8)
+  lossy    pi/stop-reason                                    1  stop reason aborted has no Responses status; the response is incomplete with no reason (at 8)
+  lossy    pi/thinking-empty                                 1  a thinking block with neither text nor signature is an empty reasoning item (at 3)
+  kept     pi/message-members                                5  kept in pi:message: api, provider (at 3, 4, 6, 7, 8)
+  kept     pi/redacted-thinking                              1  redacted thinking is an anthropic.redacted_thinking item, as openresponses' Anthropic provider writes it (at 3)
+  kept     pi/thinking-signature                             1  a thinking signature from openai-completions is not a Responses encrypted_content; it is pi:thinking_signature (at 6)
+  kept     pi/unknown-block                                  1  a block of type artifact is a pi.artifact item (at 6)
+  repaired pi/call-id-renamed                                1  call "call:gem/1" is recorded as "call_gem_1_1", unique in the session (at 4)

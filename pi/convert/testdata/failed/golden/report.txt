@@ -1,0 +1,7 @@
+pi: 7 lines: mapped 7 kept 0 dropped 0 malformed 0
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  gap      agentimport/usage-detail                          4  cache writes are folded into input_tokens; the native usage and its cost are pi:usage (at 3, 5, 6, 7)
+  lossy    pi/failed-turn                                    2  an attempt that ended aborted is written and left out of context by omit, as pi leaves it out of every later request (at 3, 6)
+  lossy    pi/stop-reason                                    1  stop reason aborted has no Responses status; the response is incomplete with no reason (at 3)
+  lossy    pi/thinking-empty                                 1  a thinking block with neither text nor signature is an empty reasoning item (at 3)
+  kept     pi/message-members                                4  kept in pi:message: api, provider (at 3, 5, 6, 7)

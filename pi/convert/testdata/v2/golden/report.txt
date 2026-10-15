@@ -1,0 +1,7 @@
+pi: 4 lines: mapped 4 kept 0 dropped 0 malformed 0
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  gap      agentimport/usage-detail                          1  cache writes are folded into input_tokens; the native usage and its cost are pi:usage (at 4)
+  lossy    pi/parent-unresolved                              1  the parent session is named by a path that could not be read; it is kept in the header member pi:parent_session and parent_session is unset (at 1)
+  kept     pi/custom-message                                 1  an extension's message (greeter) is a user message; its type is pi:custom_type (at 3)
+  kept     pi/message-members                                1  kept in pi:message: api, provider (at 4)
+  repaired pi/hook-message                                   1  1 messages of version 2's role hookMessage are read as role custom, as pi migrates them

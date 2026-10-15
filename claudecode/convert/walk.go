@@ -410,7 +410,7 @@ func (c *converter) tally() {
 	}
 	for _, e := range c.tr.Errors {
 		c.report.Line(agentimport.LineMalformed)
-		c.report.Addf(agentimport.Repaired, "claudecode/malformed-line", c.file, e.No, "skipped: %v", e.Err)
+		c.report.Addf(agentimport.Repaired, "claudecode/malformed-line", c.file, e.No, "skipped: %s", agentimport.ErrorText(e.Err))
 	}
 	for _, no := range c.tr.NULLines {
 		c.report.Addf(agentimport.Repaired, "claudecode/nul-bytes", c.file, no, "NUL bytes removed from the line")
@@ -438,12 +438,15 @@ func (c *converter) customAs(kind agentimport.Kind, l *claudecode.Line, tail, co
 // clean makes raw native JSON valid Unicode, as the session format
 // needs, and reports a change.
 func (c *converter) clean(raw json.RawMessage, l *claudecode.Line) json.RawMessage {
-	out, changed, err := agentimport.CleanJSON(raw)
+	out, _, err := agentimport.CleanJSON(raw)
 	if err != nil {
 		// raw came from the reader, which only keeps JSON.
 		return raw
 	}
-	if changed {
+	if agentimport.RepeatedMembers(raw) {
+		c.addf(agentimport.Repaired, "agentimport/repeated-member", l, "an object named a member twice, which I-JSON forbids; the last is kept, as JSON.parse keeps it")
+	}
+	if agentimport.InvalidText(raw) {
 		c.addf(agentimport.Repaired, "agentimport/invalid-text", l, "text that was not valid Unicode was replaced with U+FFFD")
 	}
 	return out

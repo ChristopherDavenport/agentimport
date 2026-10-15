@@ -122,11 +122,17 @@ func (b *Builder) Member(e agentsession.Entry, name string, v any) error {
 			return fmt.Errorf("member %s:%s: %w", b.NS, name, err)
 		}
 	}
-	raw, changed, err := CleanJSON(raw)
+	repeated := RepeatedMembers(raw)
+	badText := InvalidText(raw)
+	raw, _, err := CleanJSON(raw)
 	if err != nil {
 		return fmt.Errorf("member %s:%s: %w", b.NS, name, err)
 	}
-	if changed {
+	if repeated {
+		b.Report.Addf(Repaired, "agentimport/repeated-member", b.File, 0,
+			"an object in member %s:%s named a member twice, which I-JSON forbids; the last is kept, as JSON.parse keeps it", b.NS, name)
+	}
+	if badText {
 		b.Report.Addf(Repaired, "agentimport/invalid-text", b.File, 0,
 			"text in member %s:%s that was not valid Unicode was replaced with U+FFFD", b.NS, name)
 	}
@@ -215,22 +221,31 @@ func (b *Builder) Resume() string {
 	return b.tail
 }
 
-// Verify writes s, reads it back and checks the records on every leaf,
-// the checks a reader of the converted file will make. A converter
-// whose output fails them has a bug.
-func Verify(s *agentsession.Session) error {
+// Finish writes s, reads it back and checks the records on every leaf,
+// the checks a reader of the converted file will make, and returns the
+// session as read back. A converter returns that session rather than
+// the one it built: a reader of the written file resumes on the leaf
+// the file names, which an in-memory session's leaf can differ from.
+// A converter whose output fails the checks has a bug.
+func Finish(s *agentsession.Session) (*agentsession.Session, error) {
 	var buf bytes.Buffer
 	if err := agentsession.Write(&buf, s); err != nil {
-		return fmt.Errorf("write: %w", err)
+		return nil, fmt.Errorf("write: %w", err)
 	}
 	r, err := agentsession.Read(&buf)
 	if err != nil {
-		return fmt.Errorf("read back: %w", err)
+		return nil, fmt.Errorf("read back: %w", err)
 	}
 	for _, leaf := range r.Leaves() {
 		if err := r.VerifyRecords(leaf); err != nil {
-			return fmt.Errorf("leaf %s: %w", leaf, err)
+			return nil, fmt.Errorf("leaf %s: %w", leaf, err)
 		}
 	}
-	return nil
+	return r, nil
+}
+
+// Verify is [Finish] for a caller that only needs the checks.
+func Verify(s *agentsession.Session) error {
+	_, err := Finish(s)
+	return err
 }

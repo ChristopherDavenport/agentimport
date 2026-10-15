@@ -1,0 +1,11 @@
+pi: 13 lines: mapped 7 kept 2 dropped 1 malformed 3
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  gap      agentimport/usage-detail                          1  cache writes are folded into input_tokens; the native usage and its cost are pi:usage (at 14)
+  dropped  pi/extra-header                                   1  a second session line; the first is the header (at 9)
+  kept     pi/message-members                                1  kept in pi:message: api, provider (at 14)
+  kept     pi/mistyped-member                                1  members whose value is not of the type pi defines are kept as written beside the object's other unmapped members: message (at 6)
+  kept     pi/no-message                                     1  a message entry with no message is a custom entry (at 6)
+  kept     pi/orphan-result                                  1  a tool result for a call not on its path is a custom entry (at 12)
+  repaired pi/dangling-parent                                1  parent zzzzzzzz is not in the file; the entry starts a root (at 7)
+  repaired pi/malformed-line                                 3  skipped, as pi skips it: the line holds NUL bytes (at 3, 4, 5)
+  repaired pi/parent-cycle                                   1  the parent links from this entry form a cycle; it starts a root (at 10)

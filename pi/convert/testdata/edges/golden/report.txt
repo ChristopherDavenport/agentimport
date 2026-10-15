@@ -1,0 +1,17 @@
+pi: 20 lines: mapped 15 kept 0 dropped 3 malformed 2
+  gap      agentimport/context-replace                       1  the user message is left out of context and its replacement written where the edit was, not in its place (at 11)
+  gap      agentimport/info-clear                            1  a session_info with no name clears pi's session name; the session format cannot clear one, so the earlier name stands (at 15)
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  gap      agentimport/usage-detail                          4  cache writes are folded into input_tokens; the native usage and its cost are pi:usage (at 4, 8, 12, 20)
+  dropped  pi/context-edit-target                            2  an edit of an entry that is not in context on this path changes nothing, as pi applies it (at 6, 10)
+  dropped  pi/input-block-members                            1  members of an input block a part has no place for are left out: extra (at 16)
+  dropped  pi/invalid-block                                  2  a content block that is not an object (null) is left out (at 16, 16)
+  dropped  pi/system-content                                 1  a block of type "image" in a system message is not part of the prompt pi renders (at 9)
+  kept     pi/block-members                                  1  members of a text block an item has no place for are pi:block: redacted (at 20)
+  kept     pi/message-members                                4  kept in pi:message: api, provider (at 4, 8, 12, 20)
+  kept     pi/mistyped-member                                1  members whose value is not of the type pi defines are kept as written beside the object's other unmapped members: message.content[0].redacted (at 20)
+  kept     pi/retain-none                                    1  the compaction keeps nothing from before it and follows an item or nothing; its first_kept is a custom marker entry written before it, which puts nothing in context (at 2)
+  kept     pi/tool-members                                   1  tool declaration members a function tool has no place for are pi:tool_members (at 9)
+  kept     pi/tool-name                                      1  the result names tool "Read" and its call "read"; the result's name is pi:tool_name (at 5)
+  repaired pi/lone-surrogate                                 1  a lone UTF-16 surrogate escape, half of a character cut short, was removed, as pi removes it from what it sends (at 19)
+  repaired pi/malformed-line                                 2  skipped, as pi skips it: not a JSON object (at 17, 18)

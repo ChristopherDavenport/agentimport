@@ -1,0 +1,9 @@
+pi: 18 lines: mapped 15 kept 1 dropped 2 malformed 0
+  gap      agentimport/context-replace                       2  the user message is left out of context and its replacement written where the edit was, not in its place (at 11, 13)
+  gap      agentimport/omit-summary                          1  pi leaves the branch_summary out of context; the format's omit names item entries alone, so it stays (at 15)
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  gap      agentimport/usage-detail                          4  cache writes are folded into input_tokens; the native usage and its cost are pi:usage (at 3, 5, 8, 12)
+  dropped  pi/context-edit-target                            1  an edit of an entry that is not in context on this path changes nothing, as pi applies it (at 14)
+  lossy    pi/label-leaf                                     1  the label "leaf" is reserved in the session format; it is written as "pi:leaf" (at 16)
+  kept     pi/details                                        1  the branch_summary's details, which pi does not send the model, are pi:details (at 6)
+  kept     pi/message-members                                4  kept in pi:message: api, provider (at 3, 5, 8, 12)

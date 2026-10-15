@@ -1,0 +1,14 @@
+codex: 15 lines: mapped 12 kept 0 dropped 3 malformed 0
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  gap      agentimport/reasoning-provider                    1  the encrypted reasoning is in encrypted_content, which says nothing of the provider that can replay it; the entry carries codex:provider (at 8)
+  gap      agentimport/vcs-branch                            1  the git branch is the vcs member codex:branch; the format's vcs has no branch (at 1)
+  dropped  codex/event-echo                                  3  a user_message event, which repeats an item or record the rollout holds, for Codex's own display (at 5, 6, 13)
+  lossy    codex/interleaved-outputs                         1  Codex recorded the response's calls each followed by its output; the response entry follows its last item, so the format's request context of the response holds only the items after the last output (at 8)
+  lossy    codex/no-base-instructions                        1  the session meta records no base instructions (older rollouts); Codex rendered the model's default, which is not recorded, so the session has none (at 1)
+  lossy    codex/response-id                                 1  the rollout names no response ids (only the token usage records of newer rollouts do); a response is named codex-line-<n> after its first item's line (at 8)
+  lossy    codex/tools-unrecorded                            1  Codex does not record the tool definitions it sends the model; the session's config has none (at 1)
+  kept     codex/rate-limits                                 2  the rate limits reported with the usage are kept in codex:rate_limits (at 7, 14)
+  kept     codex/repository-url                              1  the repository URL is the vcs member codex:repository_url (at 1)
+  kept     codex/session-meta-members                        1  kept in the header member codex:session_meta: model_provider, originator, source (at 1)
+  kept     codex/token-count                                 2  the thread's running total and context window are kept in codex:token_count (at 7, 14)
+  kept     codex/turn-context                                1  the turn's other settings (approval and sandbox policy and the like), which reach the model as messages the rollout records, are kept in codex:turn_context (at 3)
