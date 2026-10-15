@@ -92,19 +92,35 @@ func (c *docConv) exporterStep(i int) (n int, ok bool, err error) {
 	return 0, false, nil
 }
 
-// rawItem decodes a raw item, inlining an image the exporter wrote to
-// a file beside the document.
-func (c *docConv) rawItem(i int, raw json.RawMessage) (openresponses.Item, error) {
-	clean, err := c.clean(i+1, raw)
+// decodeItem decodes a raw item and reports nothing, so a step's items
+// can all be checked before any of them changes the conversion's state.
+func decodeItem(raw json.RawMessage) (openresponses.Item, error) {
+	clean, _, err := agentimport.CleanJSON(raw)
 	if err != nil {
 		return nil, err
+	}
+	if !bytes.HasPrefix(bytes.TrimSpace(clean), []byte("{")) {
+		return nil, errors.New("the raw item is not an object with a type")
 	}
 	item, err := openresponses.UnmarshalItem(clean)
 	if err != nil {
 		return nil, err
 	}
-	if item == nil || item.ItemType() == "" || !bytes.HasPrefix(bytes.TrimSpace(clean), []byte("{")) {
+	if item == nil || item.ItemType() == "" {
 		return nil, errors.New("the raw item is not an object with a type")
+	}
+	return item, nil
+}
+
+// rawItem decodes a raw item, reporting what cleaning it changed, and
+// inlines an image the exporter wrote to a file beside the document.
+func (c *docConv) rawItem(i int, raw json.RawMessage) (openresponses.Item, error) {
+	item, err := decodeItem(raw)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := c.clean(i+1, raw); err != nil {
+		return nil, err
 	}
 	switch v := item.(type) {
 	case *openresponses.Message:
@@ -246,11 +262,24 @@ func (c *docConv) exporterAgent(i int, s *atif.Step, ext, or map[string]json.Raw
 	if err := json.Unmarshal(or["items"], &raws); err != nil {
 		return c.exporterFallback(i, s, err)
 	}
+	// Every item and the response decode before anything is recorded:
+	// a step that falls back is mapped as if the rebuild never started.
+	for _, raw := range raws {
+		if _, err := decodeItem(raw); err != nil {
+			return c.exporterFallback(i, s, err)
+		}
+	}
+	body := or["response"]
+	if !atif.IsNull(body) {
+		if _, err := parseResponseBody(body); err != nil {
+			return c.exporterFallback(i, s, err)
+		}
+	}
 	var resp *agentsession.ResponseEntry
-	if body := or["response"]; !atif.IsNull(body) {
+	if !atif.IsNull(body) {
 		r, err := c.responseBody(i, body)
 		if err != nil {
-			return c.exporterFallback(i, s, err)
+			return err
 		}
 		resp = r
 	}
@@ -263,7 +292,7 @@ func (c *docConv) exporterAgent(i int, s *atif.Step, ext, or map[string]json.Raw
 	for _, raw := range raws {
 		e, err := c.itemEntry(i, raw, nil)
 		if err != nil {
-			return c.exporterFallback(i, s, err)
+			return err
 		}
 		if resp != nil {
 			e.ResponseID = resp.ResponseID
@@ -368,9 +397,18 @@ func (c *docConv) exporterResults(i int, s *atif.Step, local map[string][]*call)
 		}
 		rext := object(r.Ext)
 		ror := object(rext["openresponses"])
-		if ror == nil || ror["item"] == nil {
-			// A result the exporter wrote no item for: a subsession
-			// reference attached to a call with no output on the path.
+		raw, has := ror["item"]
+		if has {
+			if _, err := decodeItem(raw); err != nil {
+				c.addf(agentimport.Lossy, "atif/raw-items", i+1,
+					"result %d's raw item does not decode (%s); it is mapped from its declared fields", j, agentimport.ErrorText(err))
+				has = false
+			}
+		}
+		if !has {
+			// A result the exporter wrote no item for, a subsession
+			// reference attached to a call with no output on the path,
+			// or one whose item does not decode.
 			ents, err := c.results(i, &atif.Step{Observation: &atif.Observation{Results: []*atif.Result{r}}}, local, nil)
 			if err != nil {
 				return nil, nil, err
@@ -423,7 +461,15 @@ func (c *docConv) exporterResults(i int, s *atif.Step, local map[string][]*call)
 // responseBody rebuilds a response entry from the body the exporter
 // carried: the entry without its envelope, its ID as entry_id.
 func (c *docConv) responseBody(i int, body json.RawMessage) (*agentsession.ResponseEntry, error) {
-	clean, err := c.clean(i+1, body)
+	if _, err := c.clean(i+1, body); err != nil {
+		return nil, err
+	}
+	return parseResponseBody(body)
+}
+
+// parseResponseBody is responseBody reporting nothing.
+func parseResponseBody(body json.RawMessage) (*agentsession.ResponseEntry, error) {
+	clean, _, err := agentimport.CleanJSON(body)
 	if err != nil {
 		return nil, err
 	}
@@ -474,23 +520,28 @@ func (c *docConv) responseBody(i int, body json.RawMessage) (*agentsession.Respo
 // document was exported from, so they are converted first and the
 // compaction keeps from the first of them.
 func (c *docConv) exporterCompaction(i int, s *atif.Step, ext, or map[string]json.RawMessage) (int, error) {
-	summary, err := c.rawItem(i, or["item"])
-	if err != nil {
-		return 0, c.exporterFallback(i, s, err)
-	}
-	var pinned openresponses.Items
+	var raws []json.RawMessage
 	if raw := or["pinned"]; raw != nil {
-		var raws []json.RawMessage
 		if err := json.Unmarshal(raw, &raws); err != nil {
 			return 0, c.exporterFallback(i, s, err)
 		}
-		for _, r := range raws {
-			item, err := c.rawItem(i, r)
-			if err != nil {
-				return 0, c.exporterFallback(i, s, err)
-			}
-			pinned = append(pinned, item)
+	}
+	for _, raw := range append([]json.RawMessage{or["item"]}, raws...) {
+		if _, err := decodeItem(raw); err != nil {
+			return 0, c.exporterFallback(i, s, err)
 		}
+	}
+	summary, err := c.rawItem(i, or["item"])
+	if err != nil {
+		return 0, err
+	}
+	var pinned openresponses.Items
+	for _, r := range raws {
+		item, err := c.rawItem(i, r)
+		if err != nil {
+			return 0, err
+		}
+		pinned = append(pinned, item)
 	}
 	// The window: the copied steps after the compaction.
 	n := 0
