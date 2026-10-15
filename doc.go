@@ -4,7 +4,7 @@
 // [CallIDs] the format's call rules need.
 //
 // The converters are in the source packages' convert subpackages,
-// claudecode/convert, pi/convert and codex/convert; the native formats
-// are in claudecode, pi and codex, which import the standard library
-// alone. docs/plans/agentimport.md is the design.
+// claudecode/convert, pi/convert, codex/convert and atif/convert; the
+// native formats are in claudecode, pi, codex and atif, which import
+// the standard library alone. docs/plans/agentimport.md is the design.
 package agentimport

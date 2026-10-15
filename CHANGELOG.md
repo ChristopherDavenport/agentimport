@@ -7,6 +7,28 @@ versions may break the API.
 
 ## Unreleased
 
+- Added: ATIF, Harbor's Agent Trajectory Interchange Format (v1.0 to
+  v1.8), the format Harbor's agents and `agentsession/export` write.
+  `atif` reads a document block by block, so a bad step, call, result
+  or part is a finding and its neighbours still read, keeps every member
+  it does not declare and every number as written, and salvages a
+  document cut short. `atif/convert` converts it: leading system steps
+  are the instructions, results are the outputs of the calls they name
+  (or user messages), a `replace` context boundary is a compaction, as
+  ATIF's RFC has it, sub-agents referenced from a call's result are
+  subsessions, those referenced from no call are linked with no
+  `call_id` (a gap), embedded trajectories no step names are sessions
+  with `parent_session`, and continuations are sessions the previous
+  one is `continued_in`. A document agentsession's exporter wrote is
+  rebuilt from the raw items it carries, its compaction's kept window
+  put back before it. Related files are read inside the document's
+  directory alone, each once. The command detects ATIF by its
+  `schema_version`, converts a document with the files it names and
+  skips those as inputs. Four new gap codes are in
+  `docs/incompatibilities.md`.
+- Added: `Report.Unit` names what a tally counts when it is not lines;
+  ATIF's counts each document's root and steps.
+
 - Added: Codex sub-agents are linked. A thread converts with the
   threads it spawned, at any depth, each a session of its own after its
   parent's, and the parent gets a `peer` link after each `spawn_agent`

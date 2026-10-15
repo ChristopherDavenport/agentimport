@@ -2,7 +2,8 @@
 
 Converters from other coding agents' session logs into the
 [Agent Session Format](https://github.com/ChristopherDavenport/agentsession):
-Claude Code, pi and Codex. Each conversion returns the sessions it made
+Claude Code, pi and Codex, and ATIF, Harbor's trajectory format, which
+many more agents write. Each conversion returns the sessions it made
 and a report that accounts for every native line and lists every
 difference between the two formats by a stable code, so nothing is
 lost without saying so.
@@ -19,12 +20,15 @@ agentimport convert -o ~/sessions ~/.claude/projects/<project>/<session>.jsonl
 agentimport convert -o ~/sessions -report json ~/.codex/sessions
 ```
 
-Each file's source is told from its name and first lines; `-from
-claudecode|pi|codex` names it instead. A Claude Code session, and a
+Each file's source is told from its name and first lines, an ATIF
+document by its `schema_version`; `-from claudecode|pi|codex|atif`
+names it instead. A Claude Code session, and a
 Codex rollout, is converted with its sub-agents, each a session of its
 own linked to its parent; a Codex sub-agent's rollout given beside an
 ancestor's is converted with it, not again on its own, and on its own
-when the ancestor's conversion did not produce it. A session already in
+when the ancestor's conversion did not produce it. An ATIF document is
+converted with the continuations and sub-agent files it names, which
+are skipped as inputs when its conversion holds them. A session already in
 the store is kept as it is, listed, and is no failure, unless `-force`
 replaces it; the other sessions of the same conversion are written all
 the same, so converting a tree again adds what is new since. `-slim` drops what the model never saw rather than keep it
@@ -41,6 +45,7 @@ writes `agentsession` sessions.
 | Claude Code | `claudecode` | `claudecode/convert` | [docs/formats/claudecode.md](docs/formats/claudecode.md) |
 | pi | `pi` | `pi/convert` | [docs/formats/pi.md](docs/formats/pi.md) |
 | Codex | `codex` | `codex/convert` | [docs/formats/codex.md](docs/formats/codex.md) |
+| ATIF (Harbor) | `atif` | `atif/convert` | [docs/formats/atif.md](docs/formats/atif.md) |
 
 What the session format itself cannot hold, across all sources, is in
 [docs/incompatibilities.md](docs/incompatibilities.md).

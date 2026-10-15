@@ -8,6 +8,9 @@ does not list.
 - [claudecode.md](claudecode.md): Claude Code.
 - [pi.md](pi.md): pi.
 - [codex.md](codex.md): Codex CLI.
+- [atif.md](atif.md): ATIF, Harbor's Agent Trajectory Interchange
+  Format. Its report counts each document's root and steps rather than
+  lines.
 
 ## Codes every converter can report
 
