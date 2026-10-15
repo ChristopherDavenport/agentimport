@@ -23,20 +23,27 @@ type pathState struct {
 	// conversed says a message other than a system message is on the
 	// path, so a system message now updates a conversation under way.
 	conversed bool
-	// calls maps a native tool call id to the call ID recorded for it,
-	// for the calls on the path.
-	calls map[string]string
+	// calls maps a native tool call id to the call recorded for it, for
+	// the calls on the path.
+	calls map[string]call
 	// answered marks the recorded call IDs on the path that have an
 	// output.
 	answered map[string]bool
 }
 
-func (st *pathState) addCall(native, id string) {
-	m := make(map[string]string, len(st.calls)+1)
+// call is a tool call on the path: the call ID recorded, the tool's
+// name, and whether it is a Responses custom tool call.
+type call struct {
+	id, name string
+	custom   bool
+}
+
+func (st *pathState) addCall(native string, cl call) {
+	m := make(map[string]call, len(st.calls)+1)
 	for k, v := range st.calls {
 		m[k] = v
 	}
-	m[native] = id
+	m[native] = cl
 	st.calls = m
 }
 
@@ -49,26 +56,14 @@ func (st *pathState) answer(id string) {
 	st.answered = m
 }
 
-// walk converts an entry and everything below it. It recurses: a path
-// is as deep as its file is long, which Go's stacks hold.
-func (c *converter) walk(n *pi.Node, parent string, st pathState) error {
-	tail, err := c.entry(n.Line, parent, &st)
-	if err != nil {
-		return err
-	}
-	c.b.Bind(nodeKey(n), tail)
-	for _, ch := range n.Children {
-		if err := c.walk(ch, tail, st); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // entry converts one entry under tail and returns the new tail.
 func (c *converter) entry(l *pi.Line, tail string, st *pathState) (string, error) {
 	if l.Err != nil {
 		return c.custom(l, tail, "pi/undecodable-line", "a line that does not decode as its type (%v) is a custom entry", l.Err)
+	}
+	if ms := l.MistypedMembers(); len(ms) > 0 {
+		c.addf(agentimport.Kept, "pi/mistyped-member", l,
+			"members whose value is not of the type pi defines are kept as written beside the object's other unmapped members: %s", joinComma(ms))
 	}
 	switch l.Type {
 	case pi.TypeMessage:
@@ -95,11 +90,17 @@ func (c *converter) entry(l *pi.Line, tail string, st *pathState) (string, error
 	case pi.TypeLabel:
 		return c.label(l, tail)
 	case pi.TypeSessionInfo:
-		e := &agentsession.InfoEntry{}
+		name := ""
 		if l.Name != nil {
-			e.Name = *l.Name
+			name = strings.TrimSpace(*l.Name)
 		}
-		return c.mapped(l, tail, e)
+		if name == "" {
+			c.mark(l, agentimport.LineDropped)
+			c.addf(agentimport.Gap, "agentimport/info-clear", l,
+				"a session_info with no name clears pi's session name; the session format cannot clear one, so the earlier name stands")
+			return tail, nil
+		}
+		return c.mapped(l, tail, &agentsession.InfoEntry{Name: *l.Name})
 	}
 	return c.custom(l, tail, "pi/unknown-entry-type", "an entry of unknown type %q is a custom entry", l.Type)
 }
@@ -198,6 +199,10 @@ func (c *converter) label(l *pi.Line, tail string) (string, error) {
 		return c.custom(l, tail, "pi/label-unlinked", "a label of an entry not converted before it is a custom entry")
 	}
 	e := &agentsession.LabelEntry{Target: target, Label: l.Label}
+	if l.Label != nil && *l.Label == "" {
+		// pi clears a label on any falsy value.
+		e.Label = nil
+	}
 	if l.Label != nil && *l.Label == agentsession.LeafLabel {
 		renamed := Source + ":" + agentsession.LeafLabel
 		e.Label = &renamed

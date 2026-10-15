@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
+	"unicode/utf16"
 
 	"github.com/ChristopherDavenport/agentimport"
 	"github.com/ChristopherDavenport/agentimport/pi"
@@ -92,7 +94,7 @@ var mappedMessageMembers = map[string][]string{
 	pi.RoleToolResult:    {"role", "content", "timestamp", "toolCallId", "toolName", "isError", "details", "usage"},
 	pi.RoleCustom:        {"role", "content", "timestamp", "customType", "display", "details"},
 	pi.RoleBashExecution: {"role", "timestamp", "command", "output", "exitCode", "cancelled", "truncated", "fullOutputPath", "excludeFromContext"},
-	pi.RoleSystem:        {"role", "content", "timestamp", "sections", "toolsAdded", "toolsRemoved", "replace"},
+	pi.RoleSystem:        {"role", "content", "timestamp", "sections", "toolsAdded", "toolsRemoved"},
 }
 
 // messageMembers keeps the members of line l's message the converter
@@ -160,6 +162,13 @@ func (c *converter) contents(l *pi.Line, content *pi.Content) openresponses.Cont
 		return append(out, &openresponses.InputText{Text: content.Text})
 	}
 	for _, b := range content.Blocks {
+		if b.Invalid() {
+			c.addf(agentimport.Dropped, "pi/invalid-block", l, "a content block that is not an object (%s) is left out", compactJSON(b.Raw()))
+			continue
+		}
+		if extra := nonNull(b.Extra); len(extra) > 0 {
+			c.addf(agentimport.Dropped, "pi/input-block-members", l, "members of an input block a part has no place for are left out: %s", memberNames(extra))
+		}
 		switch b.Type {
 		case pi.BlockText:
 			out = append(out, &openresponses.InputText{Text: b.Text})
@@ -175,7 +184,7 @@ func (c *converter) contents(l *pi.Line, content *pi.Content) openresponses.Cont
 		if err != nil {
 			raw = []byte("{}")
 		}
-		typ := Source + "." + b.Type
+		typ := extensionType(b.Type)
 		part, _ := json.Marshal(struct {
 			Type  string          `json:"type"`
 			Block json.RawMessage `json:"block"`
@@ -260,21 +269,25 @@ var responsesAPIs = map[string]bool{
 	"openai-responses": true, "azure-openai-responses": true, "openai-codex-responses": true,
 }
 
-// signatureAPIs are the APIs whose thinking signature openresponses'
-// providers carry in encrypted_content: Anthropic's signature, and
-// Gemini's thought signature.
-var signatureAPIs = map[string]bool{
-	"anthropic-messages": true, "bedrock-converse-stream": true,
-	"google-generative-ai": true, "google-vertex": true,
-}
-
-// anthropicAPIs are the APIs whose redacted thinking is Anthropic's
-// redacted_thinking block.
+// anthropicAPIs are the APIs whose thinking signature is Anthropic's,
+// which openresponses' Anthropic provider carries in encrypted_content,
+// and whose redacted thinking is Anthropic's redacted_thinking block.
 var anthropicAPIs = map[string]bool{"anthropic-messages": true, "bedrock-converse-stream": true}
+
+// geminiAPIs are the APIs whose signatures are Gemini's thought
+// signatures. openresponses' Gemini provider carries one on a thought
+// in the reasoning item, and one on any other part in a reasoning item
+// holding the signature alone, just before the part.
+var geminiAPIs = map[string]bool{"google-generative-ai": true, "google-vertex": true}
+
+// failedStops are the stop reasons of an attempt pi leaves out of every
+// later request (pi-ai's transformMessages): its content may be partial.
+var failedStops = map[string]bool{pi.StopError: true, pi.StopAborted: true}
 
 // assistant converts an assistant message: a config delta when it was
 // asked of another model, an item per content block in order, then the
-// response entry.
+// response entry. An attempt that failed or was aborted is written and
+// then left out of context, as pi leaves it out.
 func (c *converter) assistant(l *pi.Line, tail string, st *pathState) (string, error) {
 	m := l.Message
 	var err error
@@ -303,22 +316,25 @@ func (c *converter) assistant(l *pi.Line, tail string, st *pathState) (string, e
 		}
 	}
 	first := true
+	var written []string
 	for _, b := range blocks {
-		e, err := c.blockEntry(l, b, st)
+		es, err := c.blockEntries(l, b, st)
 		if err != nil {
 			return "", err
 		}
-		e.ResponseID = respID
-		if first {
-			if err := c.lineMembers(e, l); err != nil {
+		for _, e := range es {
+			e.ResponseID = respID
+			if first {
+				if err := c.lineMembers(e, l); err != nil {
+					return "", err
+				}
+				first = false
+			}
+			if tail, err = c.append(tail, e, l); err != nil {
 				return "", err
 			}
-			first = false
+			written = append(written, tail)
 		}
-		if tail, err = c.append(tail, e, l); err != nil {
-			return "", err
-		}
-		c.items[nodeKeyLine(l)] = append(c.items[nodeKeyLine(l)], tail)
 	}
 	re, err := c.responseEntry(l, respID)
 	if err != nil {
@@ -332,75 +348,161 @@ func (c *converter) assistant(l *pi.Line, tail string, st *pathState) (string, e
 	if tail, err = c.append(tail, re, l); err != nil {
 		return "", err
 	}
+	if failedStops[m.StopReason] && len(written) > 0 {
+		omit := &agentsession.ConfigEntry{Omit: &agentsession.Omit{Items: written}}
+		if tail, err = c.append(tail, omit, l); err != nil {
+			return "", err
+		}
+		c.addf(agentimport.Lossy, "pi/failed-turn", l,
+			"an attempt that ended %s is written and left out of context by omit, as pi leaves it out of every later request", m.StopReason)
+	} else {
+		c.items[nodeKeyLine(l)] = append(c.items[nodeKeyLine(l)], written...)
+	}
 	c.mark(l, agentimport.LineMapped)
 	return tail, nil
 }
 
-// blockEntry maps one assistant content block to an item entry.
-func (c *converter) blockEntry(l *pi.Line, b *pi.Block, st *pathState) (*agentsession.ItemEntry, error) {
+// extensionType is the item or part type a pi block with no Responses
+// equivalent is carried as.
+func extensionType(typ string) string {
+	if typ == "" {
+		typ = "block"
+	}
+	return Source + "." + typ
+}
+
+// blockEntries maps one assistant content block to item entries: one,
+// or two when a Gemini thought signature on the part rides in a
+// reasoning item before it.
+func (c *converter) blockEntries(l *pi.Line, b *pi.Block, st *pathState) ([]*agentsession.ItemEntry, error) {
 	m := l.Message
+	if b.Invalid() {
+		c.addf(agentimport.Dropped, "pi/invalid-block", l, "a content block that is not an object (%s) is left out", compactJSON(b.Raw()))
+		return nil, nil
+	}
+	var e *agentsession.ItemEntry
+	var err error
+	sig := ""
 	switch b.Type {
 	case pi.BlockText:
-		msg := &openresponses.Message{
-			Role:    openresponses.RoleAssistant,
-			Status:  openresponses.StatusCompleted,
-			Content: openresponses.Contents{&openresponses.OutputText{Text: b.Text, Annotations: openresponses.Annotations{}}},
+		e, err = c.text(l, b)
+		if geminiAPIs[m.API] {
+			sig = b.TextSignature
 		}
-		e := itemEntry(msg)
-		if b.TextSignature != "" {
-			if id, phase, ok := textSignature(b.TextSignature); ok && responsesAPIs[m.API] {
-				msg.ID, msg.Phase = id, phase
-			} else {
-				if err := c.b.Member(e, "text_signature", b.TextSignature); err != nil {
-					return nil, err
-				}
-				c.addf(agentimport.Kept, "pi/text-signature", l, "a text signature from %s has no place on a message; it is %s:text_signature", m.API, Source)
-			}
-		}
-		return e, nil
 	case pi.BlockThinking:
-		return c.thinking(l, b)
+		e, err = c.thinking(l, b)
 	case pi.BlockToolCall:
-		return c.callEntry(l, b, st)
+		e, err = c.callEntry(l, b, st)
+		if geminiAPIs[m.API] {
+			sig = b.ThoughtSignature
+		}
+	default:
+		raw, err := json.Marshal(b)
+		if err != nil {
+			return nil, err
+		}
+		typ := extensionType(b.Type)
+		item := &openresponses.UnknownItem{Type: typ, Status: openresponses.StatusCompleted}
+		item.Raw, err = json.Marshal(struct {
+			Type   string               `json:"type"`
+			Status openresponses.Status `json:"status"`
+			Block  json.RawMessage      `json:"block"`
+		}{typ, item.Status, raw})
+		if err != nil {
+			return nil, err
+		}
+		c.addf(agentimport.Kept, "pi/unknown-block", l, "a block of type %s is a %s item", b.Type, typ)
+		return []*agentsession.ItemEntry{itemEntry(item)}, nil
 	}
-	raw, err := json.Marshal(b)
 	if err != nil {
 		return nil, err
 	}
-	typ := Source + "." + b.Type
-	item := &openresponses.UnknownItem{Type: typ, Status: openresponses.StatusCompleted}
-	item.Raw, err = json.Marshal(struct {
-		Type   string               `json:"type"`
-		Status openresponses.Status `json:"status"`
-		Block  json.RawMessage      `json:"block"`
-	}{typ, item.Status, raw})
-	if err != nil {
+	if extra := nonNull(b.Extra); len(extra) > 0 {
+		if err := c.b.Member(e, "block", extra); err != nil {
+			return nil, err
+		}
+		c.addf(agentimport.Kept, "pi/block-members", l, "members of a %s block an item has no place for are %s:block: %s", b.Type, Source, memberNames(extra))
+	}
+	if sig == "" {
+		return []*agentsession.ItemEntry{e}, nil
+	}
+	r := itemEntry(&openresponses.ReasoningItem{Status: openresponses.StatusCompleted, EncryptedContent: sig})
+	if err := c.b.Member(r, "provider", m.Provider); err != nil {
 		return nil, err
 	}
-	c.addf(agentimport.Kept, "pi/unknown-block", l, "a block of type %s is a %s item", b.Type, typ)
-	return itemEntry(item), nil
+	c.addf(agentimport.Gap, "agentimport/reasoning-provider", l,
+		"a Gemini thought signature on a %s part is a reasoning item holding it alone, before the part, as openresponses' Gemini provider writes it; tagged %s:provider", b.Type, Source)
+	return []*agentsession.ItemEntry{r, e}, nil
+}
+
+// text maps a text block to an assistant message. From a Responses API
+// the text signature names the message item and its phase, as pi reads
+// it back: {"v":1,"id":…,"phase":…}, or the whole signature as the id.
+func (c *converter) text(l *pi.Line, b *pi.Block) (*agentsession.ItemEntry, error) {
+	m := l.Message
+	msg := &openresponses.Message{
+		Role:    openresponses.RoleAssistant,
+		Status:  openresponses.StatusCompleted,
+		Content: openresponses.Contents{&openresponses.OutputText{Text: b.Text, Annotations: openresponses.Annotations{}}},
+	}
+	e := itemEntry(msg)
+	switch {
+	case b.TextSignature == "", geminiAPIs[m.API]:
+	case responsesAPIs[m.API]:
+		id, phase := textSignature(b.TextSignature)
+		if len(id) > 64 {
+			// pi sends a long id as msg_ and a hash of it, as OpenAI
+			// takes 64 characters at most.
+			id = "msg_" + shortHash(id)
+		}
+		msg.ID, msg.Phase = id, phase
+	default:
+		if err := c.b.Member(e, "text_signature", b.TextSignature); err != nil {
+			return nil, err
+		}
+		c.addf(agentimport.Kept, "pi/text-signature", l, "a text signature from %s has no place on a message; it is %s:text_signature", m.API, Source)
+	}
+	return e, nil
 }
 
 // textSignature decodes the signature pi's Responses provider gives a
-// text block: {"v":1,"id":…,"phase":…}, or the bare item id of older
-// files.
-func textSignature(sig string) (id string, phase openresponses.Phase, ok bool) {
-	if !strings.HasPrefix(sig, "{") {
-		return sig, "", true
+// text block as pi's parseTextSignature does: {"v":1,"id":…,"phase":…},
+// and otherwise the whole signature as the item id.
+func textSignature(sig string) (id string, phase openresponses.Phase) {
+	if strings.HasPrefix(sig, "{") {
+		var s struct {
+			V     any `json:"v"`
+			ID    any `json:"id"`
+			Phase any `json:"phase"`
+		}
+		if json.Unmarshal([]byte(sig), &s) == nil {
+			if v, ok := s.V.(float64); ok && v == 1 {
+				if id, ok := s.ID.(string); ok {
+					if p, ok := s.Phase.(string); ok {
+						switch p := openresponses.Phase(p); p {
+						case openresponses.PhaseCommentary, openresponses.PhaseFinalAnswer:
+							phase = p
+						}
+					}
+					return id, phase
+				}
+			}
+		}
 	}
-	var s struct {
-		V     int    `json:"v"`
-		ID    string `json:"id"`
-		Phase string `json:"phase"`
+	return sig, ""
+}
+
+// shortHash is pi-ai's shortHash: two 32-bit multiplicative hashes over
+// the string's UTF-16 code units, in base 36.
+func shortHash(s string) string {
+	h1, h2 := uint32(0xdeadbeef), uint32(0x41c6ce57)
+	for _, ch := range utf16.Encode([]rune(s)) {
+		h1 = (h1 ^ uint32(ch)) * 2654435761
+		h2 = (h2 ^ uint32(ch)) * 1597334677
 	}
-	if json.Unmarshal([]byte(sig), &s) != nil || s.V != 1 || s.ID == "" {
-		return "", "", false
-	}
-	switch p := openresponses.Phase(s.Phase); p {
-	case openresponses.PhaseCommentary, openresponses.PhaseFinalAnswer:
-		phase = p
-	}
-	return s.ID, phase, true
+	h1 = ((h1 ^ (h1 >> 16)) * 2246822507) ^ ((h2 ^ (h2 >> 13)) * 3266489909)
+	h2 = ((h2 ^ (h2 >> 16)) * 2246822507) ^ ((h1 ^ (h1 >> 13)) * 3266489909)
+	return strconv.FormatUint(uint64(h2), 36) + strconv.FormatUint(uint64(h1), 36)
 }
 
 // thinking maps a thinking block to a reasoning item by the API that
@@ -452,7 +554,7 @@ func (c *converter) thinking(l *pi.Line, b *pi.Block) (*agentsession.ItemEntry, 
 	}
 	e := itemEntry(r)
 	switch {
-	case sig != "" && signatureAPIs[m.API]:
+	case sig != "" && (anthropicAPIs[m.API] || geminiAPIs[m.API]):
 		r.EncryptedContent = sig
 		if err := c.b.Member(e, "provider", m.Provider); err != nil {
 			return nil, err
@@ -472,23 +574,53 @@ func (c *converter) thinking(l *pi.Line, b *pi.Block) (*agentsession.ItemEntry, 
 }
 
 // callEntry maps a toolCall block. pi joins a Responses call's call_id
-// and item id as "<call_id>|<item_id>"; they are split back.
+// and item id as "<call_id>|<item_id>"; they are split back. An item
+// id of ctc_ marks a Responses custom tool call, which pi stores as a
+// tool call whose arguments hold its free-form input.
 func (c *converter) callEntry(l *pi.Line, b *pi.Block, st *pathState) (*agentsession.ItemEntry, error) {
 	native := b.ID
 	callID, itemID, _ := strings.Cut(native, "|")
 	id, renamed := c.b.Calls.Assign(callID)
-	st.addCall(native, id)
-	args := compactJSON(b.Arguments)
-	if len(b.Arguments) == 0 || args == "null" {
-		args = "{}"
+	custom := strings.HasPrefix(itemID, "ctc_")
+	st.addCall(native, call{id: id, name: b.Name, custom: custom})
+	var e *agentsession.ItemEntry
+	if custom {
+		input, ok := customInput(b)
+		if !ok {
+			c.addf(agentimport.Lossy, "pi/custom-input", l, "the custom tool call's arguments hold no single text input; its input is the arguments as JSON")
+		}
+		raw, err := json.Marshal(struct {
+			Type   string `json:"type"`
+			ID     string `json:"id,omitempty"`
+			Status string `json:"status"`
+			CallID string `json:"call_id"`
+			Name   string `json:"name"`
+			Input  string `json:"input"`
+		}{"custom_tool_call", itemID, "completed", id, b.Name, input})
+		if err != nil {
+			return nil, err
+		}
+		e = itemEntry(&openresponses.UnknownItem{Type: "custom_tool_call", ID: itemID, Status: openresponses.StatusCompleted, Raw: raw})
+		c.addf(agentimport.Gap, "openresponses/custom-tool-call", l,
+			"a Responses custom tool call is a custom_tool_call item, which openresponses does not type; it is carried verbatim")
+	} else {
+		args := compactJSON(b.Arguments)
+		if len(b.Arguments) == 0 || args == "null" {
+			args = "{}"
+		}
+		fc := &openresponses.FunctionCall{Status: openresponses.StatusCompleted, CallID: id, Name: b.Name, Arguments: args}
+		if strings.HasPrefix(itemID, "fc_") {
+			// pi sends only a function call item id of the right kind.
+			fc.ID = itemID
+		}
+		e = itemEntry(fc)
 	}
-	e := itemEntry(&openresponses.FunctionCall{
-		ID: itemID, Status: openresponses.StatusCompleted, CallID: id, Name: b.Name, Arguments: args,
-	})
-	if renamed {
+	if native != id {
 		if err := c.b.Member(e, "call_id", native); err != nil {
 			return nil, err
 		}
+	}
+	if renamed {
 		c.addf(agentimport.Repaired, "pi/call-id-renamed", l, "call %q is recorded as %q, unique in the session", native, id)
 	}
 	if b.Namespace != "" {
@@ -497,19 +629,43 @@ func (c *converter) callEntry(l *pi.Line, b *pi.Block, st *pathState) (*agentses
 		}
 		c.addf(agentimport.Kept, "pi/tool-namespace", l, "the call's Responses tool namespace is %s:namespace", Source)
 	}
-	if b.ThoughtSignature != "" {
+	if b.ThoughtSignature != "" && !geminiAPIs[l.Message.API] {
 		if err := c.b.Member(e, "thought_signature", b.ThoughtSignature); err != nil {
 			return nil, err
 		}
-		c.addf(agentimport.Gap, "agentimport/call-signature", l, "a thought signature on a tool call is %s:thought_signature; function_call has no member for it", Source)
-	}
-	if extra := nonNull(b.Extra); len(extra) > 0 {
-		if err := c.b.Member(e, "block", extra); err != nil {
-			return nil, err
-		}
-		c.addf(agentimport.Kept, "pi/block-members", l, "kept in %s:block: %s", Source, memberNames(extra))
+		c.addf(agentimport.Kept, "pi/thought-signature", l, "a thought signature from %s, not a Gemini API, is %s:thought_signature", l.Message.API, Source)
 	}
 	return e, nil
+}
+
+// customInput finds a custom tool call's free-form input in the
+// arguments pi stores: the property its customInput names, the single
+// member, or input; failing those, the arguments as JSON.
+func customInput(b *pi.Block) (string, bool) {
+	var args map[string]json.RawMessage
+	if json.Unmarshal(b.Arguments, &args) != nil {
+		return compactJSON(b.Arguments), false
+	}
+	prop := ""
+	var ci struct {
+		Property string `json:"property"`
+	}
+	if raw, ok := b.Extra["customInput"]; ok && json.Unmarshal(raw, &ci) == nil {
+		prop = ci.Property
+	}
+	if prop == "" && len(args) == 1 {
+		for k := range args {
+			prop = k
+		}
+	}
+	if prop == "" {
+		prop = "input"
+	}
+	var s string
+	if raw, ok := args[prop]; ok && json.Unmarshal(raw, &s) == nil {
+		return s, true
+	}
+	return compactJSON(b.Arguments), false
 }
 
 // responseEntry is the envelope of the call: the provider's response
@@ -565,28 +721,52 @@ func (c *converter) responseEntry(l *pi.Line, respID string) (*agentsession.Resp
 	return e, nil
 }
 
-// toolResult maps a tool result to the output of the call it answers.
+// toolResult maps a tool result to the output of the call it answers:
+// a function_call_output, or a custom_tool_call_output for a custom
+// tool call.
 func (c *converter) toolResult(l *pi.Line, tail string, st *pathState) (string, error) {
 	m := l.Message
-	callID, ok := st.calls[m.ToolCallID]
+	cl, ok := st.calls[m.ToolCallID]
 	if !ok {
 		return c.custom(l, tail, "pi/orphan-result", "a tool result for a call not on its path is a custom entry")
 	}
-	if st.answered[callID] {
+	if st.answered[cl.id] {
 		return c.custom(l, tail, "pi/duplicate-result", "a second result for a call answered on its path is a custom entry")
 	}
-	st.answer(callID)
-	out := &openresponses.FunctionCallOutput{CallID: callID}
+	st.answer(cl.id)
+	var data openresponses.FunctionCallOutputData
 	if m.Content != nil {
-		if m.Content.IsText {
-			out.Output.Text = m.Content.Text
-		} else if len(m.Content.Blocks) == 1 && m.Content.Blocks[0].Type == pi.BlockText {
-			out.Output.Text = m.Content.Blocks[0].Text
-		} else if len(m.Content.Blocks) > 0 {
-			out.Output.Parts = c.contents(l, m.Content)
+		switch {
+		case m.Content.IsText:
+			data.Text = m.Content.Text
+		case len(m.Content.Blocks) == 1 && !m.Content.Blocks[0].Invalid() && m.Content.Blocks[0].Type == pi.BlockText:
+			data.Text = m.Content.Blocks[0].Text
+		case len(m.Content.Blocks) > 0:
+			data.Parts = c.contents(l, m.Content)
 		}
 	}
-	e := itemEntry(out)
+	var e *agentsession.ItemEntry
+	if cl.custom {
+		raw, err := json.Marshal(struct {
+			Type   string                               `json:"type"`
+			CallID string                               `json:"call_id"`
+			Output openresponses.FunctionCallOutputData `json:"output"`
+		}{"custom_tool_call_output", cl.id, data})
+		if err != nil {
+			return "", err
+		}
+		e = itemEntry(&openresponses.UnknownItem{Type: "custom_tool_call_output", Raw: raw})
+		c.addf(agentimport.Gap, "openresponses/custom-tool-call", l,
+			"the output of a Responses custom tool call is a custom_tool_call_output item, which openresponses does not type; it is carried verbatim")
+	} else {
+		e = itemEntry(&openresponses.FunctionCallOutput{CallID: cl.id, Output: data})
+	}
+	if m.ToolName != "" && m.ToolName != cl.name {
+		if err := c.b.Member(e, "tool_name", m.ToolName); err != nil {
+			return "", err
+		}
+		c.addf(agentimport.Kept, "pi/tool-name", l, "the result names tool %q and its call %q; the result's name is %s:tool_name", m.ToolName, cl.name, Source)
+	}
 	if m.IsError {
 		if err := c.b.Member(e, "is_error", true); err != nil {
 			return "", err

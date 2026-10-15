@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -46,7 +47,13 @@ func TestRoundTrip(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%s:%d: %v", f, l.No, err)
 			}
-			if !sameJSON(t, l.Raw, got) {
+			want := l.Raw
+			if slices.Contains(file.Surrogates, l.No) {
+				// The reader removes lone surrogates; the line writes
+				// back without them.
+				want, _ = StripLoneSurrogates(l.Raw)
+			}
+			if !sameJSON(t, want, got) {
 				t.Errorf("%s:%d does not round-trip\nread:  %s\nwrote: %s", f, l.No, l.Raw, got)
 			}
 		}
@@ -81,27 +88,62 @@ func TestReadTolerates(t *testing.T) {
 		`{"type":"message","id":"b","parentId":"a","message":{"role":"assis`,
 		`{"type":"message","id":"c","parentId":"a","timestamp":"2026-01-01T00:00:02Z","message":7}`,
 		"\x00" + `{"type":"label","id":"d","parentId":"c","targetId":"a"}`,
+		`null`,
+		`[1]`,
+		`{"type":"message","id":"e","parentId":"a","message":{"role":"user","content":[null,{"type":"text","text":"x","redacted":"no"},3]}}`,
+		`{"type":"message","id":"f","parentId":"a","message":{"role":"user","content":"a\ud83d b \ud83d\ude00"}}`,
 	}, "\n")
 	f, err := Read(strings.NewReader(in))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f.LineCount() != 6 || len(f.Lines) != 4 || len(f.Errors) != 2 {
-		t.Fatalf("lines %d, read %d, errors %v", f.LineCount(), len(f.Lines), f.Errors)
+	var errs []int
+	for _, e := range f.Errors {
+		errs = append(errs, e.No)
 	}
-	if f.Errors[0].No != 3 || f.Errors[1].No != 5 {
-		t.Errorf("errors at %d and %d; want 3 and 5", f.Errors[0].No, f.Errors[1].No)
+	// NUL lines are skipped, as pi's JSON.parse refuses them; so are
+	// null and any line that is not an object.
+	if !reflect.DeepEqual(errs, []int{3, 5, 7, 8, 9}) || len(f.Lines) != 5 || f.LineCount() != 10 {
+		t.Fatalf("errors at %v, %d lines read, %d counted", errs, len(f.Lines), f.LineCount())
 	}
-	if !reflect.DeepEqual(f.NULLines, []int{3, 7}) {
-		t.Errorf("NUL lines = %v", f.NULLines)
+	// A message member of another type keeps the line in the tree, the
+	// message kept as written.
+	if l := f.Lines[2]; l.Err != nil || l.ID != "c" || l.Message != nil || !reflect.DeepEqual(l.MistypedMembers(), []string{"message"}) {
+		t.Errorf("mistyped line = %+v, mistyped %v", l, l.MistypedMembers())
 	}
-	// A line that does not decode keeps its envelope, so it stays in
-	// the tree.
-	if l := f.Lines[2]; l.Err == nil || l.ID != "c" || l.ParentID != "a" {
-		t.Errorf("undecodable line = %+v", l)
+	// Blocks decode one by one: a null or a number is kept as written,
+	// and a member of another type is kept in Extra.
+	blocks := f.Lines[3].Message.Content.Blocks
+	if len(blocks) != 3 || !blocks[0].Invalid() || blocks[1].Invalid() || !blocks[2].Invalid() || blocks[1].Text != "x" {
+		t.Errorf("blocks = %+v", blocks)
 	}
-	if f.Header().ID != "s" || f.Version() != 3 || len(f.Entries()) != 3 {
+	if got := f.Lines[3].MistypedMembers(); !reflect.DeepEqual(got, []string{"message.content[1].redacted"}) {
+		t.Errorf("mistyped = %v", got)
+	}
+	out, err := json.Marshal(f.Lines[3])
+	if err != nil || !sameJSON(t, f.Lines[3].Raw, out) {
+		t.Errorf("a line with invalid blocks wrote %s, %v", out, err)
+	}
+	// A lone surrogate is removed; a pair stays.
+	if got := f.Lines[4].Message.Content.Text; got != "a b 😀" || !reflect.DeepEqual(f.Surrogates, []int{11}) {
+		t.Errorf("surrogates: %q at %v", got, f.Surrogates)
+	}
+	if f.Header().ID != "s" || f.Version() != 3 || len(f.Entries()) != 4 {
 		t.Errorf("header %+v, version %d, entries %d", f.Header(), f.Version(), len(f.Entries()))
+	}
+}
+
+func TestStripLoneSurrogates(t *testing.T) {
+	for in, want := range map[string]string{
+		`"a\ud83d"`:            `"a"`,
+		`"\ude00b"`:            `"b"`,
+		`"\ud83d\ude00"`:       `"\ud83d\ude00"`,
+		`"\\ud83d"`:            `"\\ud83d"`,
+		`{"\ud83dk":"\u0041"}`: `{"k":"\u0041"}`,
+	} {
+		if got, _ := StripLoneSurrogates([]byte(in)); string(got) != want {
+			t.Errorf("StripLoneSurrogates(%s) = %s, want %s", in, got, want)
+		}
 	}
 }
 
@@ -126,6 +168,20 @@ func TestMigrate(t *testing.T) {
 	}
 	if e[1].Message.Role != RoleCustom || e[2].FirstKeptEntryID != "v1-3" {
 		t.Errorf("role %q, first kept %q", e[1].Message.Role, e[2].FirstKeptEntryID)
+	}
+
+	// A file that reads as version 1 but whose entries carry ids, a
+	// header lost or damaged, keeps its tree.
+	g, err := Read(strings.NewReader(strings.Join([]string{
+		`{"type":"message","id":"a","parentId":null,"message":{"role":"user","content":"one"}}`,
+		`{"type":"message","id":"b","parentId":"a","message":{"role":"user","content":"two"}}`,
+		`{"type":"message","id":"c","parentId":"a","message":{"role":"user","content":"three"}}`,
+	}, "\n")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m := Migrate(g); !m.KeptIDs || m.IDs != 0 || g.Entries()[2].ParentID != "a" {
+		t.Errorf("migration of a tree with no header = %+v", m)
 	}
 }
 

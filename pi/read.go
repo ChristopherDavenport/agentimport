@@ -28,9 +28,10 @@ type File struct {
 	// Errors lists the lines that could not be read, which the reader
 	// skipped, as pi skips them.
 	Errors []LineError
-	// NULLines lists the lines that held NUL bytes, which the reader
-	// removed before decoding.
-	NULLines []int
+	// Surrogates lists the lines that held lone UTF-16 surrogate
+	// escapes, which the reader removed before decoding; such a line
+	// writes back without them.
+	Surrogates []int
 }
 
 // LineError is a line the reader could not read.
@@ -88,27 +89,36 @@ func (f *File) add(no int, raw []byte, tooLong bool) {
 		return
 	}
 	if bytes.IndexByte(raw, 0) >= 0 {
-		raw = bytes.ReplaceAll(raw, []byte{0}, nil)
-		f.NULLines = append(f.NULLines, no)
+		// pi's JSON.parse refuses a line that holds a NUL byte, and pi
+		// skips it.
+		f.Errors = append(f.Errors, LineError{No: no, Err: errors.New("the line holds NUL bytes")})
+		return
 	}
 	raw = bytes.TrimSpace(raw)
 	if len(raw) == 0 {
-		// pi skips a blank line without counting it; a line that held
-		// NULs alone was a line of the file, and is accounted for.
-		if len(f.NULLines) > 0 && f.NULLines[len(f.NULLines)-1] == no {
-			f.Errors = append(f.Errors, LineError{No: no, Err: errors.New("empty line")})
-		}
+		// pi skips a blank line without counting it.
 		return
+	}
+	if raw[0] != '{' {
+		// null pi skips; a number, string or array is not an entry pi
+		// can use.
+		f.Errors = append(f.Errors, LineError{No: no, Err: errors.New("not a JSON object")})
+		return
+	}
+	text := raw
+	if clean, n := StripLoneSurrogates(raw); n > 0 {
+		text = clean
+		f.Surrogates = append(f.Surrogates, no)
 	}
 	var head struct {
 		Type string `json:"type"`
 	}
-	if err := json.Unmarshal(raw, &head); err != nil {
+	if err := json.Unmarshal(text, &head); err != nil {
 		f.Errors = append(f.Errors, LineError{No: no, Err: err})
 		return
 	}
 	l := &Line{}
-	if err := json.Unmarshal(raw, l); err != nil {
+	if err := json.Unmarshal(text, l); err != nil {
 		// The envelope alone, when it reads, still places the line in
 		// the tree.
 		var env struct {
@@ -116,12 +126,81 @@ func (f *File) add(no int, raw []byte, tooLong bool) {
 			ParentID  string `json:"parentId"`
 			Timestamp string `json:"timestamp"`
 		}
-		_ = json.Unmarshal(raw, &env)
+		_ = json.Unmarshal(text, &env)
 		l = &Line{Type: head.Type, ID: env.ID, ParentID: env.ParentID, Timestamp: env.Timestamp, Err: err}
 	}
 	l.No = no
 	l.Raw = json.RawMessage(bytes.Clone(raw))
 	f.Lines = append(f.Lines, l)
+}
+
+// StripLoneSurrogates removes the \u escapes of UTF-16 surrogates that
+// are not half of a pair from JSON text, and returns how many it
+// removed. JavaScript writes a string cut inside an emoji with such an
+// escape; Go would read it as U+FFFD, and pi removes it from what it
+// sends a model (pi-ai's sanitizeSurrogates).
+func StripLoneSurrogates(raw []byte) ([]byte, int) {
+	if !bytes.Contains(raw, []byte(`\u`)) {
+		return raw, 0
+	}
+	out := make([]byte, 0, len(raw))
+	n := 0
+	inString := false
+	surrogate := func(i int) (rune, bool) {
+		if i+6 > len(raw) || raw[i] != '\\' || raw[i+1] != 'u' {
+			return 0, false
+		}
+		var r rune
+		for _, c := range raw[i+2 : i+6] {
+			switch {
+			case c >= '0' && c <= '9':
+				r = r<<4 | rune(c-'0')
+			case c >= 'a' && c <= 'f':
+				r = r<<4 | rune(c-'a'+10)
+			case c >= 'A' && c <= 'F':
+				r = r<<4 | rune(c-'A'+10)
+			default:
+				return 0, false
+			}
+		}
+		return r, r >= 0xD800 && r <= 0xDFFF
+	}
+	for i := 0; i < len(raw); i++ {
+		c := raw[i]
+		if !inString {
+			if c == '"' {
+				inString = true
+			}
+			out = append(out, c)
+			continue
+		}
+		switch c {
+		case '"':
+			inString = false
+			out = append(out, c)
+		case '\\':
+			if r, ok := surrogate(i); ok {
+				if r <= 0xDBFF {
+					if lo, ok := surrogate(i + 6); ok && lo >= 0xDC00 {
+						out = append(out, raw[i:i+12]...)
+						i += 11
+						continue
+					}
+				}
+				n++
+				i += 5
+				continue
+			}
+			out = append(out, c)
+			if i+1 < len(raw) {
+				out = append(out, raw[i+1])
+				i++
+			}
+		default:
+			out = append(out, c)
+		}
+	}
+	return out, n
 }
 
 // LineCount is the number of lines the file had that a reader accounts
@@ -143,8 +222,8 @@ func (f *File) Header() *Line {
 // Version is the header's version; a header with none, or no header, is
 // version 1, as pi reads it.
 func (f *File) Version() int {
-	if h := f.Header(); h != nil && h.Version > 0 {
-		return h.Version
+	if h := f.Header(); h != nil && h.Version >= 1 {
+		return int(h.Version)
 	}
 	return 1
 }

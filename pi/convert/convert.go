@@ -33,15 +33,14 @@ type Options struct {
 	// Each drop is still reported. Custom entries, the format's own
 	// place for extension state, are kept.
 	Slim bool
-	// ResolveParent returns the session ID of the session file a forked
-	// session's header names by path. Nil resolves nothing; ConvertFile
-	// reads the file's header.
-	ResolveParent func(path string) (id string, ok bool)
+	// ResolveParent reads the session file a forked session's header
+	// names by path. Nil resolves nothing; ConvertFile reads the file.
+	ResolveParent func(path string) (*pi.File, bool)
 }
 
 // ConvertFile reads the session file at path and converts it. A forked
-// session's parent is resolved by reading the header of the file it
-// names, when that exists.
+// session's parent is resolved by reading the file it names, when that
+// exists.
 func ConvertFile(path string, opts Options) (*agentimport.Result, error) {
 	f, err := pi.ReadFile(path)
 	if err != nil {
@@ -49,15 +48,15 @@ func ConvertFile(path string, opts Options) (*agentimport.Result, error) {
 	}
 	if opts.ResolveParent == nil {
 		dir := filepath.Dir(path)
-		opts.ResolveParent = func(p string) (string, bool) {
+		opts.ResolveParent = func(p string) (*pi.File, bool) {
 			if !filepath.IsAbs(p) {
 				p = filepath.Join(dir, p)
 			}
-			h, err := pi.ReadHeader(p)
-			if err != nil || h.ID == "" {
-				return "", false
+			f, err := pi.ReadFile(p)
+			if err != nil || f.Header() == nil || f.Header().ID == "" {
+				return nil, false
 			}
-			return h.ID, true
+			return f, true
 		}
 	}
 	return Convert(f, opts)
@@ -73,9 +72,15 @@ func Convert(f *pi.File, opts Options) (*agentimport.Result, error) {
 		disp:   map[*pi.Line]agentimport.Disposition{},
 		first:  map[string]string{},
 		items:  map[string][]string{},
+
+		replacements: map[string][]string{},
+		nodes:        map[*pi.Line]*pi.Node{},
 	}
 	c.migrate()
 	c.tree = pi.BuildTree(f)
+	for _, n := range c.tree.Nodes {
+		c.nodes[n.Line] = n
+	}
 	h, err := c.header()
 	if err != nil {
 		return nil, err
@@ -110,6 +115,11 @@ type converter struct {
 	// root is the entry every root hangs from: a fork's fork_of link,
 	// or empty.
 	root string
+	// replacements maps the item a context edit wrote in place of a
+	// message to the items it replaced.
+	replacements map[string][]string
+	// nodes maps each entry line to its node in the tree.
+	nodes map[*pi.Line]*pi.Node
 }
 
 func (c *converter) addf(kind agentimport.Kind, code string, l *pi.Line, format string, args ...any) {
@@ -137,6 +147,10 @@ func (c *converter) migrate() {
 	if m.FirstKept > 0 {
 		c.addf(agentimport.Repaired, "pi/v1-first-kept-index", nil,
 			"%d version 1 compactions name the first kept entry by index; the index became the entry", m.FirstKept)
+	}
+	if m.KeptIDs {
+		c.addf(agentimport.Repaired, "pi/version-ids-kept", nil,
+			"the file reads as version %d, by its header or for want of one, but its entries carry ids; they are kept, so its branches stand", m.From)
 	}
 	if m.HookMessages > 0 {
 		c.addf(agentimport.Repaired, "pi/hook-message", nil,
@@ -193,6 +207,9 @@ func (c *converter) header() (agentsession.Header, error) {
 			if err != nil {
 				return h, err
 			}
+			if raw, err = c.clean(hl, raw); err != nil {
+				return h, err
+			}
 			h.Extra[Source+":header"] = raw
 			c.addf(agentimport.Kept, "pi/header-members", hl, "kept in the header member %s:header: %s", Source, memberNames(extra))
 		}
@@ -203,14 +220,29 @@ func (c *converter) header() (agentsession.Header, error) {
 			return h, err
 		}
 		h.Extra[Source+":parent_session"] = raw
-		id, ok := "", false
+		var parent *pi.File
+		ok := false
 		if c.opts.ResolveParent != nil {
-			id, ok = c.opts.ResolveParent(hl.ParentSession)
+			parent, ok = c.opts.ResolveParent(hl.ParentSession)
 		}
 		if ok {
-			h.ParentSession = id
-			c.addf(agentimport.Lossy, "pi/fork-prefix", hl,
-				"a fork copies its parent's path into its own file; the copy is converted as this session's own entries, not as the prefix of a base in the parent")
+			h.ParentSession = parent.Header().ID
+			ids := map[string]bool{}
+			for _, l := range parent.Entries() {
+				if l.ID != "" {
+					ids[l.ID] = true
+				}
+			}
+			copied := 0
+			for _, l := range c.f.Entries() {
+				if l.ID != "" && ids[l.ID] {
+					copied++
+				}
+			}
+			if copied > 0 {
+				c.addf(agentimport.Lossy, "pi/fork-prefix", hl,
+					"the fork copied %d entries of its parent's path into its own file; they are converted as this session's own entries, not as the prefix of a base in the parent", copied)
+			}
 		} else {
 			c.addf(agentimport.Lossy, "pi/parent-unresolved", hl,
 				"the parent session is named by a path that could not be read; it is kept in the header member %s:parent_session and parent_session is unset", Source)
@@ -255,8 +287,41 @@ func (c *converter) run() error {
 	for _, l := range t.Duplicates {
 		c.addf(agentimport.Repaired, "pi/duplicate-id", l, "an earlier entry has id %s; a parentId naming it names this one, as pi resolves it", l.ID)
 	}
-	for _, root := range t.Roots {
-		if err := c.walk(root, c.root, pathState{}); err != nil {
+	// Entries are converted in file order, which pi writes parents
+	// and the entries an entry names before it, so a branch summary or
+	// label naming another branch finds it converted. An entry whose
+	// parent comes later in the file waits for it.
+	states := map[*pi.Node]pathState{}
+	done := map[*pi.Node]bool{}
+	waiting := map[*pi.Node][]*pi.Node{}
+	var visit func(n *pi.Node) error
+	visit = func(n *pi.Node) error {
+		parent, st := c.root, pathState{}
+		if n.Parent != nil {
+			parent, _ = c.b.ID(nodeKey(n.Parent))
+			st = states[n.Parent]
+		}
+		tail, err := c.entry(n.Line, parent, &st)
+		if err != nil {
+			return err
+		}
+		c.b.Bind(nodeKey(n), tail)
+		states[n] = st
+		done[n] = true
+		for _, w := range waiting[n] {
+			if err := visit(w); err != nil {
+				return err
+			}
+		}
+		delete(waiting, n)
+		return nil
+	}
+	for _, n := range t.Nodes {
+		if n.Parent != nil && !done[n.Parent] {
+			waiting[n.Parent] = append(waiting[n.Parent], n)
+			continue
+		}
+		if err := visit(n); err != nil {
 			return err
 		}
 	}
@@ -288,10 +353,11 @@ func (c *converter) tally() {
 	}
 	for _, e := range c.f.Errors {
 		c.report.Line(agentimport.LineMalformed)
-		c.report.Addf(agentimport.Repaired, "pi/malformed-line", "", e.No, "skipped: %v", e.Err)
+		c.report.Addf(agentimport.Repaired, "pi/malformed-line", "", e.No, "skipped, as pi skips it: %v", e.Err)
 	}
-	for _, no := range c.f.NULLines {
-		c.report.Addf(agentimport.Repaired, "pi/nul-bytes", "", no, "NUL bytes removed from the line")
+	for _, no := range c.f.Surrogates {
+		c.report.Addf(agentimport.Repaired, "pi/lone-surrogate", "", no,
+			"a lone UTF-16 surrogate escape, half of a character cut short, was removed, as pi removes it from what it sends")
 	}
 }
 
@@ -341,16 +407,44 @@ func (c *converter) lineMembers(e agentsession.Entry, l *pi.Line) error {
 	return c.b.Member(e, "line", m)
 }
 
-// custom keeps a whole native line as a custom entry.
+// custom keeps a whole native line as a custom entry, under data's
+// member line: a line's own top-level usage, in pi's shape, would read
+// as the format's record of a paid call.
 func (c *converter) custom(l *pi.Line, tail, code string, format string, args ...any) (string, error) {
-	e := &agentsession.CustomEntry{NS: Source, Data: l.Raw}
+	return c.customAs(agentimport.Kept, l, tail, code, format, args...)
+}
+
+// customAs is custom with the finding's kind given.
+func (c *converter) customAs(kind agentimport.Kind, l *pi.Line, tail, code string, format string, args ...any) (string, error) {
+	line, err := c.clean(l, l.Raw)
+	if err != nil {
+		return "", err
+	}
+	data, err := json.Marshal(map[string]json.RawMessage{"line": line})
+	if err != nil {
+		return "", err
+	}
+	e := &agentsession.CustomEntry{NS: Source, Data: data}
 	id, err := c.append(tail, e, l)
 	if err != nil {
 		return "", err
 	}
 	c.mark(l, agentimport.LineKept)
-	c.addf(agentimport.Kept, code, l, format, args...)
+	c.addf(kind, code, l, format, args...)
 	return id, nil
+}
+
+// clean makes native JSON from line l I-JSON, as the session format
+// holds it, and reports what it changed.
+func (c *converter) clean(l *pi.Line, raw json.RawMessage) (json.RawMessage, error) {
+	if agentimport.RepeatedMembers(raw) {
+		c.addf(agentimport.Repaired, "agentimport/repeated-member", l, "an object in the line named a member twice, which I-JSON forbids; the last is kept, as JSON.parse keeps it")
+	}
+	if agentimport.InvalidText(raw) {
+		c.addf(agentimport.Repaired, "agentimport/invalid-text", l, "text in the line that was not valid Unicode was replaced with U+FFFD")
+	}
+	out, _, err := agentimport.CleanJSON(raw)
+	return out, err
 }
 
 // drop accounts for a line that is not written.

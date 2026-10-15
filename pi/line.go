@@ -41,10 +41,11 @@ type Line struct {
 	ParentID  string `json:"parentId"`
 	Timestamp string `json:"timestamp"`
 
-	// session (the header).
-	Version       int    `json:"version"`
-	CWD           string `json:"cwd"`
-	ParentSession string `json:"parentSession"`
+	// session (the header). Version is a number, as JavaScript writes
+	// it; [File.Version] reads it.
+	Version       float64 `json:"version"`
+	CWD           string  `json:"cwd"`
+	ParentSession string  `json:"parentSession"`
 
 	// message.
 	Message *Message `json:"message"`
@@ -113,7 +114,7 @@ type plainLine Line
 
 // UnmarshalJSON decodes a line, keeping undeclared members.
 func (l *Line) UnmarshalJSON(data []byte) error {
-	return decode(data, (*plainLine)(l), &l.Members)
+	return decodeLenient(data, (*plainLine)(l), &l.Members)
 }
 
 // MarshalJSON writes the line back as it was read.
@@ -256,7 +257,7 @@ type plainMessage Message
 
 // UnmarshalJSON decodes a message, keeping undeclared members.
 func (m *Message) UnmarshalJSON(data []byte) error {
-	return decode(data, (*plainMessage)(m), &m.Members)
+	return decodeLenient(data, (*plainMessage)(m), &m.Members)
 }
 
 // MarshalJSON writes the message back as it was read.
@@ -273,14 +274,32 @@ type Content struct {
 	Blocks []*Block
 }
 
-// UnmarshalJSON accepts a string or an array of blocks.
+// UnmarshalJSON accepts a string or an array of blocks. The blocks are
+// decoded one by one, so one that is not an object, or is null, is kept
+// as written (see [Block.Invalid]) and its neighbours still decode.
 func (c *Content) UnmarshalJSON(data []byte) error {
 	*c = Content{}
 	if len(data) > 0 && data[0] == '"' {
 		c.IsText = true
 		return json.Unmarshal(data, &c.Text)
 	}
-	return json.Unmarshal(data, &c.Blocks)
+	var raws []json.RawMessage
+	if err := json.Unmarshal(data, &raws); err != nil {
+		return err
+	}
+	if raws == nil {
+		return nil
+	}
+	c.Blocks = make([]*Block, 0, len(raws))
+	for _, raw := range raws {
+		b := &Block{}
+		if err := json.Unmarshal(raw, b); err != nil || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+			b = &Block{invalid: true}
+		}
+		b.raw = append(json.RawMessage(nil), raw...)
+		c.Blocks = append(c.Blocks, b)
+	}
+	return nil
 }
 
 // MarshalJSON writes the string or the blocks.
@@ -352,17 +371,32 @@ type Block struct {
 	Namespace        string          `json:"namespace"`
 
 	Members
+
+	// raw is the block as read; invalid says it was not an object.
+	raw     json.RawMessage
+	invalid bool
 }
+
+// Invalid reports whether the block, as read, was not a JSON object:
+// null, a number, a string or an array. Only its raw form is kept.
+func (b *Block) Invalid() bool { return b.invalid }
+
+// Raw is the block as read, empty for a block built in Go.
+func (b *Block) Raw() json.RawMessage { return b.raw }
 
 type plainBlock Block
 
-// UnmarshalJSON decodes a block, keeping undeclared members.
+// UnmarshalJSON decodes a block, keeping undeclared members, and a
+// member whose value does not fit its field among them.
 func (b *Block) UnmarshalJSON(data []byte) error {
-	return decode(data, (*plainBlock)(b), &b.Members)
+	return decodeLenient(data, (*plainBlock)(b), &b.Members)
 }
 
 // MarshalJSON writes the block back as it was read.
 func (b Block) MarshalJSON() ([]byte, error) {
+	if b.invalid {
+		return b.raw, nil
+	}
 	return encode(plainBlock(b), &b.Members)
 }
 
@@ -387,7 +421,7 @@ type plainUsage Usage
 
 // UnmarshalJSON decodes usage, keeping undeclared members.
 func (u *Usage) UnmarshalJSON(data []byte) error {
-	return decode(data, (*plainUsage)(u), &u.Members)
+	return decodeLenient(data, (*plainUsage)(u), &u.Members)
 }
 
 // MarshalJSON writes usage back as it was read.
@@ -408,7 +442,7 @@ type plainTool Tool
 
 // UnmarshalJSON decodes a tool, keeping undeclared members.
 func (t *Tool) UnmarshalJSON(data []byte) error {
-	return decode(data, (*plainTool)(t), &t.Members)
+	return decodeLenient(data, (*plainTool)(t), &t.Members)
 }
 
 // MarshalJSON writes the tool back as it was read.
@@ -427,7 +461,7 @@ type plainToolName ToolName
 
 // UnmarshalJSON decodes a tool reference, keeping undeclared members.
 func (t *ToolName) UnmarshalJSON(data []byte) error {
-	return decode(data, (*plainToolName)(t), &t.Members)
+	return decodeLenient(data, (*plainToolName)(t), &t.Members)
 }
 
 // MarshalJSON writes the tool reference back as it was read.
@@ -509,4 +543,53 @@ func (s Sections) MarshalJSON() ([]byte, error) {
 	}
 	b.WriteByte('}')
 	return b.Bytes(), nil
+}
+
+// MistypedMembers lists, as paths from the line, the members anywhere in
+// the line whose value was not of the type pi defines for it, which the
+// reader kept as written in their object's Extra rather than fail the
+// line.
+func (l *Line) MistypedMembers() []string {
+	var out []string
+	add := func(prefix string, names []string) {
+		for _, n := range names {
+			out = append(out, prefix+n)
+		}
+	}
+	add("", l.Mistyped())
+	content := func(prefix string, c *Content) {
+		if c == nil {
+			return
+		}
+		for i, b := range c.Blocks {
+			add(fmt.Sprintf("%s[%d].", prefix, i), b.Mistyped())
+		}
+	}
+	message := func(prefix string, m *Message) {
+		if m == nil {
+			return
+		}
+		add(prefix, m.Mistyped())
+		content(prefix+"content", m.Content)
+		if m.Usage != nil {
+			add(prefix+"usage.", m.Usage.Mistyped())
+		}
+		for i, t := range m.ToolsAdded {
+			if t != nil {
+				add(fmt.Sprintf("%stoolsAdded[%d].", prefix, i), t.Mistyped())
+			}
+		}
+		for i, t := range m.ToolsRemoved {
+			if t != nil {
+				add(fmt.Sprintf("%stoolsRemoved[%d].", prefix, i), t.Mistyped())
+			}
+		}
+	}
+	message("message.", l.Message)
+	message("systemMessage.", l.SystemMessage)
+	content("content", l.Content)
+	if l.Usage != nil {
+		add("usage.", l.Usage.Mistyped())
+	}
+	return out
 }

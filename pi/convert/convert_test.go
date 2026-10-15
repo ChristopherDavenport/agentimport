@@ -186,13 +186,30 @@ func TestContexts(t *testing.T) {
 		// The last compaction keeps nothing before it.
 		{"compaction", []string{"user: summary All done so far.", "user: Fourth task.", "assistant: Fourth done."}},
 		// The omitted prompt is gone, the branch summary stands in for
-		// the branch left, the replaced prompt sits where its edit was,
-		// and the replaced reply is left out.
+		// the branch left (and stays, though pi omits it: the format
+		// omits items alone), the replaced prompt sits where its edit
+		// was, and the reply whose content was replaced stays as it was.
 		{"branches", []string{
 			"assistant: Blue.", "user: summary Asked why blue; it is calm.",
 			"user: Name a fruit.", "assistant: Apple.",
-			"user: And a vegetable, briefly?",
+			"user: And a vegetable, briefly?", "assistant: Carrot.",
 		}},
+		// The branch summary and the label name entries of a branch
+		// written before them; the leaf is the last line, an edit that
+		// changed nothing, on the X path.
+		{"tree", []string{"user: Root.", "assistant: Ok.", "user: Path X.", "assistant: X done."}},
+		// The aborted and errored attempts are left out, as pi leaves
+		// them out.
+		{"failed", []string{"user: Write it.", "user: Try again.", "assistant: Done."}},
+		{"customtool", []string{
+			"user: Patch it.", "custom_tool_call", "custom_tool_call_output",
+			"assistant: Patched.", `call call_10 read {"path":"a"}`, "output call_10",
+		}},
+		// The kept range starts after an edit that wrote nothing; the
+		// replacement the last compaction keeps without its target is
+		// left out; invalid blocks are dropped and a lone surrogate
+		// removed.
+		{"edges", []string{"user: summary Edited.", "assistant: Edited seen.", "user: After null.", "user: Cut  here.", "assistant: Typed."}},
 		{"extensions", []string{
 			"user: Start.", "user: Injected context.", "user: A note.",
 			"user: Ran `ls`\n```\na\nb\n```", "assistant: Okay.", "user: End.",
@@ -244,6 +261,18 @@ func TestSettings(t *testing.T) {
 		t.Errorf("tools = %v", tools)
 	}
 
+	res = convertFixture(t, fx["prompt"], Options{})
+	ctx, err = reread(t, res.Sessions[0]).Context()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// replace is ignored, as pi-ai's getCurrentSystemMessage ignores it;
+	// sections named by an integer come first, as a JavaScript object
+	// orders them.
+	if got := ctx.Settings.Instructions; got != "Base.\n\nNew base.\n\nTwo.\n\nTen.\n\nB." {
+		t.Errorf("prompt instructions = %q", got)
+	}
+
 	res = convertFixture(t, fx["compaction"], Options{})
 	ctx, err = reread(t, res.Sessions[0]).Context()
 	if err != nil {
@@ -269,6 +298,23 @@ func TestFork(t *testing.T) {
 	}
 	if link == nil || link.Rel != agentsession.RelForkOf || link.Session != s.Header().ParentSession {
 		t.Errorf("fork link = %+v", link)
+	}
+
+	// A fork that copied nothing, made at the parent's first message,
+	// reports no copy.
+	empty := &pi.File{Lines: []*pi.Line{{Type: pi.TypeSession, ID: "other-parent"}}}
+	f0, err := pi.ReadFile(fx["fork"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err = Convert(f0, Options{ResolveParent: func(string) (*pi.File, bool) { return empty, true }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, fd := range res.Report.Findings {
+		if fd.Code == "pi/fork-prefix" {
+			t.Errorf("a fork that copied nothing reports %+v", fd)
+		}
 	}
 
 	// Without a resolver the parent is unknown and its path is kept.
@@ -300,6 +346,18 @@ func TestSlim(t *testing.T) {
 			if bytes.Contains(b.Bytes(), []byte(member)) {
 				t.Errorf("%s: slim output holds %s", name, member)
 			}
+		}
+	}
+}
+
+func TestShortHash(t *testing.T) {
+	// Values from pi-ai's own shortHash, run under node.
+	for in, want := range map[string]string{
+		"msg_" + strings.Repeat("x", 70): "1f43gnm1wcb1pr",
+		"héllo😀":                         "1olj6nu1frhbfw",
+	} {
+		if got := shortHash(in); got != want {
+			t.Errorf("shortHash(%q) = %s, want %s", in, got, want)
 		}
 	}
 }

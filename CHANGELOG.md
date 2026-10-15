@@ -35,17 +35,31 @@ versions may break the API.
   `Builder.Last` and `Builder.Resume` return the last entry and the
   leaf.
 - Added: `pi`, a reader for pi session files (session version 3, from
-  pi's own specification): line types that keep every member they do not
-  declare and round-trip, system message sections in their written
-  order, `Migrate` for versions 1 and 2 as pi migrates them, and
+  pi's own specification and, where they disagree, its code): line
+  types that keep every member they do not declare and round-trip, a
+  member of another JSON type kept as written rather than failing the
+  line, content blocks read one by one, lines pi skips (NUL bytes,
+  null, not an object) skipped, lone surrogate escapes removed as pi
+  removes them, `Migrate` for versions 1 and 2 as pi migrates them, and
   `BuildTree`, which links entries by id as pi does.
-- Added: `pi/convert`, pi to agentsession: system messages as config
-  deltas with named instruction parts and tools, assistant parts as
-  items (a Responses reasoning item and message ids recovered from pi's
-  signatures, `call_id|item_id` split), compactions and branch summaries
-  with pi's framing, context edits as `omit`, usage entries as paid-call
-  records, forks linked to their parent, and every line accounted for
-  with its findings documented in `docs/formats/pi.md`.
+- Added: `pi/convert`, pi to agentsession, converting entries in file
+  order: system messages as config deltas with named instruction parts
+  and tools; assistant parts as items (a Responses reasoning item and
+  message ids recovered from pi's signatures, `call_id|item_id` split,
+  Gemini thought signatures as openresponses' Gemini provider carries
+  them, Responses custom tool calls as `custom_tool_call` items);
+  errored and aborted attempts left out of context with `omit`, as pi
+  leaves them out; compactions and branch summaries with pi's framing;
+  context edits as `omit`; usage entries as paid-call records; forks
+  linked to their parent. Every line is accounted for, with its
+  findings documented in `docs/formats/pi.md`.
+- Added: `CleanJSON` keeps the last of a repeated member name, as
+  JSON.parse does, since I-JSON forbids repeats; `RepeatedMembers` and
+  `InvalidText` tell what it changed, and the builder reports
+  `agentimport/repeated-member`.
+- Changed: the format packages share one codec, `internal/jsonline`;
+  `TestImportBoundary` allows an internal package that imports the
+  standard library alone.
 - Added: the `agentimport` package: `Report` (a tally of where every
   native line went and findings by stable code), `Builder` (appends a
   native tree to a session, keeps native IDs in namespaced members,

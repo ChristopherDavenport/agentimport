@@ -1,5 +1,5 @@
 pi: 5 lines: mapped 5 kept 0 dropped 0 malformed 0
   gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
   gap      agentimport/usage-detail                          2  cache writes are folded into input_tokens; the native usage and its cost are pi:usage (at 3, 5)
-  lossy    pi/fork-prefix                                    1  a fork copies its parent's path into its own file; the copy is converted as this session's own entries, not as the prefix of a base in the parent (at 1)
+  lossy    pi/fork-prefix                                    1  the fork copied 2 entries of its parent's path into its own file; they are converted as this session's own entries, not as the prefix of a base in the parent (at 1)
   kept     pi/message-members                                2  kept in pi:message: api, provider (at 3, 5)

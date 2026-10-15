@@ -12,6 +12,7 @@
 {"type":"message","id":"e000000b","parentId":"e000000a","timestamp":"2026-09-05T10:00:11.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Carrot."}],"api":"anthropic-messages","provider":"anthropic","model":"claude-sonnet-4-5","usage":{"input":1,"output":1,"cacheRead":0,"cacheWrite":0,"totalTokens":2,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"stop","timestamp":1788602411000}}
 {"type":"context_edit","id":"e000000c","parentId":"e000000b","timestamp":"2026-09-05T10:00:12.000Z","targetId":"e000000b","replacement":{"content":[{"type":"text","text":"Carrot!"}]}}
 {"type":"context_edit","id":"e000000d","parentId":"e000000c","timestamp":"2026-09-05T10:00:13.000Z","targetId":"e0000003","replacement":null}
-{"type":"label","id":"e000000e","parentId":"e000000d","timestamp":"2026-09-05T10:00:14.000Z","targetId":"e0000007","label":"leaf"}
+{"type":"context_edit","id":"e0000011","parentId":"e000000d","timestamp":"2026-09-05T10:00:13.500Z","targetId":"e0000005","replacement":null}
+{"type":"label","id":"e000000e","parentId":"e0000011","timestamp":"2026-09-05T10:00:14.000Z","targetId":"e0000007","label":"leaf"}
 {"type":"label","id":"e000000f","parentId":"e000000e","timestamp":"2026-09-05T10:00:15.000Z","targetId":"e0000006","label":"fruit"}
 {"type":"label","id":"e0000010","parentId":"e000000f","timestamp":"2026-09-05T10:00:16.000Z","targetId":"e0000006"}

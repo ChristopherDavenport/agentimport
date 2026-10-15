@@ -16,6 +16,9 @@ type Migration struct {
 	// HookMessages counts the messages whose version 2 role hookMessage
 	// became custom.
 	HookMessages int
+	// KeptIDs says the file read as version 1 but its entries carry ids,
+	// which were kept rather than replaced.
+	KeptIDs bool
 }
 
 // Migrate brings f to [CurrentVersion] in place, applying pi's own
@@ -30,7 +33,19 @@ func Migrate(f *File) Migration {
 	if m.From >= CurrentVersion {
 		return m
 	}
-	if m.From < 2 {
+	// A file that says version 1, or says nothing, but whose entries
+	// carry ids is a tree whose header was lost or damaged; its ids
+	// stand. pi would give them new ones and chain them, which turns its
+	// branches into one line.
+	hasIDs := false
+	for _, l := range f.Lines {
+		if l.IsEntry() && (l.ID != "" || l.ParentID != "") {
+			hasIDs = true
+			break
+		}
+	}
+	m.KeptIDs = m.From < 2 && hasIDs
+	if m.From < 2 && !hasIDs {
 		prev := ""
 		for _, l := range f.Lines {
 			if !l.IsEntry() {
