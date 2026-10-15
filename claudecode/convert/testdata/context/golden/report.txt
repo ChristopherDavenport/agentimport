@@ -1,0 +1,13 @@
+claudecode: 12 lines: mapped 8 kept 4 dropped 0 malformed 0
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  gap      agentimport/usage-detail                          1  cache writes are folded into input_tokens; the native usage is claudecode:usage (at 6)
+  gap      agentimport/vcs-branch                            1  the git branch is the vcs member claudecode:branch; the format's vcs has no branch (at 1)
+  lossy    claudecode/request-snapshot                       2  a prompt_snapshot attachment is a config delta: its 3 system blocks are joined into one instructions string, and requests before it record none (at 2, 9)
+  kept     claudecode/attachment                             1  the date attachment's payload is claudecode:attachment (at 3)
+  kept     claudecode/attachment-unrendered                  1  an attachment (deferred_tools_record) that rendered nothing into the request is a custom entry (at 4)
+  kept     claudecode/file-history                           1  the file-history-snapshot record is a custom entry (at 12)
+  kept     claudecode/line-members                           3  kept in claudecode:line: promptId (at 5, 6, 8)
+  kept     claudecode/normalised-input                       1  arguments are the model's (the CLI echoes them); the CLI's normalised input is claudecode:input (at 6)
+  kept     claudecode/side-record                            1  a queue-operation record is a custom entry (at 11)
+  kept     claudecode/system-line                            1  a system line (local_command) is a custom entry (at 10)
+  kept     claudecode/tool-use-result                        1  the toolUseResult sidecar is claudecode:tool_use_result (at 7)

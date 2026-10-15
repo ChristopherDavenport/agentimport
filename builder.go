@@ -88,6 +88,8 @@ type Builder struct {
 
 	ids  map[string]string
 	last time.Time
+	// tail is the entry appended last, the file's last line.
+	tail string
 }
 
 // NewBuilder starts a session with header h.
@@ -155,6 +157,7 @@ func (b *Builder) Append(parent string, e agentsession.Entry) (string, error) {
 			if base.Timestamp.After(b.last) {
 				b.last = base.Timestamp
 			}
+			b.tail = r.ID
 			return r.ID, nil
 		}
 		b.Report.Addf(Repaired, "agentimport/same-instant", b.File, 0,
@@ -173,16 +176,23 @@ func (b *Builder) ID(native string) (string, bool) {
 	return id, ok
 }
 
-// Leaf makes id the session's leaf, with a leaf label when the last
-// entry appended is not it. A converter calls it last, with the entry
-// the native format names as current.
+// Last returns the entry appended last, which is the file's last line.
+func (b *Builder) Last() string { return b.tail }
+
+// Leaf makes id the leaf a reader resumes from. A reader with no leaf
+// label takes the file's last line, so nothing is written when that
+// line is id or descends from it, which resumes on id's branch; a leaf
+// label is appended otherwise. A converter calls it last, with the
+// entry the native format names as current.
 func (b *Builder) Leaf(id string) error {
-	if b.S.Leaf() == id {
-		return nil
+	for _, e := range b.S.Path(b.tail) {
+		if e.Base().ID == id {
+			return nil
+		}
 	}
 	l := agentsession.NewLabelEntry(id, agentsession.LeafLabel)
 	l.Timestamp = b.last
-	_, err := b.Append(b.S.Leaf(), l)
+	_, err := b.Append(b.tail, l)
 	return err
 }
 

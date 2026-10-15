@@ -1,0 +1,11 @@
+claudecode: 15 lines: mapped 14 kept 1 dropped 0 malformed 0
+  gap      agentimport/async-subsession                      2  the call's output says the agent was started (async_launched); its result reaches the parent later, as a message, not as the output (at 3, 5)
+  gap      agentimport/provenance                            4  the import is recorded in the header member agentimport:source
+  gap      agentimport/usage-detail                          7  cache writes are folded into input_tokens; the native usage is claudecode:usage (at 2, 4, 7, subagents/agent-a0001.jsonl:2, subagents/agent-a0002.jsonl:2)
+  gap      agentimport/vcs-branch                            4  the git branch is the vcs member claudecode:branch; the format's vcs has no branch (at 1, subagents/agent-a0001.jsonl:1, subagents/agent-a0002.jsonl:2, subagents/agent-ateam-0003.jsonl:1)
+  dropped  claudecode/agent-meta-only                        1  sub-agent a0004 has a meta file and no transcript
+  lossy    claudecode/agent-unlinked                         1  no call in the transcripts spawned sub-agent ateam-0003; it is a session with parent_session alone
+  lossy    claudecode/fork-context                           1  the fork's inherited context, the parent session up to a2, is not in the session; the record is a custom entry (at subagents/agent-a0002.jsonl:1)
+  kept     claudecode/agent-meta                             3  the sub-agent's meta file is the header member claudecode:agent_meta
+  kept     claudecode/line-members                           8  kept in claudecode:line: effort (at 2, 4, 6, 7, subagents/agent-a0001.jsonl:2)
+  kept     claudecode/tool-use-result                        2  the toolUseResult sidecar is claudecode:tool_use_result (at 3, 5)
