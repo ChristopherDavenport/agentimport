@@ -162,6 +162,24 @@ provider does, `input_tokens` is input + cache read + cache creation,
 `output_tokens_details.thinking_tokens`. The cache-write split, TTLs,
 server tool counts, service tier and the rest stay in `claudecode:usage`.
 
+## Extension types
+
+Open Responses carries types outside its spec as slug-prefixed
+extensions, kept verbatim. The converter writes these, all prefixed
+`anthropic.` because the Messages API defines them, and all shaped as
+`openresponses/providers/anthropic` shapes them, `{"type":
+"anthropic.<type>", "block": <the native block>}`:
+
+| Extension | Kind | Written for |
+| --- | --- | --- |
+| `anthropic.<block type>` | item | an assistant block with no Responses item: `redacted_thinking`, `server_tool_use`, `web_search_tool_result` and the other server tool blocks, and any block type newer than the converter |
+| `anthropic.<block type>` | content part | a user or tool-result block with no input part: `tool_reference` (a deferred tool loaded by ToolSearch), and any block whose members do not fit its type |
+| `anthropic.<tool type>` | tool | a server tool definition in a request snapshot |
+
+`providers/anthropic` sends the items and tools back as the blocks they
+carry. It has no content part extensions yet, so a session holding one
+(every ToolSearch result) does not replay through it until it does.
+
 ## Findings
 
 Every code the converter reports. Kinds are those of `agentimport`:
@@ -176,7 +194,7 @@ the codes marked "kept, or dropped" are dropped instead.
 | `agentimport/tool-error` | gap | A tool result had `is_error`; `function_call_output` has no error flag, so it is `claudecode:is_error`. |
 | `agentimport/usage-detail` | gap | A response's usage has members Responses usage lacks; they are in `claudecode:usage`. |
 | `agentimport/vcs-branch` | gap | The git branch is the vcs member `claudecode:branch`; the format's vcs records a revision, not a branch. |
-| `openresponses/provider-content-part` | gap | A user or tool-result block with no input part (`tool_reference`, a block kept raw) is an `anthropic.<type>` part carrying it; `providers/anthropic` has no such part and cannot send a session holding one. |
+| `claudecode/extension-part` | kept | A user or tool-result block with no Open Responses input part (`tool_reference`, a block kept raw) is the extension part `anthropic.<type>` carrying it; see *Extension types*. |
 | `claudecode/agent-meta` | kept, or dropped | A sub-agent's meta file is the header member `claudecode:agent_meta`. |
 | `claudecode/agent-meta-only` | dropped | A sub-agent has a meta file and no transcript: it never wrote a line. |
 | `claudecode/agent-unlinked` | lossy | No call in the transcripts spawned the agent (team members with no spawning call); its session names the parent in `parent_session` alone, with no link. |

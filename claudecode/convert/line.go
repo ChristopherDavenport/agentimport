@@ -169,8 +169,8 @@ func (c *converter) contents(l *claudecode.Line, blocks []*claudecode.ContentBlo
 		if user {
 			where = "a user message"
 		}
-		c.addf(agentimport.Gap, "openresponses/provider-content-part", l,
-			"a %s block in %s is kept as an %s part, which providers/anthropic cannot send", b.Type, where, typ)
+		c.addf(agentimport.Kept, "claudecode/extension-part", l,
+			"a %s block in %s is the extension part %s", b.Type, where, typ)
 	}
 	return out
 }
