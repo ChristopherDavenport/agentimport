@@ -122,11 +122,17 @@ func (b *Builder) Member(e agentsession.Entry, name string, v any) error {
 			return fmt.Errorf("member %s:%s: %w", b.NS, name, err)
 		}
 	}
-	raw, changed, err := CleanJSON(raw)
+	repeated := RepeatedMembers(raw)
+	badText := InvalidText(raw)
+	raw, _, err := CleanJSON(raw)
 	if err != nil {
 		return fmt.Errorf("member %s:%s: %w", b.NS, name, err)
 	}
-	if changed {
+	if repeated {
+		b.Report.Addf(Repaired, "agentimport/repeated-member", b.File, 0,
+			"an object in member %s:%s named a member twice, which I-JSON forbids; the last is kept, as JSON.parse keeps it", b.NS, name)
+	}
+	if badText {
 		b.Report.Addf(Repaired, "agentimport/invalid-text", b.File, 0,
 			"text in member %s:%s that was not valid Unicode was replaced with U+FFFD", b.NS, name)
 	}

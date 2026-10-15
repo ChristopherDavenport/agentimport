@@ -16,7 +16,9 @@ writing code.
   `<source>/convert`; `cmd/agentimport`.
 - The module imports `agentsession`, `openresponses` and the standard
   library alone; `make deps` enforces it. A format package imports the
-  standard library alone; `TestImportBoundary` enforces it, and it
+  standard library alone, or a package of this module's `internal`
+  tree that does, at any depth (`internal/jsonline`, the codec that
+  keeps undeclared members); `TestImportBoundary` enforces it, and it
   lists the format packages, so a new source adds itself there.
 
 ## Rules every converter keeps

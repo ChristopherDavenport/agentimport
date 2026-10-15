@@ -6,16 +6,20 @@ import (
 	"unicode/utf8"
 )
 
-// CleanJSON returns raw with every string in it, member names included,
-// made valid Unicode: invalid UTF-8 and lone surrogate escapes become
-// U+FFFD. The session format holds I-JSON, and its writer normalises a
-// value but refuses a member name that is not, so a native object
-// copied into a member or a custom entry is cleaned first. Numbers keep
-// their spelling. changed says something was replaced. raw that is
-// already clean is returned as it is.
+// CleanJSON returns raw as I-JSON: every string in it, member names
+// included, made valid Unicode (invalid UTF-8 and lone surrogate escapes
+// become U+FFFD), and an object that repeats a member name keeping the
+// last, as JavaScript's JSON.parse reads it. The session format holds
+// I-JSON, and its writer normalises a value but refuses a member name
+// that is not, or a repeated one, so a native object copied into a
+// member or a custom entry is cleaned first. Numbers keep their
+// spelling. changed says something was replaced or dropped; see
+// [RepeatedMembers] to tell which. raw that is already clean is
+// returned as it is.
 func CleanJSON(raw json.RawMessage) (out json.RawMessage, changed bool, err error) {
 	valid := utf8.Valid(raw)
-	if valid && !bytes.Contains(raw, []byte(`\ud`)) && !bytes.Contains(raw, []byte(`\uD`)) {
+	repeated := RepeatedMembers(raw)
+	if valid && !repeated && !bytes.Contains(raw, []byte(`\ud`)) && !bytes.Contains(raw, []byte(`\uD`)) {
 		return raw, false, nil
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
@@ -30,8 +34,61 @@ func CleanJSON(raw json.RawMessage) (out json.RawMessage, changed bool, err erro
 	if err := enc.Encode(v); err != nil {
 		return nil, false, err
 	}
-	return bytes.TrimRight(b.Bytes(), "\n"), !valid || loneSurrogate(raw), nil
+	return bytes.TrimRight(b.Bytes(), "\n"), repeated || !valid || loneSurrogate(raw), nil
 }
+
+// RepeatedMembers reports whether an object anywhere in raw names a
+// member twice, which I-JSON forbids.
+func RepeatedMembers(raw json.RawMessage) bool {
+	type frame struct {
+		keys    map[string]bool
+		wantKey bool
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	var stack []*frame
+	value := func() {
+		if n := len(stack); n > 0 && stack[n-1].keys != nil {
+			stack[n-1].wantKey = true
+		}
+	}
+	for {
+		tok, err := dec.Token()
+		if err != nil {
+			return false
+		}
+		switch t := tok.(type) {
+		case json.Delim:
+			switch t {
+			case '{':
+				stack = append(stack, &frame{keys: map[string]bool{}, wantKey: true})
+			case '[':
+				stack = append(stack, &frame{})
+			default:
+				stack = stack[:len(stack)-1]
+				value()
+			}
+		case string:
+			if n := len(stack); n > 0 && stack[n-1].keys != nil && stack[n-1].wantKey {
+				top := stack[n-1]
+				if top.keys[t] {
+					return true
+				}
+				top.keys[t] = true
+				top.wantKey = false
+				continue
+			}
+			value()
+		default:
+			value()
+		}
+	}
+}
+
+// InvalidText reports whether a JSON text holds a string, member names
+// included, that is not valid Unicode: invalid UTF-8, or a lone
+// surrogate escape. [CleanJSON] replaces such text.
+func InvalidText(raw json.RawMessage) bool { return !utf8.Valid(raw) || loneSurrogate(raw) }
 
 // loneSurrogate reports whether a JSON text holds a \u escape of a
 // surrogate that is not half of a pair.
