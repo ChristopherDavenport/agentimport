@@ -44,10 +44,9 @@ converter packages are all named `convert`, since a program almost
 always wants one source; `cmd/agentimport` imports them under aliases.
 
 A new source is two packages, `<source>` and `<source>/convert`, a
-`docs/formats/<source>.md`, and a case in the command's detection.
-Gemini CLI (JSONL with `$set`/`$patch`/`$rewindTo` records to replay)
-and VS Code chat sessions (a UI mutation log, lossy by nature) are the
-next candidates; they are not in the first cut.
+`docs/formats/<source>.md`, and a case in the command's detection;
+`new-source.md` has the method, the defects to build against and what
+is known of the candidates, Gemini CLI and VS Code chat sessions first.
 
 ## Format packages
 

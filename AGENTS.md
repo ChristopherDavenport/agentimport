@@ -5,7 +5,9 @@ Session Format: Claude Code, pi and Codex today. Each source is a
 format package that reads the native log as it is, and a `convert`
 package that turns it into `agentsession` sessions and reports every
 difference. The design is `docs/plans/agentimport.md`; read it before
-writing code.
+writing code. To add a source, read `docs/plans/new-source.md` too: the
+build-and-review loop, the defects the first three sources had, the
+decisions they settled, and what is known of the candidates.
 
 ## Module
 
