@@ -202,7 +202,7 @@ func TestContexts(t *testing.T) {
 		// them out.
 		{"failed", []string{"user: Write it.", "user: Try again.", "assistant: Done."}},
 		{"customtool", []string{
-			"user: Patch it.", "custom_tool_call", "custom_tool_call_output",
+			"user: Patch it.", "openai.custom_tool_call", "openai.custom_tool_call_output",
 			"assistant: Patched.", `call call_10 read {"path":"a"}`, "output call_10",
 		}},
 		// The kept range starts after an edit that wrote nothing; the

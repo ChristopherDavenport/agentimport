@@ -596,13 +596,13 @@ func (c *converter) callEntry(l *pi.Line, b *pi.Block, st *pathState) (*agentses
 			CallID string `json:"call_id"`
 			Name   string `json:"name"`
 			Input  string `json:"input"`
-		}{"custom_tool_call", itemID, "completed", id, b.Name, input})
+		}{"openai.custom_tool_call", itemID, "completed", id, b.Name, input})
 		if err != nil {
 			return nil, err
 		}
-		e = itemEntry(&openresponses.UnknownItem{Type: "custom_tool_call", ID: itemID, Status: openresponses.StatusCompleted, Raw: raw})
-		c.addf(agentimport.Gap, "openresponses/custom-tool-call", l,
-			"a Responses custom tool call is a custom_tool_call item, which openresponses does not type; it is carried verbatim")
+		e = itemEntry(&openresponses.UnknownItem{Type: "openai.custom_tool_call", ID: itemID, Status: openresponses.StatusCompleted, Raw: raw})
+		c.addf(agentimport.Kept, "pi/custom-tool-call", l,
+			"a Responses custom tool call is the extension item openai.custom_tool_call")
 	} else {
 		args := compactJSON(b.Arguments)
 		if len(b.Arguments) == 0 || args == "null" {
@@ -751,13 +751,13 @@ func (c *converter) toolResult(l *pi.Line, tail string, st *pathState) (string, 
 			Type   string                               `json:"type"`
 			CallID string                               `json:"call_id"`
 			Output openresponses.FunctionCallOutputData `json:"output"`
-		}{"custom_tool_call_output", cl.id, data})
+		}{"openai.custom_tool_call_output", cl.id, data})
 		if err != nil {
 			return "", err
 		}
-		e = itemEntry(&openresponses.UnknownItem{Type: "custom_tool_call_output", Raw: raw})
-		c.addf(agentimport.Gap, "openresponses/custom-tool-call", l,
-			"the output of a Responses custom tool call is a custom_tool_call_output item, which openresponses does not type; it is carried verbatim")
+		e = itemEntry(&openresponses.UnknownItem{Type: "openai.custom_tool_call_output", Raw: raw})
+		c.addf(agentimport.Kept, "pi/custom-tool-call", l,
+			"the output of a Responses custom tool call is the extension item openai.custom_tool_call_output")
 	} else {
 		e = itemEntry(&openresponses.FunctionCallOutput{CallID: cl.id, Output: data})
 	}

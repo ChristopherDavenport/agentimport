@@ -106,7 +106,7 @@ naming another branch finds it converted.
 | `message`, role `user` | `item`, user `message` | images as `input_image` data URLs |
 | `message`, role `assistant` | a `config` delta when its model is not the one in force; items for its content blocks in order; then a `response` | see below |
 | `message`, role `assistant`, stopped `error` or `aborted` | as above, then a `config` delta whose `omit.items` names its items | pi leaves the attempt out of every later request |
-| `message`, role `toolResult` | `item`, `function_call_output`, or `custom_tool_call_output` for a custom tool call | one text block is the output string; otherwise parts; `details` in `pi:details`; a `toolName` other than the call's in `pi:tool_name` |
+| `message`, role `toolResult` | `item`, `function_call_output`, or `openai.custom_tool_call_output` for a custom tool call | one text block is the output string; otherwise parts; `details` in `pi:details`; a `toolName` other than the call's in `pi:tool_name` |
 | `message`, role `bashExecution` | `item`, user `message` with the text pi renders for it | the record in `pi:bash_execution`; one kept out of context is a `custom` entry |
 | `message`, role `custom`; `custom_message` | `item`, user `message` with the content, `visible: false` when not displayed | `customType` in `pi:custom_type`, `details` in `pi:details` |
 | `usage` | `custom`, `ns` `pi`, `data` with `usage` in the Responses shape and `model`: the format's record of a paid call with no response | native usage in `data["pi:usage"]` |
@@ -149,9 +149,9 @@ parts in order; each part is an item, tied to the response by
   they are split back, and the item id is kept only when it is an
   `fc_` id, as pi sends it. An item id of `ctc_` marks a Responses
   custom tool call, which pi stores as a tool call whose arguments hold
-  its free-form input: it is a `custom_tool_call` item with that input,
-  and its result a `custom_tool_call_output`. openresponses does not
-  type either, so both are carried verbatim. The native id is
+  its free-form input: it is the extension item
+  `openai.custom_tool_call` with that input, and its result an
+  `openai.custom_tool_call_output` (see *Extension types*). The native id is
   `pi:call_id` whenever the call ID differs from it.
 - The `response` carries the model that answered (`responseModel`,
   else `model`), the status from `stopReason` (`stop` and `toolUse`
@@ -217,6 +217,18 @@ place as an update, depending on whether the provider accepts system
 messages mid-conversation. The conversion writes the folded form, a
 config delta, and reports the difference.
 
+## Extension types
+
+Open Responses carries types outside its spec as slug-prefixed
+extensions, kept verbatim. The converter writes these, each prefixed
+by whoever defines the type:
+
+| Extension | Kind | Written for |
+| --- | --- | --- |
+| `anthropic.redacted_thinking` | item | Anthropic redacted thinking, shaped as `openresponses/providers/anthropic` shapes it |
+| `openai.custom_tool_call` | item | a Responses custom tool call (free-form input; `ctc_` item id): the Responses item with its type prefixed, `call_id`, `name`, `input` |
+| `openai.custom_tool_call_output` | item | its result: `call_id` and `output` |
+
 ## Findings
 
 Every code the converter reports. Kinds are those of `agentimport`:
@@ -233,7 +245,7 @@ every converter can report are in [README.md](README.md).
 | `agentimport/context-replace` | gap | A context edit replaced a message's content: a user or extension message is omitted and its replacement written after; an assistant message or tool result stays and the edit is a custom entry. |
 | `agentimport/omit-summary` | gap | A context edit left a branch summary out of context; `omit` names items alone, so it stays. |
 | `agentimport/info-clear` | gap | A `session_info` with an empty name cleared pi's session name; the format cannot clear one, so nothing is written. |
-| `openresponses/custom-tool-call` | gap | A Responses custom tool call or its output is a `custom_tool_call` or `custom_tool_call_output` item, carried verbatim; openresponses does not type them. |
+| `pi/custom-tool-call` | kept | A Responses custom tool call or its output is the extension item `openai.custom_tool_call` or `openai.custom_tool_call_output`; see *Extension types*. |
 | `pi/bash-excluded` | kept | A command the user ran and kept out of context is a custom entry. |
 | `pi/bash-execution` | kept, or dropped | A command the user ran is the user message pi renders from it; the record is `pi:bash_execution`. |
 | `pi/block-members` | kept | Members of an assistant block an item has no place for are `pi:block`. |

@@ -47,7 +47,7 @@ versions may break the API.
   and tools; assistant parts as items (a Responses reasoning item and
   message ids recovered from pi's signatures, `call_id|item_id` split,
   Gemini thought signatures as openresponses' Gemini provider carries
-  them, Responses custom tool calls as `custom_tool_call` items);
+  them, Responses custom tool calls as `openai.custom_tool_call` extension items);
   errored and aborted attempts left out of context with `omit`, as pi
   leaves them out; compactions and branch summaries with pi's framing;
   context edits as `omit`; usage entries as paid-call records; forks

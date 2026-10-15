@@ -1,5 +1,5 @@
 pi: 6 lines: mapped 6 kept 0 dropped 0 malformed 0
   gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
   gap      agentimport/usage-detail                          2  cache writes are folded into input_tokens; the native usage and its cost are pi:usage (at 3, 5)
-  gap      openresponses/custom-tool-call                    2  a Responses custom tool call is a custom_tool_call item, which openresponses does not type; it is carried verbatim (at 3, 4)
+  kept     pi/custom-tool-call                               2  a Responses custom tool call is the extension item openai.custom_tool_call (at 3, 4)
   kept     pi/message-members                                2  kept in pi:message: api, provider (at 3, 5)
