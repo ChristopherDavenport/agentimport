@@ -576,44 +576,32 @@ func (c *converter) thinking(l *pi.Line, b *pi.Block) (*agentsession.ItemEntry, 
 // callEntry maps a toolCall block. pi joins a Responses call's call_id
 // and item id as "<call_id>|<item_id>"; they are split back. An item
 // id of ctc_ marks a Responses custom tool call, which pi stores as a
-// tool call whose arguments hold its free-form input.
+// tool call whose arguments hold its free-form input. A custom tool
+// call is a tool call, so it is a function_call like any other, which
+// the session format's call rules then see; its kind and item id are
+// members, for a writer that sends it back to OpenAI as what it was.
 func (c *converter) callEntry(l *pi.Line, b *pi.Block, st *pathState) (*agentsession.ItemEntry, error) {
 	native := b.ID
 	callID, itemID, _ := strings.Cut(native, "|")
 	id, renamed := c.b.Calls.Assign(callID)
 	custom := strings.HasPrefix(itemID, "ctc_")
 	st.addCall(native, call{id: id, name: b.Name, custom: custom})
-	var e *agentsession.ItemEntry
+	args := compactJSON(b.Arguments)
+	if len(b.Arguments) == 0 || args == "null" {
+		args = "{}"
+	}
+	fc := &openresponses.FunctionCall{Status: openresponses.StatusCompleted, CallID: id, Name: b.Name, Arguments: args}
+	if strings.HasPrefix(itemID, "fc_") {
+		// pi sends only a function call item id of the right kind.
+		fc.ID = itemID
+	}
+	e := itemEntry(fc)
 	if custom {
-		input, ok := customInput(b)
-		if !ok {
-			c.addf(agentimport.Lossy, "pi/custom-input", l, "the custom tool call's arguments hold no single text input; its input is the arguments as JSON")
-		}
-		raw, err := json.Marshal(struct {
-			Type   string `json:"type"`
-			ID     string `json:"id,omitempty"`
-			Status string `json:"status"`
-			CallID string `json:"call_id"`
-			Name   string `json:"name"`
-			Input  string `json:"input"`
-		}{"openai.custom_tool_call", itemID, "completed", id, b.Name, input})
-		if err != nil {
+		if err := c.markCustom(e, itemID); err != nil {
 			return nil, err
 		}
-		e = itemEntry(&openresponses.UnknownItem{Type: "openai.custom_tool_call", ID: itemID, Status: openresponses.StatusCompleted, Raw: raw})
 		c.addf(agentimport.Kept, "pi/custom-tool-call", l,
-			"a Responses custom tool call is the extension item openai.custom_tool_call")
-	} else {
-		args := compactJSON(b.Arguments)
-		if len(b.Arguments) == 0 || args == "null" {
-			args = "{}"
-		}
-		fc := &openresponses.FunctionCall{Status: openresponses.StatusCompleted, CallID: id, Name: b.Name, Arguments: args}
-		if strings.HasPrefix(itemID, "fc_") {
-			// pi sends only a function call item id of the right kind.
-			fc.ID = itemID
-		}
-		e = itemEntry(fc)
+			"a Responses custom tool call is a function_call whose arguments wrap its input; its kind is %s:tool_kind", Source)
 	}
 	if native != id {
 		if err := c.b.Member(e, "call_id", native); err != nil {
@@ -636,36 +624,6 @@ func (c *converter) callEntry(l *pi.Line, b *pi.Block, st *pathState) (*agentses
 		c.addf(agentimport.Kept, "pi/thought-signature", l, "a thought signature from %s, not a Gemini API, is %s:thought_signature", l.Message.API, Source)
 	}
 	return e, nil
-}
-
-// customInput finds a custom tool call's free-form input in the
-// arguments pi stores: the property its customInput names, the single
-// member, or input; failing those, the arguments as JSON.
-func customInput(b *pi.Block) (string, bool) {
-	var args map[string]json.RawMessage
-	if json.Unmarshal(b.Arguments, &args) != nil {
-		return compactJSON(b.Arguments), false
-	}
-	prop := ""
-	var ci struct {
-		Property string `json:"property"`
-	}
-	if raw, ok := b.Extra["customInput"]; ok && json.Unmarshal(raw, &ci) == nil {
-		prop = ci.Property
-	}
-	if prop == "" && len(args) == 1 {
-		for k := range args {
-			prop = k
-		}
-	}
-	if prop == "" {
-		prop = "input"
-	}
-	var s string
-	if raw, ok := args[prop]; ok && json.Unmarshal(raw, &s) == nil {
-		return s, true
-	}
-	return compactJSON(b.Arguments), false
 }
 
 // responseEntry is the envelope of the call: the provider's response
@@ -721,9 +679,8 @@ func (c *converter) responseEntry(l *pi.Line, respID string) (*agentsession.Resp
 	return e, nil
 }
 
-// toolResult maps a tool result to the output of the call it answers:
-// a function_call_output, or a custom_tool_call_output for a custom
-// tool call.
+// toolResult maps a tool result to the function_call_output of the
+// call it answers; a custom tool call's output carries its kind too.
 func (c *converter) toolResult(l *pi.Line, tail string, st *pathState) (string, error) {
 	m := l.Message
 	cl, ok := st.calls[m.ToolCallID]
@@ -745,21 +702,11 @@ func (c *converter) toolResult(l *pi.Line, tail string, st *pathState) (string, 
 			data.Parts = c.contents(l, m.Content)
 		}
 	}
-	var e *agentsession.ItemEntry
+	e := itemEntry(&openresponses.FunctionCallOutput{CallID: cl.id, Output: data})
 	if cl.custom {
-		raw, err := json.Marshal(struct {
-			Type   string                               `json:"type"`
-			CallID string                               `json:"call_id"`
-			Output openresponses.FunctionCallOutputData `json:"output"`
-		}{"openai.custom_tool_call_output", cl.id, data})
-		if err != nil {
+		if err := c.markCustom(e, ""); err != nil {
 			return "", err
 		}
-		e = itemEntry(&openresponses.UnknownItem{Type: "openai.custom_tool_call_output", Raw: raw})
-		c.addf(agentimport.Kept, "pi/custom-tool-call", l,
-			"the output of a Responses custom tool call is the extension item openai.custom_tool_call_output")
-	} else {
-		e = itemEntry(&openresponses.FunctionCallOutput{CallID: cl.id, Output: data})
 	}
 	if m.ToolName != "" && m.ToolName != cl.name {
 		if err := c.b.Member(e, "tool_name", m.ToolName); err != nil {
@@ -799,4 +746,14 @@ func sameJSON(a, b []byte) bool {
 		return false
 	}
 	return reflect.DeepEqual(x, y)
+}
+
+// markCustom records on a call or its output that the tool was a
+// Responses custom tool, and on the call its ctc_ item id, which a
+// function_call cannot hold.
+func (c *converter) markCustom(e *agentsession.ItemEntry, itemID string) error {
+	if err := c.b.Member(e, "tool_kind", "custom"); err != nil {
+		return err
+	}
+	return c.b.Member(e, "item_id", itemID)
 }
