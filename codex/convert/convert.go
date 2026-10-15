@@ -46,13 +46,19 @@ func ConvertFile(path string, opts Options) (*agentimport.Result, error) {
 // Convert converts one rollout into one session.
 func Convert(f *codex.File, opts Options) (*agentimport.Result, error) {
 	c := &converter{
-		opts:     opts,
-		report:   agentimport.NewReport(Source),
-		f:        f,
-		disp:     map[*codex.Line]agentimport.Disposition{},
-		states:   map[string]state{},
-		once:     map[string]bool{},
-		reported: map[string]bool{},
+		opts:      opts,
+		report:    agentimport.NewReport(Source),
+		f:         f,
+		disp:      map[*codex.Line]agentimport.Disposition{},
+		states:    map[string]state{},
+		once:      map[string]bool{},
+		reported:  map[string]bool{},
+		copyBound: -1,
+
+		turnStarts:  map[string]bool{},
+		markers:     map[string]bool{},
+		compactions: map[string]string{},
+		windows:     map[string]string{},
 	}
 	h, err := c.header()
 	if err != nil {
@@ -62,10 +68,11 @@ func Convert(f *codex.File, opts Options) (*agentimport.Result, error) {
 	if err := c.run(); err != nil {
 		return nil, err
 	}
-	if err := agentimport.Verify(c.b.S); err != nil {
+	s, err := agentimport.Finish(c.b.S)
+	if err != nil {
 		return nil, fmt.Errorf("converted session does not verify: %w", err)
 	}
-	return &agentimport.Result{Report: c.report, Sessions: []*agentsession.Session{c.b.S}}, nil
+	return &agentimport.Result{Report: c.report, Sessions: []*agentsession.Session{s}}, nil
 }
 
 // converter converts one rollout into one session. The rollout is a
@@ -94,6 +101,26 @@ type converter struct {
 	reported map[string]bool
 	// lastTS is the latest time an entry was written at.
 	lastTS time.Time
+	// batch says the rollout writes a response's token count before its
+	// items, as Codex did up to 0.65; see recordOrder.
+	batch bool
+	// copyBound is the first ordinal of the thread's own records, when
+	// the session meta names one; lines before it were copied from the
+	// parent. -1 when there is none.
+	copyBound int64
+	// rawReasoning says the reasoning items since the last turn began
+	// carried their raw content, which the events that stream it repeat.
+	rawReasoning bool
+	// turnStarts marks the custom entries of turn_started events, where
+	// Codex's reconstruction starts a segment.
+	turnStarts map[string]bool
+	// markers marks the custom entries holding a compaction record whose
+	// window came from its replacement history.
+	markers map[string]bool
+	// compactions maps a compaction entry, and windows a window's hidden
+	// entry, to the kind of window.
+	compactions map[string]string
+	windows     map[string]string
 }
 
 // state is what is in force at a point of the session. Its maps are
@@ -201,9 +228,6 @@ func (c *converter) header() (agentsession.Header, error) {
 	src := agentimport.Source{Format: Source}
 	if m != nil {
 		h.Harness.Version = m.CLIVersion
-		if m.SessionID != "" && m.SessionID != m.ID {
-			src.NativeID = m.SessionID
-		}
 	}
 	if err := agentimport.SetSource(&h, src); err != nil {
 		return h, err
@@ -279,6 +303,21 @@ func (c *converter) metaMembers(m *codex.SessionMeta) (map[string]json.RawMessag
 	for _, k := range []string{"id", "timestamp", "cwd", "cli_version", "base_instructions", "git", "instructions", "parent_thread_id"} {
 		delete(all, k)
 	}
+	// The base instructions' text is the config's instructions; their
+	// provenance and anything else are kept.
+	if b := m.BaseInstructions; b != nil {
+		rest := nonNull(b.Extra)
+		if len(b.Provenance) > 0 && string(bytes.TrimSpace(b.Provenance)) != "null" {
+			rest["provenance"] = b.Provenance
+		}
+		if len(rest) > 0 {
+			raw, err := json.Marshal(rest)
+			if err != nil {
+				return nil, err
+			}
+			all["base_instructions"] = raw
+		}
+	}
 	if m.SessionID == m.ID {
 		delete(all, "session_id")
 	}
@@ -288,6 +327,7 @@ func (c *converter) metaMembers(m *codex.SessionMeta) (map[string]json.RawMessag
 // run writes the entries the session starts with, converts every line
 // in file order, names the leaf and tallies every line.
 func (c *converter) run() error {
+	c.recordOrder()
 	if err := c.start(); err != nil {
 		return err
 	}
@@ -325,14 +365,24 @@ func (c *converter) start() error {
 	if ts.IsZero() {
 		ts = c.b.S.Header().CreatedAt
 	}
+	for _, bound := range []json.Number{m.SubagentHistoryStartOrdinal, m.ForkedFromOrdinalExclusive} {
+		if n, err := bound.Int64(); bound != "" && err == nil {
+			c.copyBound = n
+			break
+		}
+	}
 	if m.ForkedFromID != "" {
 		link := agentsession.NewLinkEntry(agentsession.RelForkOf, m.ForkedFromID)
 		link.Timestamp = ts
 		if err := c.appendNow(link, c.meta); err != nil {
 			return err
 		}
+		usageNote := "the responses among them keep their usage only in codex:usage"
+		if c.copyBound < 0 {
+			usageNote = "with no ordinal bound in the session meta they cannot be told from the thread's own, so the responses among them keep their usage, which the parent's session counts too"
+		}
 		c.addf(agentimport.Lossy, "codex/fork-prefix", c.meta,
-			"the thread was forked from %s; the records it copied from its parent are converted as this session's own entries, not as the prefix of a base", m.ForkedFromID)
+			"the thread was forked from %s; the records it copied from its parent are converted as this session's own entries, not as the prefix of a base, and %s", m.ForkedFromID, usageNote)
 	}
 	if m.BaseInstructions != nil && m.BaseInstructions.Text != "" {
 		text := m.BaseInstructions.Text
@@ -340,9 +390,6 @@ func (c *converter) start() error {
 		e.Timestamp = ts
 		if err := c.appendNow(e, c.meta); err != nil {
 			return err
-		}
-		if extra := nonNull(m.BaseInstructions.Extra); len(extra) > 0 || len(m.BaseInstructions.Provenance) > 0 {
-			c.addf(agentimport.Kept, "codex/session-meta-members", c.meta, "the base instructions' provenance is in %s:session_meta", Source)
 		}
 	} else {
 		c.addf(agentimport.Lossy, "codex/no-base-instructions", c.meta,
@@ -556,4 +603,77 @@ func memberNames(m map[string]json.RawMessage) string {
 	}
 	sort.Strings(names)
 	return strings.Join(names, ", ")
+}
+
+// recordOrder picks the order Codex wrote a response's records in, from
+// the session meta's cli_version: up to 0.65 the token count at the
+// response's completion, then its items in one batch, each call followed
+// by its output (codex.rs at rust-v0.40.0, process_items); from 0.66 the
+// items as each completes, the count at completion and the tool outputs
+// after it; from 0.131 the outputs, then the count (session/turn.rs,
+// drain_in_flight); from 0.159 a token usage record at completion too.
+// The later orders read the same way. A rollout naming no version this
+// can read is judged by where its first token count falls, and the
+// guess is reported.
+func (c *converter) recordOrder() {
+	if c.meta != nil {
+		if major, minor, ok := version(c.meta.Meta.CLIVersion); ok {
+			c.batch = major == 0 && minor <= 65
+			return
+		}
+	}
+	for i, l := range c.f.Lines {
+		if l.Event == nil || l.Event.Type != codex.EventTokenCount || l.Event.Info == nil {
+			continue
+		}
+		after := false
+	back:
+		for j := i - 1; j >= 0; j-- {
+			p := c.f.Lines[j]
+			switch {
+			case p.Item != nil:
+				after = isOutput(p.Item, harnessMeta{}) || answerTypes[p.Item.Type]
+				break back
+			case p.TurnContext != nil, p.Event != nil && (p.Event.Type == codex.EventTurnStarted || p.Event.Type == codex.EventTokenCount):
+				break back
+			}
+		}
+		c.batch = !after
+		order := "items first, then the count"
+		if c.batch {
+			order = "the count first, then the response's items (Codex up to 0.65)"
+		}
+		version := ""
+		if c.meta != nil {
+			version = c.meta.Meta.CLIVersion
+		}
+		c.addf(agentimport.Lossy, "codex/record-order", l,
+			"the rollout names no version this converter can read (cli_version %q); its records were read as %s, judged by where its first token count falls", version, order)
+		return
+	}
+}
+
+// version reads a cli_version's major and minor numbers.
+func version(v string) (major, minor int, ok bool) {
+	parts := strings.SplitN(v, ".", 3)
+	if len(parts) < 2 {
+		return 0, 0, false
+	}
+	if _, err := fmt.Sscanf(parts[0], "%d", &major); err != nil {
+		return 0, 0, false
+	}
+	if _, err := fmt.Sscanf(parts[1], "%d", &minor); err != nil {
+		return 0, 0, false
+	}
+	return major, minor, true
+}
+
+// copiedLine reports whether line l was copied from the parent thread:
+// its ordinal falls before the first of the thread's own records.
+func (c *converter) copiedLine(l *codex.Line) bool {
+	if l == nil || c.copyBound < 0 || l.Ordinal == "" {
+		return false
+	}
+	n, err := l.Ordinal.Int64()
+	return err == nil && n < c.copyBound
 }

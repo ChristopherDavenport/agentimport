@@ -175,10 +175,11 @@ func (cv *conversion) transcript(tr *claudecode.Transcript, file string, t targe
 	if err := c.run(); err != nil {
 		return nil, "", fmt.Errorf("%s: %w", displayFile(file), err)
 	}
-	if err := agentimport.Verify(b.S); err != nil {
+	read, err := agentimport.Finish(b.S)
+	if err != nil {
 		return nil, "", fmt.Errorf("%s: converted session does not verify: %w", displayFile(file), err)
 	}
-	out := []*agentsession.Session{b.S}
+	out := []*agentsession.Session{read}
 	for _, ch := range c.spawned {
 		if ch.sessions == nil {
 			more, _, err := cv.transcript(ch.agent.Transcript, agentFile(ch.agent.ID), target{

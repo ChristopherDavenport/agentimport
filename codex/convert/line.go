@@ -1,6 +1,7 @@
 package convert
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -74,8 +75,15 @@ var outputTypes = map[string]bool{
 // isOutput reports whether an item is model output: part of a response,
 // rather than input the harness, a tool or a person gave.
 func isOutput(it *codex.Item, hm harnessMeta) bool {
-	if it.Type == codex.ItemMessage {
-		return it.Role == "assistant" && hm.DeliveredAssistantMessage == nil && !hm.CompactionOutput && !hm.InheritedUserMessage
+	switch it.Type {
+	case codex.ItemMessage:
+		// An assistant message carrying another agent's instruction as
+		// JSON is input Codex wrote, and starts a turn.
+		return it.Role == "assistant" && hm.DeliveredAssistantMessage == nil && !hm.CompactionOutput &&
+			!hm.InheritedUserMessage && !interAgentText(it.Parts())
+	case codex.ItemToolSearchOutput:
+		// A hosted tool search is answered in the same response.
+		return it.Execution == "server"
 	}
 	return outputTypes[it.Type]
 }
@@ -112,14 +120,15 @@ func (c *converter) item(l *codex.Line) error {
 	}
 	output := isOutput(it, hm)
 	if output {
-		if c.pending != nil && c.pending.usage != nil {
-			// The response that was gathered completed; this output is
-			// the next one's.
+		if p := c.pending; p != nil && p.closesOnOutput() {
+			// The response that was gathered is over: this output is the
+			// next one's.
 			if err := c.closePending(l); err != nil {
 				return err
 			}
 		}
-	} else {
+	} else if !answerTypes[it.Type] {
+		// Input other than a tool's output starts a step or a turn.
 		if err := c.closePending(l); err != nil {
 			return err
 		}
@@ -127,7 +136,7 @@ func (c *converter) item(l *codex.Line) error {
 			c.reportUnanswered(l)
 		}
 	}
-	if answerTypes[it.Type] {
+	if answerTypes[it.Type] && it.CallID != "" && !output {
 		if _, ok := c.st.calls[it.CallID]; !ok {
 			return c.custom(l, "codex/orphan-output", "an output whose call is not on its path, which Codex drops from what it sends, is a custom entry")
 		}
@@ -136,13 +145,19 @@ func (c *converter) item(l *codex.Line) error {
 	if err != nil {
 		return c.custom(l, "codex/undecodable-item", "a %s item that does not decode as one (%v) is a custom entry", it.Type, err)
 	}
+	if answerTypes[it.Type] && c.pending != nil && !output {
+		c.pending.inputSeen = true
+	}
+	if r, ok := item.(*openresponses.ReasoningItem); ok && len(r.Content) > 0 {
+		c.rawReasoning = true
+	}
 	e := agentsession.NewItemEntry(item)
 	if !output && it.Type == codex.ItemMessage && it.Role == "assistant" {
 		if err := c.b.Member(e, "input", true); err != nil {
 			return err
 		}
 		c.addf(agentimport.Kept, "codex/assistant-input", l,
-			"an assistant message the harness wrote (a delivered or inherited message, or compaction output) is input, not a response's output; it is marked %s:input", Source)
+			"an assistant message the harness wrote (a delivered or inherited message, compaction output, another agent's instruction) is input, not a response's output; it is marked %s:input", Source)
 	}
 	if err := c.customMembers(e, l, it); err != nil {
 		return err
@@ -153,6 +168,11 @@ func (c *converter) item(l *codex.Line) error {
 	if output {
 		if c.pending == nil {
 			c.pending = &pending{first: l}
+		}
+		if len(c.pending.outputs) == 0 {
+			// A response is named, and its findings placed, by its
+			// first item, not by the count that opened it.
+			c.pending.first = l
 		}
 		c.pending.outputs = append(c.pending.outputs, e)
 	}
@@ -250,8 +270,9 @@ func (c *converter) checkTruncation(l *codex.Line, text string, hm harnessMeta) 
 
 // convertItem decodes a Codex item as an Open Responses item, and
 // returns the members the item could not hold. A call or output gets
-// the call id recorded for it; a Responses type openresponses does not
-// type is an unknown item, carried verbatim.
+// the call id recorded for it; a type openresponses does not type is an
+// extension item, carried verbatim. An item that does not decode
+// changes nothing: no call id is taken, no call recorded.
 func (c *converter) convertItem(l *codex.Line, raw json.RawMessage, it *codex.Item) (openresponses.Item, map[string]json.RawMessage, error) {
 	raw, err := c.clean(l, raw)
 	if err != nil {
@@ -263,36 +284,63 @@ func (c *converter) convertItem(l *codex.Line, raw json.RawMessage, it *codex.It
 	}
 	if it.Type == codex.ItemCompactionSummary {
 		obj["type"] = json.RawMessage(`"compaction"`)
+	}
+	if _, _, err := buildItem(obj, it, ""); err != nil {
+		return nil, nil, err
+	}
+	if it.Type == codex.ItemCompactionSummary {
 		c.addf(agentimport.Repaired, "codex/compaction-alias", l, "an item of type compaction_summary, which Codex reads as compaction, is a compaction item")
 	}
 	// The call id recorded: a native id another call holds, or that a
-	// provider would refuse, is renamed; an output takes its call's.
-	// A function call needs a call id the format accepts even when
-	// Codex recorded an empty one; the other calls are extension items,
-	// carried as they are.
-	if callTypes[it.Type] && (it.CallID != "" || it.Type == codex.ItemFunctionCall) {
-		id, renamed := c.b.Calls.Assign(it.CallID)
+	// provider would refuse, is renamed; an output takes its call's. A
+	// function call, and a custom tool call written as one, needs an id
+	// the format accepts even when Codex recorded an empty one; the
+	// other calls are extension items, carried as they are. An output
+	// with no call id stands alone, as Codex keeps it.
+	id := ""
+	switch {
+	case callTypes[it.Type] && (it.CallID != "" || it.Type == codex.ItemFunctionCall || it.Type == codex.ItemCustomToolCall):
+		var renamed bool
+		id, renamed = c.b.Calls.Assign(it.CallID)
 		if renamed {
-			obj["call_id"], _ = json.Marshal(id)
 			c.addf(agentimport.Repaired, "codex/call-id-renamed", l,
-				"call id %q is held by another call of the session or has characters providers refuse; it is %q, and the native one is %s:call_id", it.CallID, id, Source)
+				"call id %q is held by another call of the session, is empty, or has characters providers refuse; it is %q, and the native one is %s:call_id", it.CallID, id, Source)
 		}
 		c.st.addCall(it.CallID, id)
-	}
-	if answerTypes[it.Type] {
-		if id, ok := c.st.calls[it.CallID]; ok {
-			if id != it.CallID {
-				obj["call_id"], _ = json.Marshal(id)
-			}
-			c.st.answer(id)
+	case answerTypes[it.Type] && it.CallID != "":
+		if rec, ok := c.st.calls[it.CallID]; ok {
+			id = rec
+			c.st.answer(rec)
 		}
 	}
-	native := obj
-	obj, consumed, err := asFunction(obj, it)
+	return buildItem(obj, it, id)
+}
+
+// buildItem decodes a native item, with call id id in place of its own
+// when id is set, and returns the members the item could not hold.
+func buildItem(native map[string]json.RawMessage, it *codex.Item, id string) (openresponses.Item, map[string]json.RawMessage, error) {
+	obj := make(map[string]json.RawMessage, len(native))
+	for k, v := range native {
+		obj[k] = v
+	}
+	renamed := id != "" && id != it.CallID
+	if renamed {
+		obj["call_id"], _ = json.Marshal(id)
+	}
+	nativeID := func(extra map[string]json.RawMessage) map[string]json.RawMessage {
+		if renamed {
+			if extra == nil {
+				extra = map[string]json.RawMessage{}
+			}
+			extra["call_id"], _ = json.Marshal(it.CallID)
+		}
+		return extra
+	}
+	fobj, consumed, err := asFunction(obj, it)
 	if err != nil {
 		return nil, nil, err
 	}
-	data, err := json.Marshal(obj)
+	data, err := json.Marshal(fobj)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -309,27 +357,14 @@ func (c *converter) convertItem(l *codex.Line, raw json.RawMessage, it *codex.It
 				extra[k] = v
 			}
 		}
-		if id := callIDOf(item); id != "" && id != it.CallID {
-			extra["call_id"], _ = json.Marshal(it.CallID)
-		}
-		return item, extra, nil
+		return item, nativeID(extra), nil
 	}
 	if u, ok := item.(*openresponses.UnknownItem); ok {
-		if data, err = extension(obj); err != nil {
+		if data, err = extension(fobj); err != nil {
 			return nil, nil, err
 		}
 		u.Type, u.Raw = extensionType(it.Type), data
-		var extra map[string]json.RawMessage
-		if (callTypes[it.Type] || answerTypes[it.Type]) && it.CallID != "" {
-			var now struct {
-				CallID string `json:"call_id"`
-			}
-			if json.Unmarshal(data, &now) == nil && now.CallID != it.CallID {
-				native, _ := json.Marshal(it.CallID)
-				extra = map[string]json.RawMessage{"call_id": native}
-			}
-		}
-		return u, extra, nil
+		return u, nativeID(nil), nil
 	}
 	out, err := json.Marshal(item)
 	if err != nil {
@@ -340,33 +375,12 @@ func (c *converter) convertItem(l *codex.Line, raw json.RawMessage, it *codex.It
 		return nil, nil, err
 	}
 	extra := map[string]json.RawMessage{}
-	for k, v := range obj {
+	for k, v := range fobj {
 		if !sameJSON(v, back[k]) {
 			extra[k] = v
 		}
 	}
-	if callTypes[it.Type] {
-		if id := callIDOf(item); id != "" && id != it.CallID {
-			extra["call_id"], _ = json.Marshal(it.CallID)
-		}
-	}
-	if answerTypes[it.Type] {
-		if id := callIDOf(item); id != "" && id != it.CallID {
-			extra["call_id"], _ = json.Marshal(it.CallID)
-		}
-	}
-	return item, extra, nil
-}
-
-// callIDOf returns the call id of a typed call or output.
-func callIDOf(item openresponses.Item) string {
-	switch v := item.(type) {
-	case *openresponses.FunctionCall:
-		return v.CallID
-	case *openresponses.FunctionCallOutput:
-		return v.CallID
-	}
-	return ""
+	return item, nativeID(extra), nil
 }
 
 // sameJSON reports whether two JSON values are the same once members
@@ -435,14 +449,32 @@ type pending struct {
 	first   *codex.Line
 	outputs []*agentsession.ItemEntry
 	queue   []queued
-	// usage is the response's usage, from a token_count event or a
-	// token usage record; usageLine is the line it came from.
-	usage      *codex.TokenUsage
-	usageLine  *codex.Line
+	// inputSeen says a tool's output was queued after the outputs began:
+	// the next output is the next response's, unless fromCount.
+	inputSeen bool
+	// fromCount says the response was opened by its token count, as
+	// Codex wrote them up to 0.65: the count first, then the response's
+	// items in one batch, each call followed by its output.
+	fromCount bool
+	// usage is the response's usage, from a token usage record or a
+	// token_count event; usageLine is the line it came from.
+	usage     *codex.TokenUsage
+	usageLine *codex.Line
+	// count is the token_count line the response took its running total
+	// and rate limits from.
+	count      *codex.Line
 	tokenCount json.RawMessage
 	rateLimits json.RawMessage
 	responseID string
 	record     *codex.Line
+}
+
+// closesOnOutput reports whether an output item arriving now starts
+// the next response: the response completed (its usage arrived) or a
+// tool's output followed it, unless Codex wrote the response as a batch
+// opened by its count.
+func (p *pending) closesOnOutput() bool {
+	return !p.fromCount && (p.inputSeen || p.usage != nil)
 }
 
 // queued is an entry written while a response was gathered, with what
@@ -453,9 +485,10 @@ type queued struct {
 	st state
 }
 
-// closePending writes the response being gathered: its items, under the
-// response id, the entries written meanwhile, then the response entry.
-// by is the line that closed it, nil at the end of the file.
+// closePending writes the response being gathered: the entries queued
+// while it was, in order, with its response entry right after its last
+// output item, where the format's request context of a response looks
+// for its items. by is the line that closed it, nil at the end.
 func (c *converter) closePending(by *codex.Line) error {
 	p := c.pending
 	if p == nil {
@@ -468,17 +501,61 @@ func (c *converter) closePending(by *codex.Line) error {
 		c.addOnce(agentimport.Lossy, "codex/response-id", p.first,
 			"the rollout names no response ids (only the token usage records of newer rollouts do); a response is named %s-line-<n> after its first item's line", Source)
 	}
+	outputs := map[agentsession.Entry]bool{}
 	for _, e := range p.outputs {
 		e.ResponseID = respID
+		outputs[e] = true
+	}
+	// last is the index of the last output item; an item between the
+	// first and the last that is not output (a tool's output, as Codex
+	// recorded responses up to 0.65) interleaves them.
+	last, first := -1, -1
+	for i, q := range p.queue {
+		if outputs[q.e] {
+			if first < 0 {
+				first = i
+			}
+			last = i
+		}
+	}
+	interleaved := false
+	for i := first + 1; first >= 0 && i < last; i++ {
+		if _, ok := p.queue[i].e.(*agentsession.ItemEntry); ok && !outputs[p.queue[i].e] {
+			interleaved = true
+		}
+	}
+	if interleaved {
+		c.addf(agentimport.Lossy, "codex/interleaved-outputs", p.first,
+			"Codex recorded the response's calls each followed by its output; the response entry follows its last item, so the format's request context of the response holds only the items after the last output")
+	}
+	e, src, err := c.responseEntry(p, respID)
+	if err != nil {
+		return err
 	}
 	st := c.st
-	for _, q := range p.queue {
+	written := false
+	for i, q := range p.queue {
 		c.st = q.st
 		if err := c.appendNow(q.e, q.l); err != nil {
 			return err
 		}
+		if i == last {
+			if err := c.appendNow(e, src); err != nil {
+				return err
+			}
+			written = true
+		}
 	}
 	c.st = st
+	if !written {
+		return c.appendNow(e, src)
+	}
+	return nil
+}
+
+// responseEntry builds the response entry of a gathered response, and
+// returns the line it is made from.
+func (c *converter) responseEntry(p *pending, respID string) (*agentsession.ResponseEntry, *codex.Line, error) {
 	e := &agentsession.ResponseEntry{ResponseID: respID, Model: c.st.model}
 	src := p.first
 	if p.usageLine != nil {
@@ -486,34 +563,52 @@ func (c *converter) closePending(by *codex.Line) error {
 	}
 	if p.usage != nil {
 		e.Status = openresponses.ResponseStatusCompleted
-		e.Usage = usage(p.usage)
-		if p.usage.CacheWriteInputTokens != 0 || len(nonNull(p.usage.Extra)) > 0 {
+		switch {
+		case c.copiedLine(src):
+			// The parent's response, copied into a fork or a sub-agent
+			// that inherited its context: the parent paid for it.
 			if err := c.b.Member(e, "usage", p.usage); err != nil {
-				return err
+				return nil, nil, err
 			}
-			c.addf(agentimport.Gap, "agentimport/usage-detail", src,
-				"usage has members Responses usage lacks (cache writes); the native usage is %s:usage", Source)
+			if err := c.b.Member(e, "copied", true); err != nil {
+				return nil, nil, err
+			}
+			c.addf(agentimport.Lossy, "codex/fork-copied-response", src,
+				"the response was copied from the parent thread; its usage, which the parent's session counts, is %s:usage and not the entry's", Source)
+		default:
+			e.Usage = usage(p.usage)
+			if p.usage.CacheWriteInputTokens != 0 || len(nonNull(p.usage.Extra)) > 0 {
+				if err := c.b.Member(e, "usage", p.usage); err != nil {
+					return nil, nil, err
+				}
+				c.addf(agentimport.Gap, "agentimport/usage-detail", src,
+					"usage has members Responses usage lacks (cache writes); the native usage is %s:usage", Source)
+			}
 		}
 	} else {
 		c.addf(agentimport.Lossy, "codex/no-status", p.first,
-			"no token count followed the response, which Codex writes when one completes; it has no status and no usage")
+			"no token count or usage record went with the response, which Codex writes when one completes; it has no status and no usage")
 	}
 	if c.st.model == "" {
 		c.addOnce(agentimport.Lossy, "codex/no-model", p.first,
 			"no turn context named the model before this response (older rollouts record none); the response has no model")
 	}
-	if err := c.member(e, src, "token_count", "codex/token-count", p.tokenCount, "the thread's running total and context window are"); err != nil {
-		return err
+	countLine := src
+	if p.count != nil {
+		countLine = p.count
 	}
-	if err := c.member(e, src, "rate_limits", "codex/rate-limits", p.rateLimits, "the rate limits reported with the usage are"); err != nil {
-		return err
+	if err := c.member(e, countLine, "token_count", "codex/token-count", p.tokenCount, "the thread's running total and context window are"); err != nil {
+		return nil, nil, err
+	}
+	if err := c.member(e, countLine, "rate_limits", "codex/rate-limits", p.rateLimits, "the rate limits reported with the usage are"); err != nil {
+		return nil, nil, err
 	}
 	if p.record != nil {
 		if err := c.recordMembers(e, p.record); err != nil {
-			return err
+			return nil, nil, err
 		}
 	}
-	return c.appendNow(e, src)
+	return e, src, nil
 }
 
 // usage converts Codex's usage to the Responses shape, which it already
@@ -540,26 +635,41 @@ func sameUsage(a, b *codex.TokenUsage) bool {
 		a.ReasoningOutputTokens == b.ReasoningOutputTokens && a.TotalTokens == b.TotalTokens
 }
 
-// tokenCount completes the response being gathered with its usage: the
-// event's last response usage. The running total and the rate limits
-// are kept beside it.
+// tokenCount gives a response its usage: the event's last response
+// usage, with the running total and the rate limits kept beside it.
+// Which response depends on the order Codex wrote: up to 0.65 the count
+// opens the response whose items follow; later it completes the one
+// being gathered, before or after its tool outputs.
 func (c *converter) tokenCount(l *codex.Line) error {
 	ev := l.Event
 	if ev.Info == nil || ev.Info.LastTokenUsage == nil {
 		return c.custom(l, "codex/rate-limits-only", "a token count with no usage, a rate limit report, is a custom entry")
 	}
+	if c.batch {
+		if err := c.closePending(l); err != nil {
+			return err
+		}
+		c.pending = &pending{first: l, fromCount: true}
+	}
 	p := c.pending
 	if p == nil {
 		return c.custom(l, "codex/unplaced-usage", "a token count with no response before it to complete is a custom entry")
 	}
-	if p.usage != nil && p.usageLine != nil {
-		if sameUsage(p.usage, ev.Info.LastTokenUsage) {
-			c.drop(l, "codex/token-count-repeat", "a token count repeating the one before it")
+	if p.count != nil {
+		if bytes.Equal(bytes.TrimSpace(p.count.Payload), bytes.TrimSpace(l.Payload)) {
+			c.drop(l, "codex/token-count-repeat", "a token count identical to the one before it")
 			return nil
 		}
-		c.addf(agentimport.Lossy, "codex/usage-snapshots", l, "a second token count for one response, with other numbers; the last is used")
+		return c.custom(l, "codex/token-count-extra", "a second token count for one response, with other numbers, is a custom entry")
 	}
-	p.usage, p.usageLine = ev.Info.LastTokenUsage, l
+	switch {
+	case p.usage == nil:
+		p.usage, p.usageLine = ev.Info.LastTokenUsage, l
+	case !sameUsage(p.usage, ev.Info.LastTokenUsage):
+		c.addf(agentimport.Lossy, "codex/usage-snapshots", l,
+			"the token count's usage differs from the usage record's for the same response; the record's, which names the response, is used")
+	}
+	p.count = l
 	info := map[string]any{}
 	if ev.Info.TotalTokenUsage != nil {
 		info["total_token_usage"] = ev.Info.TotalTokenUsage
@@ -573,7 +683,6 @@ func (c *converter) tokenCount(l *codex.Line) error {
 	for k, v := range nonNull(ev.Extra) {
 		info[k] = v
 	}
-	p.tokenCount = nil
 	if len(info) > 0 {
 		raw, err := json.Marshal(info)
 		if err != nil {
@@ -586,8 +695,9 @@ func (c *converter) tokenCount(l *codex.Line) error {
 	return nil
 }
 
-// usageRecord names the response being gathered and gives its usage,
-// when the token count did not.
+// usageRecord names the response being gathered and gives its usage:
+// Codex writes it when the response completes, so it is the response's
+// own usage, before any token count.
 func (c *converter) usageRecord(l *codex.Line) error {
 	r := l.UsageRecord
 	p := c.pending
@@ -595,7 +705,11 @@ func (c *converter) usageRecord(l *codex.Line) error {
 		return c.custom(l, "codex/record", "a token usage record with no response before it to name is a custom entry")
 	}
 	p.responseID, p.record = r.ResponseID, l
-	if p.usage == nil && r.Usage != nil {
+	if r.Usage != nil {
+		if p.usage != nil && !sameUsage(p.usage, r.Usage) {
+			c.addf(agentimport.Lossy, "codex/usage-snapshots", l,
+				"the usage record's usage differs from the token count's for the same response; the record's, which names the response, is used")
+		}
 		p.usage, p.usageLine = r.Usage, l
 	}
 	c.mark(l, agentimport.LineMapped)
@@ -669,8 +783,17 @@ func (c *converter) interAgent(l *codex.Line) error {
 func (c *converter) event(l *codex.Line) error {
 	ev := l.Event
 	switch ev.Type {
-	case codex.EventUserMessage, codex.EventAgentMessage, codex.EventAgentReasoning,
-		codex.EventAgentReasoningRawContent, codex.EventContextCompacted:
+	case codex.EventAgentReasoningRawContent:
+		if !c.rawReasoning {
+			// Codex writes a reasoning item's content only when it is
+			// reasoning_text (models.rs, should_serialize_reasoning_content),
+			// so raw reasoning of another kind is here alone. Codex does
+			// not send it.
+			return c.custom(l, "codex/reasoning-raw", "raw reasoning text the turn's reasoning items do not carry is a custom entry")
+		}
+		c.drop(l, "codex/event-echo", "a %s event, which repeats an item or record the rollout holds, for Codex's own display", ev.Type)
+		return nil
+	case codex.EventUserMessage, codex.EventAgentMessage, codex.EventAgentReasoning, codex.EventContextCompacted:
 		c.drop(l, "codex/event-echo", "a %s event, which repeats an item or record the rollout holds, for Codex's own display", ev.Type)
 		return nil
 	case codex.EventTokenCount:
@@ -681,7 +804,14 @@ func (c *converter) event(l *codex.Line) error {
 		if err := c.closePending(l); err != nil {
 			return err
 		}
-		return c.custom(l, "codex/turn-event", "a %s event is a custom entry", ev.Type)
+		c.rawReasoning = false
+		if err := c.custom(l, "codex/turn-event", "a %s event is a custom entry", ev.Type); err != nil {
+			return err
+		}
+		if ev.Type == codex.EventTurnStarted {
+			c.turnStarts[c.tail] = true
+		}
+		return nil
 	}
 	return c.custom(l, "codex/event", "a %s event, which the model does not see, is a custom entry", ev.Type)
 }
@@ -761,6 +891,9 @@ func (c *converter) turnContext(l *codex.Line) error {
 	cwdMoved := tc.CWD != "" && tc.CWD != c.st.cwd
 	if !changed && !cwdMoved {
 		c.drop(l, "codex/turn-context-repeat", "a turn context with the settings of the one before it, the turn id aside")
+		if m := nonNull(l.Extra); len(m) > 0 && !l.Legacy {
+			c.addf(agentimport.Dropped, "codex/line-members", l, "the dropped turn context's line members %s are left out", memberNames(m))
+		}
 		return nil
 	}
 	if changed {
@@ -773,7 +906,13 @@ func (c *converter) turnContext(l *codex.Line) error {
 	}
 	if cwdMoved {
 		c.st.cwd = tc.CWD
-		if err := c.emit(agentsession.NewEnvEntry(tc.CWD), l); err != nil {
+		env := agentsession.NewEnvEntry(tc.CWD)
+		if !changed {
+			if err := c.lineMembers(env, l); err != nil {
+				return err
+			}
+		}
+		if err := c.emit(env, l); err != nil {
 			return err
 		}
 	}
@@ -881,11 +1020,12 @@ func asFunction(obj map[string]json.RawMessage, it *codex.Item) (map[string]json
 			}
 		}
 		if id, ok := obj["id"]; ok {
+			// A ctc_ id is not a function call's; it is codex:item_id.
 			var s string
 			if json.Unmarshal(id, &s) == nil && !strings.HasPrefix(s, "ctc_") {
 				out["id"] = id
-				consumed["id"] = true
 			}
+			consumed["id"] = true
 		}
 		args, err := customArguments(obj)
 		if err != nil {

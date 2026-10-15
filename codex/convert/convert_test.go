@@ -168,9 +168,20 @@ func TestContexts(t *testing.T) {
 			"user: List the files.", "reasoning", "assistant: Listing.", "call call_1 shell", "output call_1",
 			"assistant: Two files.",
 		}},
+		// Up to 0.65 a response's calls are each followed by its output.
+		{"batch", []string{
+			"user: <environment_context>   <cwd>/work/demo</cwd> </environment_context>",
+			"user: Build and test.", "reasoning", "call call_b shell", "output call_b", "call call_t shell", "output call_t",
+			"assistant: Both pass.",
+		}},
+		{"streamed", []string{
+			"user: Build and test.", "reasoning", "call call_b shell", "call call_t shell", "output call_b", "output call_t",
+			"assistant: Both pass.",
+		}},
 		{"tools", []string{
-			"user: Fix the logo.", "call call_p apply_patch", "openai.local_shell_call", "openai.web_search_call",
-			"output call_p", "output call_s", "call call_v view_image", "output call_v", "assistant: Fixed.",
+			"user: Fix the logo.", "openai.tool_search_call", "openai.tool_search_output", "call call_p apply_patch",
+			"openai.local_shell_call", "openai.web_search_call", "output call_p", "output call_s",
+			"call call_v view_image", "output call_v", "assistant: Fixed.",
 		}},
 		// The second turn is dropped with the model-switch notice Codex
 		// wrote before it.
@@ -179,12 +190,21 @@ func TestContexts(t *testing.T) {
 			"user: First question.", "assistant: First answer.",
 			"user: Second question, rephrased.", "assistant: Rephrased answer.",
 		}},
-		// The window Codex installed, item for item, then the turn goes
-		// on.
+		// Rolling back the turn a compaction was written in undoes it.
+		{"rollbackcompaction", []string{
+			"developer: <permissions instructions> Workspace write. </permissions instructions>",
+			"user: First.", "assistant: One.",
+		}},
+		// Two turns back is the person's second message; the developer
+		// bundle and the user message holding a notice above it are
+		// trimmed with it, and another agent's instruction is a turn.
+		{"turns", []string{"user: One.", "assistant: A."}},
+		// The window Codex installed, item for item (an item of it that
+		// does not decode left out), then the turn goes on.
 		{"compaction", []string{
 			"developer: <permissions instructions> Workspace write. </permissions instructions>",
-			"user: Refactor the parser.", "call call_b shell", "user: summary Read parser.go; tests next.",
-			"output call_b", "assistant: Done.",
+			"user: Refactor the parser.", "call call_b shell", "output call_b", "user: summary Read parser.go; tests pass.",
+			"assistant: Done.",
 		}},
 		// Copies after the window's new summary are written again, the
 		// call under a renamed id its output follows.
@@ -192,13 +212,14 @@ func TestContexts(t *testing.T) {
 			"user: Check the build.", "user: summary The build passed.", "call call_x_1 shell", "output call_x_1",
 			"user: And test it.", "assistant: Tested.",
 		}},
+		// A message with an image keeps its text alone.
 		{"legacycompaction", []string{
-			"user: Write a haiku.", "user: Another.", "user: summary Two haiku written.",
+			"user: Write a haiku.", "user: Another, like this:", "user: summary Two haiku written.",
 			"user: A third.", "assistant: Rain.",
 		}},
 		{"legacy", []string{"user: Hello.", "reasoning", "call call_9 shell", "output call_9", "assistant: Hi."}},
-		{"subagent", []string{"user: Parent's task.", "codex.agent_message", "codex.agent_message", "assistant: Reported."}},
-		{"damaged", []string{"user: Hello.", "call bad_id__1 shell", "assistant: Answer.", "user: Again."}},
+		{"subagent", []string{"user: Parent's task.", "assistant: Parent's answer.", "codex.agent_message", "codex.agent_message", "assistant: Reported."}},
+		{"damaged", []string{"user: Hello.", "call bad_id__1 shell", "call call_2 apply_patch", "assistant: Answer.", "user: Again."}},
 		{"context", []string{"user: Go.", "codex.configuration_update", "codex.additional_tools", "assistant: Delivered earlier.", "codex.context_compaction", "assistant: Ok."}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -241,11 +262,10 @@ func TestSettings(t *testing.T) {
 	}
 }
 
-// TestResponses checks the response entries: ids from the usage
-// records, usage from the token counts, items tied to them.
-func TestResponses(t *testing.T) {
-	res := convertFixture(t, fixtures(t)["plain"], Options{})
-	s := reread(t, res.Sessions[0])
+// responses returns a session's response entries and how many items
+// name each.
+func responses(t *testing.T, s *agentsession.Session) ([]*agentsession.ResponseEntry, map[string]int) {
+	t.Helper()
 	var resps []*agentsession.ResponseEntry
 	tied := map[string]int{}
 	for _, e := range s.Entries() {
@@ -258,17 +278,46 @@ func TestResponses(t *testing.T) {
 			}
 		}
 	}
-	if len(resps) != 2 || resps[0].ResponseID != "resp_1" || resps[1].ResponseID != "resp_2" {
-		t.Fatalf("responses = %+v", resps)
+	return resps, tied
+}
+
+// TestResponses checks the response entries of each record order: ids
+// from the usage records, usage from the records and token counts,
+// items tied to them, the count's members kept.
+func TestResponses(t *testing.T) {
+	fx := fixtures(t)
+	for _, tc := range []struct {
+		name  string
+		ids   []string
+		input []int
+		tied  []int
+	}{
+		{"plain", []string{"resp_1", "resp_2"}, []int{100, 130}, []int{3, 1}},
+		{"batch", []string{"codex-line-8", "codex-line-15"}, []int{50, 70}, []int{3, 1}},
+		{"streamed", []string{"codex-line-4", "codex-line-10"}, []int{50, 70}, []int{3, 1}},
+		{"tools", []string{"resp_t1", "resp_t2", "resp_t3"}, []int{50, 100, 150}, []int{5, 1, 1}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			res := convertFixture(t, fx[tc.name], Options{})
+			resps, tied := responses(t, res.Sessions[0])
+			if len(resps) != len(tc.ids) {
+				t.Fatalf("%d responses, want %d", len(resps), len(tc.ids))
+			}
+			for i, r := range resps {
+				if r.ResponseID != tc.ids[i] || r.Usage == nil || r.Usage.InputTokens != tc.input[i] ||
+					tied[r.ResponseID] != tc.tied[i] || r.Status != openresponses.ResponseStatusCompleted {
+					t.Errorf("response %d = %s usage %+v status %q, %d items; want %s, %d input tokens, %d items",
+						i, r.ResponseID, r.Usage, r.Status, tied[r.ResponseID], tc.ids[i], tc.input[i], tc.tied[i])
+				}
+				if _, ok := r.Unknown[Source+":rate_limits"]; !ok {
+					t.Errorf("response %d keeps no rate limits", i)
+				}
+			}
+		})
 	}
-	if tied["resp_1"] != 3 || tied["resp_2"] != 1 {
-		t.Errorf("items tied = %v", tied)
-	}
-	u := resps[1].Usage
-	if u == nil || u.InputTokens != 130 || u.InputTokensDetails.CachedTokens != 100 || u.OutputTokens != 10 || resps[1].Status != openresponses.ResponseStatusCompleted {
-		t.Errorf("usage = %+v status %q", u, resps[1].Status)
-	}
-	if _, ok := resps[1].Unknown[Source+":usage"]; !ok {
+	res := convertFixture(t, fx["plain"], Options{})
+	resps, _ := responses(t, res.Sessions[0])
+	if _, ok := resps[1].Unknown[Source+":usage"]; !ok || resps[1].Usage.InputTokensDetails.CachedTokens != 100 {
 		t.Error("the cache writes are not kept")
 	}
 }
@@ -290,21 +339,33 @@ func TestSlim(t *testing.T) {
 	}
 }
 
-// TestSubagent checks a sub-agent's header names its parent.
+// TestSubagent checks a sub-agent's header names its parent, and the
+// response copied from the parent carries no usage of its own.
 func TestSubagent(t *testing.T) {
 	res := convertFixture(t, fixtures(t)["subagent"], Options{})
-	h := res.Sessions[0].Header()
+	s := res.Sessions[0]
+	h := s.Header()
 	if h.ParentSession != "01990000-0000-7000-8000-0000000000aa" || h.SpawnedBy != "" {
 		t.Errorf("header = %+v", h)
 	}
 	var link *agentsession.LinkEntry
-	for _, e := range res.Sessions[0].Entries() {
+	for _, e := range s.Entries() {
 		if l, ok := e.(*agentsession.LinkEntry); ok {
 			link = l
 		}
 	}
 	if link == nil || link.Rel != agentsession.RelForkOf {
 		t.Errorf("fork link = %+v", link)
+	}
+	resps, _ := responses(t, s)
+	if len(resps) != 2 {
+		t.Fatalf("%d responses", len(resps))
+	}
+	if r := resps[0]; r.ResponseID != "resp_parent" || r.Usage != nil || string(r.Unknown[Source+":copied"]) != "true" {
+		t.Errorf("copied response = %+v", r)
+	}
+	if r := resps[1]; r.ResponseID != "resp_own" || r.Usage == nil || r.Usage.InputTokens != 40 {
+		t.Errorf("own response = %+v", r)
 	}
 }
 
@@ -324,5 +385,75 @@ func TestNoTimestamps(t *testing.T) {
 		if ts := e.Base().Timestamp; ts.Year() != 1970 {
 			t.Errorf("%s at %v", e.EntryType(), ts)
 		}
+	}
+}
+
+// TestNeverFatal converts the crafted lines a review found aborting a
+// conversion: each must convert, verify and account for every line.
+func TestNeverFatal(t *testing.T) {
+	for name, in := range map[string]string{
+		"custom call with no call id":            `{"type":"custom_tool_call","name":"x","input":"y"}`,
+		"custom call with an empty call id":      `{"timestamp":"2026-10-01T10:00:01Z","type":"response_item","payload":{"type":"custom_tool_call","call_id":"","name":"x","input":"y"}}`,
+		"window message of string content":       `{"timestamp":"2026-10-01T10:00:09Z","type":"compacted","payload":{"message":"s","replacement_history":[{"type":"message","role":"user","content":"hi"}]}}`,
+		"window call with object arguments":      `{"timestamp":"2026-10-01T10:00:09Z","type":"compacted","payload":{"message":"s","replacement_history":[{"type":"function_call","call_id":"c","name":"n","arguments":{}}]}}`,
+		"window custom call with a number input": `{"timestamp":"2026-10-01T10:00:09Z","type":"compacted","payload":{"message":"s","replacement_history":[{"type":"custom_tool_call","call_id":"c","name":"n","input":1}]}}`,
+		"call that does not decode, then its output": `{"timestamp":"t","type":"response_item","payload":{"type":"function_call","call_id":"c","name":"n","arguments":{}}}` + "\n" +
+			`{"timestamp":"t","type":"response_item","payload":{"type":"function_call_output","call_id":"c","output":"o"}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			f, err := codex.Read(strings.NewReader(in + "\n"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			res, err := Convert(f, Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got, want := res.Report.Lines(), f.LineCount(); got != want {
+				t.Errorf("accounts for %d lines of %d", got, want)
+			}
+			doccheck.Check(t, Source, res.Report)
+			if name == "call that does not decode, then its output" {
+				ctx, err := res.Sessions[0].Context()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(ctx.Items) != 0 {
+					t.Errorf("the output of a call that did not decode is in context: %v", render(ctx.Items))
+				}
+			}
+		})
+	}
+}
+
+// TestRecordOrderGuess checks that a rollout with no readable version
+// is read by where its first token count falls, and says so.
+func TestRecordOrderGuess(t *testing.T) {
+	path := fixtures(t)["batch"]
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = bytes.Replace(data, []byte(`"cli_version":"0.40.0"`), []byte(`"cli_version":"dev"`), 1)
+	f, err := codex.Read(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := Convert(f, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	guessed := false
+	for _, fd := range res.Report.Findings {
+		if fd.Code == "codex/record-order" && strings.Contains(fd.Detail, "the count first") {
+			guessed = true
+		}
+	}
+	if !guessed {
+		t.Error("the batch order was not guessed")
+	}
+	resps, tied := responses(t, res.Sessions[0])
+	if len(resps) != 2 || tied[resps[0].ResponseID] != 3 || resps[0].Usage == nil || resps[0].Usage.InputTokens != 50 {
+		t.Errorf("responses = %+v, %v", resps, tied)
 	}
 }

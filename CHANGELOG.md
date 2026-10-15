@@ -77,6 +77,19 @@ versions may break the API.
   `codex:tool_kind`; other items openresponses does not type as
   `openai.<type>` or `codex.<type>` extension items. Every line is accounted for and every difference
   reported under a code `docs/formats/codex.md` documents.
+- Changed: `codex/convert` reads a response's records in the order the
+  rollout's Codex wrote them (the token count before a batch of items
+  up to 0.65, after the items from 0.66, after the tool outputs from
+  0.131, with a usage record from 0.159), judging the order when the
+  version is unknown; a rollback undoes a compaction written in the
+  turns it drops, as Codex's reconstruction does; Codex's own messages
+  are told from a person's by a port of Codex's classifier; a response
+  copied into a fork or a context-inheriting sub-agent keeps its usage
+  in `codex:usage` only; nothing in a compaction's window stops a
+  conversion.
+- Added: `Finish` writes a converted session, reads it back, checks it
+  and returns the session as read back; every converter returns that
+  session, so its leaf is the one a reader of the file resumes on.
 - Added: the `agentimport` package: `Report` (a tally of where every
   native line went and findings by stable code), `Builder` (appends a
   native tree to a session, keeps native IDs in namespaced members,

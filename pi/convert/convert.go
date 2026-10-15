@@ -89,10 +89,11 @@ func Convert(f *pi.File, opts Options) (*agentimport.Result, error) {
 	if err := c.run(); err != nil {
 		return nil, err
 	}
-	if err := agentimport.Verify(c.b.S); err != nil {
+	s, err := agentimport.Finish(c.b.S)
+	if err != nil {
 		return nil, fmt.Errorf("converted session does not verify: %w", err)
 	}
-	return &agentimport.Result{Report: c.report, Sessions: []*agentsession.Session{c.b.S}}, nil
+	return &agentimport.Result{Report: c.report, Sessions: []*agentsession.Session{s}}, nil
 }
 
 // converter converts one file into one session.
