@@ -73,6 +73,34 @@ func decode(data []byte, v any, m *Members) error {
 		return err
 	}
 	names := declared(reflect.TypeOf(v).Elem())
+	// encoding/json fills a field from a key that matches its name in
+	// any case. A key that is not the declared name exactly is kept in
+	// Extra, so decode again from the declared keys alone, or both
+	// would be written back.
+	folded := false
+	for k := range all {
+		if !names[k] && foldsToDeclared(k, names) {
+			folded = true
+			break
+		}
+	}
+	if folded {
+		exact := map[string]json.RawMessage{}
+		for k, raw := range all {
+			if names[k] {
+				exact[k] = raw
+			}
+		}
+		data, err := json.Marshal(exact)
+		if err != nil {
+			return err
+		}
+		rv := reflect.ValueOf(v).Elem()
+		rv.Set(reflect.Zero(rv.Type()))
+		if err := json.Unmarshal(data, v); err != nil {
+			return err
+		}
+	}
 	m.read = true
 	m.present, m.null, m.Extra = nil, nil, nil
 	for k, raw := range all {
@@ -144,4 +172,13 @@ func encode(v any, m *Members) ([]byte, error) {
 		}
 	}
 	return json.Marshal(out)
+}
+
+func foldsToDeclared(k string, names map[string]bool) bool {
+	for n := range names {
+		if strings.EqualFold(k, n) {
+			return true
+		}
+	}
+	return false
 }

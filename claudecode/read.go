@@ -51,7 +51,9 @@ func Read(r io.Reader) (*Transcript, error) {
 	br := bufio.NewReaderSize(r, 1<<20)
 	for no := 1; ; no++ {
 		raw, tooLong, err := readLine(br)
-		if len(raw) > 0 || tooLong {
+		// A line ends at a newline; the bytes after the last one are a
+		// line only when there are any.
+		if len(raw) > 0 || tooLong || err == nil {
 			t.add(no, raw, tooLong)
 		}
 		if err == io.EOF {
@@ -109,11 +111,30 @@ func (t *Transcript) add(no int, raw []byte, tooLong bool) {
 	}
 	l := &Line{}
 	if err := json.Unmarshal(raw, l); err != nil {
-		l = &Line{Type: head.Type, Err: err}
+		l = envelope(raw, err)
 	}
 	l.No = no
 	l.Raw = json.RawMessage(bytes.Clone(raw))
 	t.Lines = append(t.Lines, l)
+}
+
+// envelope reads what it can of a line that does not decode: its
+// string envelope members, so it keeps its place in the tree.
+func envelope(raw []byte, err error) *Line {
+	l := &Line{Err: err}
+	var m map[string]json.RawMessage
+	if json.Unmarshal(raw, &m) != nil {
+		return l
+	}
+	for name, dst := range map[string]*string{
+		"type": &l.Type, "uuid": &l.UUID, "parentUuid": &l.ParentUUID,
+		"logicalParentUuid": &l.LogicalParentUUID, "timestamp": &l.Timestamp,
+		"cwd": &l.CWD, "gitBranch": &l.GitBranch, "version": &l.Version,
+		"sessionId": &l.SessionID, "agentId": &l.AgentID, "subtype": &l.Subtype,
+	} {
+		_ = json.Unmarshal(m[name], dst)
+	}
+	return l
 }
 
 // LineCount is the number of lines the file had: those read and those
@@ -150,6 +171,10 @@ type Agent struct {
 	ID         string
 	Meta       *AgentMeta
 	Transcript *Transcript
+	// MetaRaw and MetaErr hold a meta file that did not decode; Meta is
+	// nil then.
+	MetaRaw json.RawMessage
+	MetaErr error
 }
 
 // AgentMeta is a sub-agent's agent-<agentId>.meta.json.
@@ -163,6 +188,9 @@ type AgentMeta struct {
 	TeamName      string `json:"teamName"`
 	Model         string `json:"model"`
 	SpawnDepth    int    `json:"spawnDepth"`
+	// RequestShape is "foreground" for an agent the call waited on and
+	// "background" for one it started and left running.
+	RequestShape string `json:"requestShape"`
 
 	Members
 
@@ -221,14 +249,16 @@ func Open(path string) (*Session, error) {
 			if err != nil {
 				return nil, err
 			}
+			a := agent(strings.TrimSuffix(strings.TrimPrefix(name, "agent-"), ".meta.json"))
 			m := &AgentMeta{}
 			if err := json.Unmarshal(data, m); err != nil {
 				// A meta file that does not decode is not fatal: the
-				// agent is read without it.
+				// agent is read without it, and the caller told.
+				a.MetaRaw, a.MetaErr = data, err
 				continue
 			}
 			m.Raw = data
-			agent(strings.TrimSuffix(strings.TrimPrefix(name, "agent-"), ".meta.json")).Meta = m
+			a.Meta = m
 		case strings.HasSuffix(name, ".jsonl"):
 			t, err := ReadFile(p)
 			if err != nil {

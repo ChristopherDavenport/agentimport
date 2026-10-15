@@ -29,7 +29,7 @@ func fixtures(t *testing.T) map[string]string {
 	}
 	out := map[string]string{}
 	for _, d := range dirs {
-		if !d.IsDir() {
+		if !d.IsDir() || d.Name() == "fuzz" {
 			continue
 		}
 		matches, err := filepath.Glob(filepath.Join("testdata", d.Name(), "*.jsonl"))
@@ -151,7 +151,13 @@ func contextAtLeaf(t *testing.T, s *agentsession.Session) []string {
 	for _, it := range ctx.Items {
 		switch it := it.(type) {
 		case *openresponses.Message:
-			out = append(out, string(it.Role)+": "+it.Text())
+			line := string(it.Role) + ": " + it.Text()
+			for _, p := range it.Content {
+				if r, ok := p.(*openresponses.Refusal); ok {
+					line += " [refused: " + r.Refusal + "]"
+				}
+			}
+			out = append(out, line)
 		case *openresponses.FunctionCall:
 			out = append(out, "call "+it.CallID+" "+it.Name+" "+it.Arguments)
 		case *openresponses.FunctionCallOutput:
@@ -181,6 +187,7 @@ func TestContexts(t *testing.T) {
 			`call toolu_A Bash {"command":"ls -la"}`, `call toolu_B Read {"file_path":"/work/demo/b.png"}`,
 			"output toolu_A", "output toolu_B",
 			`call toolu_C Bash {"command":"false"}`, "output toolu_C",
+			`call toolu_D Bash {"command":"rm -rf /tmp/x"}`, "output toolu_D",
 			"assistant: Done.",
 		}},
 		// The leaf is the branch the last last-prompt names, not the
@@ -193,11 +200,35 @@ func TestContexts(t *testing.T) {
 			"user: Third task.", "assistant: Third done.",
 		}},
 		// The snapshot says the CLI echoes the model's arguments.
+		// The attachment and the meta line written between the two
+		// calls stay on the path, after the results, where Claude Code
+		// sends them.
+		{"between", []string{
+			"user: Two commands.",
+			`call toolu_P Bash {"command":"pwd"}`, `call toolu_Q Bash {"command":"ls"}`,
+			"output toolu_P", "output toolu_Q",
+			"user: <system-reminder>The user did not see that output.</system-reminder>",
+			"user: <system-reminder>Meta note.</system-reminder>",
+			"assistant: Both ran.",
+		}},
+		// Blocks and lines of shapes the package does not type keep
+		// their place: the server tool result is an anthropic item, the
+		// line whose apiBlockIndex is a string is a custom entry the
+		// rest still hangs from, null blocks are left out, and the
+		// synthetic line's call never reaches the context.
+		{"crafted", []string{
+			"user: Fetch it.", "anthropic.server_tool_use", "anthropic.web_fetch_tool_result",
+			"user: after nulls", "user: Keep going.", "assistant: Done.",
+		}},
 		{"context", []string{
 			"user: <local-command-caveat>Caveat.</local-command-caveat>",
 			"system: <system-reminder>Today is 2026-09-01.</system-reminder>",
 			"user: Run it.",
 			`call toolu_X Bash {"command":"echo hi"}`, "output toolu_X",
+			// One rendering of the queued prompt, the one sent.
+			"system: <system-reminder>The user sent: later (mid-turn)</system-reminder>",
+			"user: Refuse this.",
+			"assistant: I can't help with that. [refused: Declined for safety.]",
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -213,24 +244,54 @@ func TestContexts(t *testing.T) {
 func TestSubagents(t *testing.T) {
 	_, res := convertFixture(t, fixtures(t)["subagents"], Options{})
 	main := reread(t, res.Sessions[0])
-	if len(res.Sessions) != 4 {
-		t.Fatalf("%d sessions; want main, two spawned agents and one unlinked", len(res.Sessions))
+	mainID := main.Header().ID
+	byNative := map[string]*agentsession.Session{}
+	for _, s := range res.Sessions[1:] {
+		var src agentimport.Source
+		if err := json.Unmarshal(s.Header().Extra[agentimport.SourceMember], &src); err != nil {
+			t.Fatal(err)
+		}
+		byNative[src.NativeID] = s
 	}
-	var links []*agentsession.LinkEntry
+	if len(res.Sessions) != 6 {
+		t.Fatalf("%d sessions; want main and five agents", len(res.Sessions))
+	}
+	links := map[string]*agentsession.LinkEntry{}
+	var outputs []*agentsession.ItemEntry
+	var sources []*agentsession.Trigger
 	for _, e := range main.Entries() {
-		if l, ok := e.(*agentsession.LinkEntry); ok {
-			links = append(links, l)
+		switch e := e.(type) {
+		case *agentsession.LinkEntry:
+			links[e.CallID] = e
+		case *agentsession.ItemEntry:
+			if _, ok := e.Item.(*openresponses.FunctionCallOutput); ok {
+				outputs = append(outputs, e)
+			}
+			if e.Source != nil {
+				sources = append(sources, e.Source)
+			}
 		}
 	}
-	if len(links) != 2 {
-		t.Fatalf("%d links in the main session; want 2", len(links))
-	}
-	for i, call := range []string{"toolu_AG", "toolu_FK"} {
-		child := res.Sessions[i+1].Header()
-		want := agentsession.SubsessionID(main.Header().ID, call)
-		if links[i].CallID != call || links[i].Session != want || child.ID != want ||
-			child.ParentSession != main.Header().ID || child.SpawnedBy != call {
-			t.Errorf("link %d = %+v, child header %+v; want call %s, session %s", i, links[i], child, call, want)
+	// The agent the call waited for is a subsession; the ones it only
+	// started, and the team member, are peers.
+	for call, tc := range map[string]struct{ agent, rel string }{
+		"toolu_AG": {"a0001", agentsession.RelPeer},
+		"toolu_FK": {"a0002", agentsession.RelPeer},
+		"toolu_SY": {"a0005", agentsession.RelSubsession},
+		"toolu_TM": {"ateam-0003", agentsession.RelPeer},
+	} {
+		l, child := links[call], byNative[tc.agent]
+		if l == nil || child == nil {
+			t.Fatalf("%s: link %v, session %v", call, l, child)
+		}
+		want := agentsession.SubsessionID(mainID, call)
+		h := child.Header()
+		spawned := ""
+		if tc.rel == agentsession.RelSubsession {
+			spawned = call
+		}
+		if l.Rel != tc.rel || l.Session != want || h.ID != want || h.ParentSession != mainID || h.SpawnedBy != spawned {
+			t.Errorf("%s: link %s %s, header id %s parent %s spawned_by %q", call, l.Rel, l.Session, h.ID, h.ParentSession, h.SpawnedBy)
 		}
 	}
 	err := main.VerifyLinks(func(id string) (*agentsession.Session, error) {
@@ -244,13 +305,68 @@ func TestSubagents(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	team := res.Sessions[3].Header()
-	if team.ParentSession != main.Header().ID || team.SpawnedBy != "" {
-		t.Errorf("unlinked agent header = %+v", team)
+	// The waited-for agent's output names its leaf.
+	sync := byNative["a0005"]
+	var named bool
+	for _, o := range outputs {
+		if o.Item.(*openresponses.FunctionCallOutput).CallID == "toolu_SY" {
+			named = len(o.Parents) == 1 && o.Parents[0].Session == sync.Header().ID && o.Parents[0].Entry == sync.Leaf()
+		}
 	}
-	var src agentimport.Source
-	if err := json.Unmarshal(team.Extra[agentimport.SourceMember], &src); err != nil || src.NativeID != "ateam-0003" {
-		t.Errorf("unlinked agent source = %+v, %v", src, err)
+	if !named {
+		t.Error("the subsession's output does not name its leaf")
+	}
+	// The peer's report names it as its source.
+	if len(sources) != 1 || sources[0].Kind != "peer" || sources[0].Ref != "a0001" || sources[0].Source != Source {
+		t.Errorf("sources = %+v", sources)
+	}
+	// The fork's copy of the parent's response carries no usage.
+	for _, e := range byNative["a0002"].Entries() {
+		if r, ok := e.(*agentsession.ResponseEntry); ok && r.ResponseID == "msg_31" {
+			if r.Usage != nil || string(r.Unknown["claudecode:copied"]) != "true" {
+				t.Errorf("copied response = %+v", r)
+			}
+		}
+	}
+	lone := byNative["ateam-0006"].Header()
+	if lone.ParentSession != mainID || lone.SpawnedBy != "" {
+		t.Errorf("unlinked agent header = %+v", lone)
+	}
+}
+
+// TestDecision checks that a call the user refused is a reject decision
+// before its output, by a human, with the output as its reason.
+func TestDecision(t *testing.T) {
+	_, res := convertFixture(t, fixtures(t)["parallel"], Options{})
+	s := reread(t, res.Sessions[0])
+	var d *agentsession.DecisionEntry
+	for _, e := range s.Entries() {
+		if x, ok := e.(*agentsession.DecisionEntry); ok {
+			d = x
+		}
+	}
+	if d == nil {
+		t.Fatal("no decision")
+	}
+	if d.CallID != "toolu_D" || d.Verdict != agentsession.VerdictReject || d.By != agentsession.ByHuman ||
+		d.Reason != "The user doesn't want to proceed with this tool use." {
+		t.Errorf("decision = %+v", d)
+	}
+	call, _ := s.Entry(d.Target)
+	if fc, ok := call.(*agentsession.ItemEntry).Item.(*openresponses.FunctionCall); !ok || fc.CallID != "toolu_D" {
+		t.Errorf("decision target = %+v", call)
+	}
+}
+
+// TestLeaf checks that a session whose native leaf is on an earlier
+// branch resumes there, at the end of the response, outputs and all.
+func TestLeaf(t *testing.T) {
+	_, res := convertFixture(t, fixtures(t)["rewind"], Options{})
+	s := reread(t, res.Sessions[0])
+	leaf, _ := s.Entry(s.Leaf())
+	r, ok := leaf.(*agentsession.ResponseEntry)
+	if !ok || r.ResponseID != "msg_11" {
+		t.Errorf("leaf = %T %+v; want the response msg_11", leaf, leaf)
 	}
 }
 

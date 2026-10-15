@@ -38,7 +38,14 @@ func TestBuildTree(t *testing.T) {
 		{"parallel", `user u1
   response msg_02 toolu_A=r1 toolu_B=r2
     response msg_03 toolu_C=r3
-      response msg_04
+      response msg_04 toolu_D=r4
+        response msg_05
+`},
+		// The attachment and the meta line between the two blocks are in
+		// the response, so nothing hangs off the path.
+		{"between", `user u1
+  response msg_70 toolu_P=r1 toolu_Q=r2
+    response msg_71
 `},
 		// The boundary hangs from its logical parent.
 		{"compaction", `user u1

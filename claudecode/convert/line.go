@@ -12,8 +12,12 @@ import (
 )
 
 // line converts a unit of one line: a user turn, an attachment, a
-// system line, or an assistant line with no message id.
+// system line, an assistant line with no message id, or a line that
+// did not decode.
 func (c *converter) line(l *claudecode.Line, tail string, st *pathState) (string, error) {
+	if l.Err != nil {
+		return c.custom(l, tail, "claudecode/undecodable-line", "a line that does not decode as its type (%v) is a custom entry", l.Err)
+	}
 	switch l.Type {
 	case claudecode.TypeUser:
 		if l.IsToolResult() {
@@ -22,16 +26,17 @@ func (c *converter) line(l *claudecode.Line, tail string, st *pathState) (string
 		if l.Message == nil {
 			return c.custom(l, tail, "claudecode/no-message", "a user line with no message is a custom entry")
 		}
+		if l.IsVisibleInTranscriptOnly {
+			return c.custom(l, tail, "claudecode/transcript-only", "a line shown in the transcript and not sent to the model is a custom entry")
+		}
 		return c.userLine(l, tail)
 	case claudecode.TypeAssistant:
 		if l.Message == nil {
 			return c.custom(l, tail, "claudecode/no-message", "an assistant line with no message is a custom entry")
 		}
 		r := &claudecode.Response{Lines: []*claudecode.Line{l}}
-		for _, b := range l.Message.Content.Blocks {
-			if b.Type == claudecode.BlockToolUse {
-				r.Calls = append(r.Calls, &claudecode.Call{Use: b, Line: l})
-			}
+		for _, b := range l.ToolUses() {
+			r.Calls = append(r.Calls, &claudecode.Call{Use: b, Line: l})
 		}
 		return c.response(r, tail, st)
 	case claudecode.TypeAttachment:
@@ -43,14 +48,27 @@ func (c *converter) line(l *claudecode.Line, tail string, st *pathState) (string
 }
 
 // userLine converts a prompt: a user message, hidden when the CLI
-// injected it.
+// injected it, its origin as the item's source.
 func (c *converter) userLine(l *claudecode.Line, tail string) (string, error) {
 	e := itemEntry(openresponses.UserMessage(c.userContent(l, l.Message.Content)...))
 	if l.IsMeta {
 		hidden := false
 		e.Visible = &hidden
 	}
-	if err := c.lineMembers(e, l); err != nil {
+	var skip []string
+	if src := origin(l); src != nil {
+		e.Source = src
+		skip = append(skip, "origin")
+	}
+	if !l.Message.Content.IsText {
+		if err := c.blockMembers(e, l, l.Message.Content.Blocks...); err != nil {
+			return "", err
+		}
+	}
+	if err := c.messageMembers(e, l, l.Message); err != nil {
+		return "", err
+	}
+	if err := c.lineMembers(e, l, "line", skip...); err != nil {
 		return "", err
 	}
 	id, err := c.append(tail, e, l)
@@ -58,8 +76,49 @@ func (c *converter) userLine(l *claudecode.Line, tail string) (string, error) {
 		return "", err
 	}
 	c.mark(l, agentimport.LineMapped)
-	c.b.Bind(l.UUID, id)
+	c.bind(l, id)
 	return id, nil
+}
+
+// origin maps how a prompt arrived to the item's source trigger: kind
+// the origin's kind (human, peer, task-notification, ...), ref the
+// agent or task that sent it, source "claudecode", and the origin's
+// other members as the trigger's own.
+func origin(l *claudecode.Line) *agentsession.Trigger {
+	raw, ok := l.Extra["origin"]
+	if !ok {
+		return nil
+	}
+	var m map[string]json.RawMessage
+	if json.Unmarshal(raw, &m) != nil {
+		return nil
+	}
+	var kind string
+	if json.Unmarshal(m["kind"], &kind) != nil || kind == "" {
+		return nil
+	}
+	t := &agentsession.Trigger{Kind: kind, Source: Source}
+	for _, k := range []string{"senderTaskId", "from", "runId"} {
+		var s string
+		if json.Unmarshal(m[k], &s) == nil && s != "" {
+			t.Ref = s
+			break
+		}
+	}
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		if k == "kind" || k == "ref" || k == "source" {
+			continue
+		}
+		if err := t.SetMember(k, m[k]); err != nil {
+			return nil
+		}
+	}
+	return t
 }
 
 func (c *converter) userContent(l *claudecode.Line, content claudecode.Content) openresponses.Contents {
@@ -71,28 +130,35 @@ func (c *converter) userContent(l *claudecode.Line, content claudecode.Content) 
 
 // contents maps user or tool-result blocks to input parts. A block
 // with no input part is kept as an anthropic.<type> part carrying the
-// block, the shape the provider gives such items.
+// block, which the provider adapter cannot send: a gap upstream.
 func (c *converter) contents(l *claudecode.Line, blocks []*claudecode.ContentBlock, user bool) openresponses.Contents {
 	out := openresponses.Contents{}
 	for _, b := range blocks {
-		switch {
-		case b.Type == claudecode.BlockText:
-			out = append(out, &openresponses.InputText{Text: b.Text})
+		if b.IsRaw() && b.Type == "" {
+			c.addf(agentimport.Dropped, "claudecode/null-block", l, "a content block that is not an object is left out")
 			continue
-		case b.Type == claudecode.BlockImage && b.Source != nil && b.Source.Type == "base64":
-			out = append(out, &openresponses.InputImage{ImageURL: "data:" + b.Source.MediaType + ";base64," + b.Source.Data})
-			continue
-		case b.Type == claudecode.BlockImage && b.Source != nil && b.Source.Type == "url":
-			out = append(out, &openresponses.InputImage{ImageURL: b.Source.URL})
-			continue
-		case b.Type == claudecode.BlockDocument && b.Source != nil && b.Source.Type == "base64":
-			out = append(out, &openresponses.InputFile{FileData: "data:" + b.Source.MediaType + ";base64," + b.Source.Data})
-			continue
+		}
+		if !b.IsRaw() {
+			switch {
+			case b.Type == claudecode.BlockText:
+				out = append(out, &openresponses.InputText{Text: b.Text})
+				continue
+			case b.Type == claudecode.BlockImage && b.Source != nil && b.Source.Type == "base64":
+				out = append(out, &openresponses.InputImage{ImageURL: "data:" + b.Source.MediaType + ";base64," + b.Source.Data})
+				continue
+			case b.Type == claudecode.BlockImage && b.Source != nil && b.Source.Type == "url":
+				out = append(out, &openresponses.InputImage{ImageURL: b.Source.URL})
+				continue
+			case b.Type == claudecode.BlockDocument && b.Source != nil && b.Source.Type == "base64":
+				out = append(out, &openresponses.InputFile{FileData: "data:" + b.Source.MediaType + ";base64," + b.Source.Data})
+				continue
+			}
 		}
 		raw, err := json.Marshal(b)
 		if err != nil {
 			raw = []byte("{}")
 		}
+		raw = c.clean(raw, l)
 		typ := "anthropic." + b.Type
 		part, _ := json.Marshal(struct {
 			Type  string          `json:"type"`
@@ -103,7 +169,8 @@ func (c *converter) contents(l *claudecode.Line, blocks []*claudecode.ContentBlo
 		if user {
 			where = "a user message"
 		}
-		c.addf(agentimport.Kept, "claudecode/anthropic-content", l, "a %s block in %s is an %s part", b.Type, where, typ)
+		c.addf(agentimport.Gap, "openresponses/provider-content-part", l,
+			"a %s block in %s is kept as an %s part, which providers/anthropic cannot send", b.Type, where, typ)
 	}
 	return out
 }
@@ -111,9 +178,13 @@ func (c *converter) contents(l *claudecode.Line, blocks []*claudecode.ContentBlo
 // attachment converts context the CLI injected: what it rendered into
 // the request becomes hidden messages in the rendered role; a prompt
 // snapshot becomes a config delta; one with nothing rendered is kept
-// aside.
+// aside. A queued prompt carries two renderings, for mid-turn and for
+// a new turn; the requests Claude Code logs hold the first, so it is
+// the one written.
 func (c *converter) attachment(l *claudecode.Line, tail string, st *pathState) (string, error) {
 	if snap, ok := l.PromptSnapshot(); ok {
+		echo := snap.EchoWireToolInputs
+		st.echo = &echo
 		instructions := snap.SystemPrompt
 		if snap.CLIPrefix != "" {
 			instructions = append([]string{snap.CLIPrefix}, instructions...)
@@ -123,115 +194,174 @@ func (c *converter) attachment(l *claudecode.Line, tail string, st *pathState) (
 			for _, t := range snap.Tools {
 				d := tool{name: t.Name, description: t.Description}
 				if t.Schema != nil {
-					d.schema = t.Schema.InputSchema
+					d.def = t.Schema
 				}
 				tools = append(tools, d)
 			}
 		}
 		return c.config(l, tail, st, instructions, tools, snap.HasTools, "prompt_snapshot attachment")
 	}
-	rendered := len(l.Rendered) + len(l.RenderedInHumanTurn)
-	if rendered == 0 || l.Attachment == nil {
+	if l.Attachment == nil || len(l.Rendered)+len(l.RenderedInHumanTurn) == 0 {
 		typ := ""
 		if l.Attachment != nil {
 			typ = l.Attachment.Type
 		}
 		return c.custom(l, tail, "claudecode/attachment-unrendered", "an attachment (%s) that rendered nothing into the request is a custom entry", typ)
 	}
-	hidden := false
-	var err error
-	first := true
-	add := func(role openresponses.Role, text string) error {
-		e := itemEntry(&openresponses.Message{Role: role, Content: openresponses.Contents{&openresponses.InputText{Text: text}}})
-		e.Visible = &hidden
-		if first {
-			if c.opts.Slim {
-				c.addf(agentimport.Dropped, "claudecode/attachment", l, "the %s attachment's payload is left out; its rendering is the message", l.Attachment.Type)
-			} else {
-				if err := c.b.Member(e, "attachment", l.Attachment); err != nil {
-					return err
-				}
-				c.addf(agentimport.Kept, "claudecode/attachment", l, "the %s attachment's payload is %s:attachment", l.Attachment.Type, Source)
-			}
-			if err := c.lineMembers(e, l); err != nil {
-				return err
-			}
-			first = false
-		}
-		tail, err = c.append(tail, e, l)
-		return err
-	}
 	role := openresponses.RoleUser
 	if l.RenderedRole == "system" {
 		role = openresponses.RoleSystem
 	}
-	for _, r := range l.Rendered {
-		if err := add(role, r.Content); err != nil {
-			return "", err
-		}
+	rendered := l.Rendered
+	if len(rendered) == 0 {
+		rendered, role = l.RenderedInHumanTurn, openresponses.RoleUser
+	} else if len(l.RenderedInHumanTurn) > 0 {
+		c.addf(agentimport.Lossy, "claudecode/alternate-rendering", l,
+			"the %s attachment has a second rendering, for a new turn, which is kept in %s:line, not sent", l.Attachment.Type, Source)
 	}
-	for _, r := range l.RenderedInHumanTurn {
-		if err := add(openresponses.RoleUser, r.Content); err != nil {
+	hidden := false
+	for i, r := range rendered {
+		e := itemEntry(&openresponses.Message{Role: role, Content: openresponses.Contents{&openresponses.InputText{Text: r.Content}}})
+		e.Visible = &hidden
+		if i == 0 {
+			if c.opts.Slim {
+				c.addf(agentimport.Dropped, "claudecode/attachment", l, "the %s attachment's payload is left out; its rendering is the message", l.Attachment.Type)
+			} else {
+				if err := c.b.Member(e, "attachment", l.Attachment); err != nil {
+					return "", err
+				}
+				c.addf(agentimport.Kept, "claudecode/attachment", l, "the %s attachment's payload is %s:attachment", l.Attachment.Type, Source)
+			}
+			if err := c.lineMembers(e, l, "line"); err != nil {
+				return "", err
+			}
+		}
+		if m := nonNull(r.Extra); len(m) > 0 {
+			if err := c.b.Member(e, "rendered", m); err != nil {
+				return "", err
+			}
+			c.addf(agentimport.Kept, "claudecode/block-members", l, "rendering members kept in %s:rendered", Source)
+		}
+		id, err := c.append(tail, e, l)
+		if err != nil {
 			return "", err
 		}
+		c.bind(l, id)
+		tail = id
 	}
 	c.mark(l, agentimport.LineMapped)
-	c.b.Bind(l.UUID, tail)
 	return tail, nil
 }
 
 // tool is a tool definition from a prompt snapshot or a request shape.
 type tool struct {
 	name, description string
-	schema            json.RawMessage
+	def               *claudecode.ToolDef
+}
+
+// encode maps a tool definition to the payload's tool: a function tool
+// for a client tool, and for a server tool (one whose definition has a
+// type) an anthropic.<type> tool carrying the definition, the shape
+// providers/anthropic sends as written.
+func (t tool) encode() (openresponses.Tool, error) {
+	if t.def != nil {
+		var typ string
+		if json.Unmarshal(t.def.Extra["type"], &typ) == nil && typ != "" && typ != "custom" {
+			raw, err := json.Marshal(t.def)
+			if err != nil {
+				return nil, err
+			}
+			var m map[string]json.RawMessage
+			if err := json.Unmarshal(raw, &m); err != nil {
+				return nil, err
+			}
+			m["type"], _ = json.Marshal("anthropic." + typ)
+			if raw, err = json.Marshal(m); err != nil {
+				return nil, err
+			}
+			raw, _, err = agentimport.CleanJSON(raw)
+			return &openresponses.UnknownTool{Type: "anthropic." + typ, Raw: raw}, err
+		}
+	}
+	params := json.RawMessage(`{"type":"object"}`)
+	desc := t.description
+	if t.def != nil {
+		if len(t.def.InputSchema) > 0 && json.Valid(t.def.InputSchema) && string(t.def.InputSchema) != "null" {
+			params = t.def.InputSchema
+		}
+		if desc == "" {
+			desc = t.def.Description
+		}
+	}
+	return &openresponses.FunctionTool{Name: t.name, Description: desc, Parameters: params}, nil
 }
 
 // config writes the system prompt and tools a snapshot of the request
 // recorded, as a config delta: the instructions whole, the tools as
-// what was added and removed against those in force.
+// what was added and removed against those in force on the path.
 func (c *converter) config(l *claudecode.Line, tail string, st *pathState, system []string, tools []tool, hasTools bool, what string) (string, error) {
 	text := strings.Join(system, agentsession.PartSeparator)
 	e := &agentsession.ConfigEntry{Instructions: &text}
 	if hasTools {
 		next := map[string]string{}
 		for _, t := range tools {
-			params := t.schema
-			if len(params) == 0 {
-				params = json.RawMessage(`{"type":"object"}`)
+			if t.name == "" && t.def != nil {
+				t.name = t.def.Name
 			}
-			ft := &openresponses.FunctionTool{Name: t.name, Description: t.description, Parameters: params}
-			raw, err := json.Marshal(ft)
+			ot, err := t.encode()
 			if err != nil {
 				return "", err
 			}
+			raw, err := json.Marshal(ot)
+			if err != nil {
+				return "", err
+			}
+			if _, dup := next[t.name]; dup {
+				continue
+			}
 			next[t.name] = string(raw)
 			if st.tools[t.name] != string(raw) {
-				e.ToolsAdded = append(e.ToolsAdded, ft)
+				e.ToolsAdded = append(e.ToolsAdded, ot)
+				if _, ok := ot.(*openresponses.UnknownTool); ok {
+					c.addf(agentimport.Kept, "claudecode/server-tool", l, "server tool %s is an %s tool carrying its definition", t.name, ot.ToolType())
+				}
 			}
 		}
-		for name, raw := range st.tools {
-			if next[name] != raw {
+		// A delta removes, then adds, an added tool replacing one of
+		// its name: a changed tool is added again, a gone one removed.
+		for name := range st.tools {
+			if _, ok := next[name]; !ok {
 				e.ToolsRemoved = append(e.ToolsRemoved, name)
 			}
 		}
 		sort.Strings(e.ToolsRemoved)
 		st.tools = next
 	}
-	if l.Attachment != nil && len(l.Attachment.Extra) > 0 && !c.opts.Slim {
-		if err := c.b.Member(e, "attachment", l.Attachment); err != nil {
-			return "", err
+	if !c.opts.Slim {
+		var keep any
+		switch {
+		case l.Attachment != nil && len(l.Attachment.Extra) > 0:
+			if err := c.b.Member(e, "attachment", l.Attachment); err != nil {
+				return "", err
+			}
+		case l.Shape != nil:
+			keep = l.Shape
+			if err := c.b.Member(e, "shape", keep); err != nil {
+				return "", err
+			}
 		}
+	}
+	if err := c.lineMembers(e, l, "line"); err != nil {
+		return "", err
 	}
 	id, err := c.append(tail, e, l)
 	if err != nil {
 		return "", err
 	}
 	c.mark(l, agentimport.LineMapped)
-	if l.UUID != "" {
-		c.b.Bind(l.UUID, id)
-	}
+	c.bind(l, id)
 	c.addf(agentimport.Lossy, "claudecode/request-snapshot", l,
-		"a %s is a config delta: its %d system blocks are joined into one instructions string, and requests before it record none", what, len(system))
+		"the %s is a config delta: its %d system blocks are joined into one instructions string, and requests before it record none", what, len(system))
 	return id, nil
 }
 
@@ -239,11 +369,11 @@ func (c *converter) config(l *claudecode.Line, tail string, st *pathState, syste
 // below it into a compaction entry under the line the conversation was
 // at, keeping the lines the compaction preserved. It returns the
 // summary's unit, which the entry folded in.
-func (c *converter) compaction(u *claudecode.Unit, tail string) (string, *claudecode.Unit, error) {
+func (c *converter) compaction(u *claudecode.Unit, tail string, st *pathState) (string, *claudecode.Unit, error) {
 	l := u.Line
 	var summary *claudecode.Unit
 	for _, ch := range u.Children {
-		if ch.Line != nil && ch.Line.Type == claudecode.TypeUser && ch.Line.IsCompactSummary && ch.Line.Message != nil {
+		if x := ch.Line; x != nil && x.Err == nil && x.Type == claudecode.TypeUser && x.IsCompactSummary && x.Message != nil {
 			summary = ch
 			break
 		}
@@ -293,7 +423,13 @@ func (c *converter) compaction(u *claudecode.Unit, tail string) (string, *claude
 		}
 		c.addf(agentimport.Kept, "claudecode/compact-metadata", l, "the compaction's metadata is %s:compact_metadata", Source)
 	}
-	if err := c.lineMembers(e, l); err != nil {
+	if err := c.lineMembers(e, l, "line"); err != nil {
+		return "", nil, err
+	}
+	if err := c.lineMembers(e, sl, "summary_line"); err != nil {
+		return "", nil, err
+	}
+	if err := c.messageMembers(e, sl, sl.Message); err != nil {
 		return "", nil, err
 	}
 	id, err := c.append(tail, e, l)
@@ -302,17 +438,17 @@ func (c *converter) compaction(u *claudecode.Unit, tail string) (string, *claude
 	}
 	c.mark(l, agentimport.LineMapped)
 	c.mark(sl, agentimport.LineMapped)
-	c.b.Bind(l.UUID, id)
-	c.b.Bind(sl.UUID, id)
+	c.bind(l, id)
+	c.bind(sl, id)
 	return id, summary, nil
 }
 
 // side converts the side records written after a unit, in file order,
 // each hanging from the one before.
-func (c *converter) side(lines []*claudecode.Line, tail string) (string, error) {
+func (c *converter) side(lines []*claudecode.Line, tail string, st *pathState) (string, error) {
 	var err error
 	for _, l := range lines {
-		if tail, err = c.sideRecord(l, tail); err != nil {
+		if tail, err = c.sideRecord(l, tail, st); err != nil {
 			return "", err
 		}
 	}
@@ -320,14 +456,15 @@ func (c *converter) side(lines []*claudecode.Line, tail string) (string, error) 
 }
 
 // stateRecords are the side records that restate a value, the last one
-// in force; a repeat of the value in force is not written again.
+// in force; a repeat of the value in force on the path is not written
+// again.
 var stateRecords = map[string]bool{
 	claudecode.TypeMode: true, claudecode.TypePermissionMode: true, claudecode.TypeAtisLatch: true,
 	claudecode.TypeCostState: true, claudecode.TypePRLink: true, claudecode.TypeTag: true,
 	claudecode.TypeBridgeSession: true,
 }
 
-func (c *converter) sideRecord(l *claudecode.Line, tail string) (string, error) {
+func (c *converter) sideRecord(l *claudecode.Line, tail string, st *pathState) (string, error) {
 	if l.Err != nil {
 		return c.custom(l, tail, "claudecode/undecodable-line", "a line that does not decode as its type (%v) is a custom entry", l.Err)
 	}
@@ -339,11 +476,14 @@ func (c *converter) sideRecord(l *claudecode.Line, tail string) (string, error) 
 		} else if l.Type == claudecode.TypeSummary {
 			name = l.Summary
 		}
-		if c.repeat("title", name) {
+		if repeat(st, "title", name) {
 			return c.drop(l, tail, "claudecode/side-record-repeat", "a %s repeating the title in force", l.Type)
 		}
 		e := &agentsession.InfoEntry{Name: name}
 		if err := c.b.Member(e, "title_kind", l.Type); err != nil {
+			return "", err
+		}
+		if err := c.lineMembers(e, l, "line"); err != nil {
 			return "", err
 		}
 		id, err := c.append(tail, e, l)
@@ -359,19 +499,21 @@ func (c *converter) sideRecord(l *claudecode.Line, tail string) (string, error) 
 			break
 		}
 		var system []string
-		for _, b := range l.Shape.System {
-			if b.Type == claudecode.BlockText {
+		if l.Shape.System.IsText {
+			system = append(system, l.Shape.System.Text)
+		}
+		for _, b := range l.Shape.System.Blocks {
+			if b.Type == claudecode.BlockText && !b.IsRaw() {
 				system = append(system, b.Text)
 			}
 		}
 		tools := make([]tool, 0, len(l.Shape.Tools))
 		for _, t := range l.Shape.Tools {
-			tools = append(tools, tool{name: t.Name, description: t.Description, schema: t.InputSchema})
+			if t != nil {
+				tools = append(tools, tool{name: t.Name, description: t.Description, def: t})
+			}
 		}
-		// A side record has no path state of its own; the shape is
-		// written whole.
-		st := pathState{}
-		return c.config(l, tail, &st, system, tools, true, "api-request-shape record")
+		return c.config(l, tail, st, system, tools, true, "api-request-shape record")
 	case claudecode.TypeAPIRequest, claudecode.TypeAPIRequestBlob:
 		if c.opts.Slim {
 			return c.drop(l, tail, "claudecode/request-log", "the %s record is left out", l.Type)
@@ -386,7 +528,7 @@ func (c *converter) sideRecord(l *claudecode.Line, tail string) (string, error) 
 		return c.customAs(agentimport.Lossy, l, tail, "claudecode/fork-context", "the fork's inherited context, the parent session up to %s, is not in the session; the record is a custom entry", l.ParentLastUUID)
 	}
 	if stateRecords[l.Type] {
-		if c.repeat(l.Type, stateValue(l)) {
+		if repeat(st, l.Type, stateValue(l)) {
 			return c.drop(l, tail, "claudecode/side-record-repeat", "a %s record repeating the value in force", l.Type)
 		}
 		return c.custom(l, tail, "claudecode/side-record", "a %s record is a custom entry", l.Type)
@@ -397,12 +539,20 @@ func (c *converter) sideRecord(l *claudecode.Line, tail string) (string, error) 
 	return c.custom(l, tail, "claudecode/unknown-line-type", "a side record of unknown type %q is a custom entry", l.Type)
 }
 
-// repeat reports whether value is the one in force for key, and puts
-// it in force.
-func (c *converter) repeat(key, value string) bool {
-	old, ok := c.state[key]
-	c.state[key] = value
-	return ok && old == value
+// repeat reports whether value is the one in force on the path for key,
+// and puts it in force there.
+func repeat(st *pathState, key, value string) bool {
+	old, ok := st.side[key]
+	if ok && old == value {
+		return true
+	}
+	next := make(map[string]string, len(st.side)+1)
+	for k, v := range st.side {
+		next[k] = v
+	}
+	next[key] = value
+	st.side = next
+	return false
 }
 
 // stateValue is a state record without its timestamp, which a repeat
@@ -424,11 +574,10 @@ func (c *converter) drop(l *claudecode.Line, tail, code, format string, args ...
 	return tail, nil
 }
 
-func sortStrings(s []string) { sort.Strings(s) }
-
 // linkAgents finds the call that spawned each agent this transcript can
 // have spawned: the one its meta file names, or the Agent call whose
-// result names the agent.
+// result names the agent, by its ID or, for a team member, by
+// name@team.
 func (c *converter) linkAgents() {
 	parent := ""
 	if c.t.agent != nil {
@@ -440,18 +589,18 @@ func (c *converter) linkAgents() {
 	}
 	uses := map[string]bool{}
 	for _, l := range c.tr.Lines {
-		if l.Err != nil || l.Type != claudecode.TypeAssistant || l.Message == nil {
-			continue
-		}
-		for _, b := range l.Message.Content.Blocks {
-			if b.Type == claudecode.BlockToolUse {
+		if l.Err == nil {
+			for _, b := range l.ToolUses() {
 				uses[b.ID] = true
 			}
 		}
 	}
-	byID := map[string]*claudecode.Agent{}
+	byName := map[string]*claudecode.Agent{}
 	for _, a := range candidates {
-		byID[a.ID] = a
+		byName[a.ID] = a
+		if a.Meta != nil && a.Meta.Name != "" && a.Meta.TeamName != "" {
+			byName[a.Meta.Name+"@"+a.Meta.TeamName] = a
+		}
 		if a.Meta != nil && a.Meta.ToolUseID != "" && uses[a.Meta.ToolUseID] {
 			if _, taken := c.agents[a.Meta.ToolUseID]; !taken {
 				c.agents[a.Meta.ToolUseID] = a
@@ -469,11 +618,10 @@ func (c *converter) linkAgents() {
 		if json.Unmarshal(l.ToolUseResult, &r) != nil {
 			continue
 		}
-		id := r.AgentID
-		if id == "" {
-			id = r.AgentID2
+		a := byName[r.AgentID]
+		if a == nil {
+			a = byName[r.AgentID2]
 		}
-		a := byID[id]
 		if a == nil || a.Meta != nil && a.Meta.ToolUseID != "" {
 			continue
 		}

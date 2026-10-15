@@ -112,7 +112,7 @@ func TestOpenFindsAgents(t *testing.T) {
 	for _, a := range s.Agents {
 		ids = append(ids, a.ID)
 	}
-	if strings.Join(ids, " ") != "a0001 a0002 a0004 ateam-0003" {
+	if strings.Join(ids, " ") != "a0001 a0002 a0004 a0005 ateam-0003 ateam-0006" {
 		t.Errorf("agents = %v", ids)
 	}
 	if s.Agents[2].Transcript != nil || s.Agents[2].Meta.ToolUseID != "toolu_NONE" {

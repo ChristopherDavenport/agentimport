@@ -60,7 +60,14 @@ func Convert(s *claudecode.Session, opts Options) (*agentimport.Result, error) {
 		}
 		cv.children[parent] = append(cv.children[parent], a)
 	}
-	sessions, err := cv.transcript(s.Main, "", target{id: s.ID})
+	cv.sessionOf = map[string]string{}
+	cv.transcripts = map[string]*claudecode.Transcript{}
+	for _, a := range s.Agents {
+		if a.Transcript != nil {
+			cv.transcripts[a.ID] = a.Transcript
+		}
+	}
+	sessions, _, err := cv.transcript(s.Main, "", target{id: s.ID})
 	if err != nil {
 		return nil, err
 	}
@@ -77,10 +84,16 @@ func Convert(s *claudecode.Session, opts Options) (*agentimport.Result, error) {
 			if p := parentOf(a); p != "" && cv.waiting(p) {
 				continue
 			}
+			// The session it came from: its parent agent's, when that
+			// was converted, else the main one.
+			parentID, parentTr := s.ID, s.Main
+			if p := parentOf(a); p != "" && cv.sessionOf[p] != "" {
+				parentID, parentTr = cv.sessionOf[p], cv.transcripts[p]
+			}
 			cv.report.Addf(agentimport.Lossy, "claudecode/agent-unlinked", agentFile(a.ID), 0,
 				"no call in the transcripts spawned sub-agent %s; it is a session with parent_session alone", a.ID)
-			more, err := cv.transcript(a.Transcript, agentFile(a.ID), target{
-				id: agentsession.SubsessionID(s.ID, "agent-"+a.ID), parent: s.ID, agent: a,
+			more, _, err := cv.transcript(a.Transcript, agentFile(a.ID), target{
+				id: agentsession.SubsessionID(parentID, "agent-"+a.ID), parent: parentID, agent: a, parentTr: parentTr,
 			})
 			if err != nil {
 				return nil, err
@@ -123,6 +136,10 @@ type conversion struct {
 	// the main transcript.
 	children map[string][]*claudecode.Agent
 	done     map[string]bool
+	// sessionOf maps an agent to the session it became, and
+	// transcripts to its transcript.
+	sessionOf   map[string]string
+	transcripts map[string]*claudecode.Transcript
 }
 
 // target is the session a transcript becomes.
@@ -132,41 +149,49 @@ type target struct {
 	parent    string
 	spawnedBy string
 	agent     *claudecode.Agent
+	// parentTr is the transcript of the session that spawned the
+	// agent, whose responses a fork's transcript opens with a copy of.
+	parentTr *claudecode.Transcript
 }
 
 func agentFile(id string) string { return "subagents/agent-" + id + ".jsonl" }
 
-// transcript converts one transcript into the session t names, then
+// transcript converts one transcript into the session t names, and
 // each agent its calls spawned. It returns the session and then every
-// session it spawned, each before its own descendants.
-func (cv *conversion) transcript(tr *claudecode.Transcript, file string, t target) ([]*agentsession.Session, error) {
+// session it spawned, each before its own descendants, and the entry
+// the session's leaf is.
+func (cv *conversion) transcript(tr *claudecode.Transcript, file string, t target) ([]*agentsession.Session, string, error) {
 	if t.agent != nil {
 		cv.done[t.agent.ID] = true
+		cv.sessionOf[t.agent.ID] = t.id
 	}
 	h, err := cv.header(tr, file, t)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	b := agentimport.NewBuilder(h, Source, cv.report)
 	b.File = file
 	c := newConverter(cv, tr, file, t, b)
 	if err := c.run(); err != nil {
-		return nil, fmt.Errorf("%s: %w", displayFile(file), err)
+		return nil, "", fmt.Errorf("%s: %w", displayFile(file), err)
 	}
 	if err := agentimport.Verify(b.S); err != nil {
-		return nil, fmt.Errorf("%s: converted session does not verify: %w", displayFile(file), err)
+		return nil, "", fmt.Errorf("%s: converted session does not verify: %w", displayFile(file), err)
 	}
 	out := []*agentsession.Session{b.S}
 	for _, ch := range c.spawned {
-		more, err := cv.transcript(ch.agent.Transcript, agentFile(ch.agent.ID), target{
-			id: ch.id, parent: t.id, spawnedBy: ch.callID, agent: ch.agent,
-		})
-		if err != nil {
-			return nil, err
+		if ch.sessions == nil {
+			more, _, err := cv.transcript(ch.agent.Transcript, agentFile(ch.agent.ID), target{
+				id: ch.id, parent: t.id, agent: ch.agent, parentTr: tr,
+			})
+			if err != nil {
+				return nil, "", err
+			}
+			ch.sessions = more
 		}
-		out = append(out, more...)
+		out = append(out, ch.sessions...)
 	}
-	return out, nil
+	return out, b.Resume(), nil
 }
 
 func displayFile(file string) string {
@@ -211,11 +236,43 @@ func (cv *conversion) header(tr *claudecode.Transcript, file string, t target) (
 	}
 	cv.report.Addf(agentimport.Gap, "agentimport/provenance", file, 0,
 		"the import is recorded in the header member %s", agentimport.SourceMember)
+	if e, ok := firstEnvelope(tr); ok && (e.Entrypoint != "" || e.UserType != "") {
+		env := map[string]string{}
+		if e.Entrypoint != "" {
+			env["entrypoint"] = e.Entrypoint
+		}
+		if e.UserType != "" {
+			env["userType"] = e.UserType
+		}
+		raw, err := json.Marshal(env)
+		if err != nil {
+			return h, err
+		}
+		h.Extra[Source+":envelope"] = raw
+	}
+	if t.agent != nil && t.agent.Meta == nil && t.agent.MetaErr != nil {
+		if json.Valid(t.agent.MetaRaw) && !cv.opts.Slim {
+			raw, _, err := agentimport.CleanJSON(t.agent.MetaRaw)
+			if err != nil {
+				return h, err
+			}
+			h.Extra[Source+":agent_meta"] = raw
+			cv.report.Addf(agentimport.Kept, "claudecode/agent-meta-undecodable", file, 0,
+				"the sub-agent's meta file does not decode (%v); it is the header member %s:agent_meta, and the agent is linked as if it had none", t.agent.MetaErr, Source)
+		} else {
+			cv.report.Addf(agentimport.Dropped, "claudecode/agent-meta-undecodable", file, 0,
+				"the sub-agent's meta file does not decode (%v) and is left out", t.agent.MetaErr)
+		}
+	}
 	if t.agent != nil && t.agent.Meta != nil {
 		if cv.opts.Slim {
 			cv.report.Addf(agentimport.Dropped, "claudecode/agent-meta", file, 0, "the sub-agent's meta file (type, description, model) is left out")
 		} else {
-			h.Extra[Source+":agent_meta"] = json.RawMessage(t.agent.Meta.Raw)
+			raw, _, err := agentimport.CleanJSON(t.agent.Meta.Raw)
+			if err != nil {
+				return h, err
+			}
+			h.Extra[Source+":agent_meta"] = raw
 			cv.report.Addf(agentimport.Kept, "claudecode/agent-meta", file, 0, "the sub-agent's meta file is the header member %s:agent_meta", Source)
 		}
 	}

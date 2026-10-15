@@ -16,11 +16,15 @@ import (
 //     from the line holding its tool_use while the next block of the
 //     response hangs from whatever was written last, so the results of
 //     parallel calls are dead ends; inside a Response they are not.
+//   - A line written between two blocks of one response, on the chain
+//     that links them (an attachment, a meta message), is in the
+//     response too, in [Response.Between], so it stays on the path.
 //   - A compact_boundary line is a root on disk; here it hangs from its
 //     logicalParentUuid, the line the conversation was at when it was
 //     compacted, so the conversation reads through it.
 //   - Timestamps are never used to order anything: they go backwards.
 //
+// A line that did not decode keeps its place by its uuid and parent.
 // Side records, the lines without a uuid, are attached to the unit of
 // the tree line written before them, in file order.
 type Tree struct {
@@ -30,9 +34,13 @@ type Tree struct {
 	Roots []*Unit
 	// Head holds the side records written before the first tree line.
 	Head []*Line
-	// Orphans are tool_result lines whose tool_use is not in the
-	// transcript. Each is also a unit of its own.
+	// Orphans are tool_result lines none of whose results answer a call
+	// in the transcript. Each is also a unit of its own.
 	Orphans []*Line
+	// Unplaced are result blocks on a line that belongs to a response
+	// that are not that response's: a second result for a call already
+	// answered, a result for another response's call, or for none.
+	Unplaced []Unplaced
 	// Dangling lists lines whose parent is not in the transcript; each
 	// is a root here.
 	Dangling []*Line
@@ -42,6 +50,14 @@ type Tree struct {
 
 	unitOf map[*Line]*Unit
 	byUUID map[string]*Line
+}
+
+// Unplaced is a tool_result block the tree could not give a call.
+type Unplaced struct {
+	Line  *Line
+	Block *ContentBlock
+	// Why is "duplicate", "other-response" or "no-call".
+	Why string
 }
 
 // Unit is a node of the tree: one line, or one API response with the
@@ -76,13 +92,14 @@ func (u *Unit) Lines() []*Line {
 	if u.Line != nil {
 		return []*Line{u.Line}
 	}
-	out := append([]*Line(nil), u.Response.Lines...)
-	for _, c := range u.Response.Calls {
+	r := u.Response
+	out := append([]*Line(nil), r.Lines...)
+	for _, c := range r.Calls {
 		if c.Result != nil && !containsLine(out, c.Result) {
 			out = append(out, c.Result)
 		}
 	}
-	for _, l := range u.Response.Extra {
+	for _, l := range append(append([]*Line(nil), r.Extra...), r.Between...) {
 		if !containsLine(out, l) {
 			out = append(out, l)
 		}
@@ -107,10 +124,15 @@ type Response struct {
 	RequestID string
 	Lines     []*Line
 	Calls     []*Call
-	// Extra holds result lines that answer a call of this response and
-	// also carry other blocks, or answer a call twice; they are in the
-	// response so their children hang from it.
+	// Extra holds result lines that belong to this response and carry
+	// more than its results: other blocks, or results the tree could
+	// not place (see [Tree.Unplaced]).
 	Extra []*Line
+	// Between holds the lines on the chain from one block of the
+	// response to the next that are not the response's own, in the
+	// order the chain runs. Claude Code sends them in the user turn
+	// after the tool results.
+	Between []*Line
 }
 
 // Last returns the last line of the response, in block order.
@@ -141,7 +163,7 @@ func BuildTree(tr *Transcript) *Tree {
 	index := map[*Line]int{}
 	for i, l := range tr.Lines {
 		index[l] = i
-		if l.Err == nil && l.InTree() {
+		if l.InTree() {
 			if _, dup := t.byUUID[l.UUID]; !dup {
 				t.byUUID[l.UUID] = l
 			}
@@ -164,6 +186,8 @@ func BuildTree(tr *Transcript) *Tree {
 		r.Lines = append(r.Lines, l)
 	}
 	uses := map[string]*Call{} // tool_use id -> the latest call in file order
+	callResponse := map[*Call]*Response{}
+	lineResponse := map[*Line]*Response{}
 	for _, r := range order {
 		sort.SliceStable(r.Lines, func(i, j int) bool {
 			a, b := r.Lines[i], r.Lines[j]
@@ -173,19 +197,13 @@ func BuildTree(tr *Transcript) *Tree {
 			return index[a] < index[b]
 		})
 		for _, l := range r.Lines {
-			for _, b := range l.Message.Content.Blocks {
-				if b.Type == BlockToolUse {
-					c := &Call{Use: b, Line: l}
-					r.Calls = append(r.Calls, c)
-					uses[b.ID] = c
-				}
+			lineResponse[l] = r
+			for _, b := range l.ToolUses() {
+				c := &Call{Use: b, Line: l}
+				r.Calls = append(r.Calls, c)
+				uses[b.ID] = c
+				callResponse[c] = r
 			}
-		}
-	}
-	callResponse := map[*Call]*Response{}
-	for _, r := range order {
-		for _, c := range r.Calls {
-			callResponse[c] = r
 		}
 	}
 
@@ -201,33 +219,11 @@ func BuildTree(tr *Transcript) *Tree {
 		t.Units = append(t.Units, u)
 	}
 	for _, l := range tr.Lines {
-		if l.Err != nil || !l.InTree() || t.unitOf[l] != nil {
+		if !l.InTree() || t.unitOf[l] != nil {
 			continue
 		}
-		if results := l.ToolResults(); len(results) > 0 {
-			var owner *Response
-			for _, b := range results {
-				c := uses[b.ToolUseID]
-				if c == nil {
-					continue
-				}
-				r := callResponse[c]
-				if owner == nil {
-					owner = r
-				}
-				if r != owner {
-					continue
-				}
-				if c.Result == nil {
-					c.Result, c.ResultBlock = l, b
-				} else if !containsLine(r.Extra, l) {
-					r.Extra = append(r.Extra, l)
-				}
-			}
-			if owner != nil {
-				if len(results) != len(l.Message.Content.Blocks) && !containsLine(owner.Extra, l) {
-					owner.Extra = append(owner.Extra, l)
-				}
+		if l.IsToolResult() {
+			if owner := t.placeResults(l, uses, callResponse, lineResponse); owner != nil {
 				t.unitOf[l] = t.unitOf[owner.Lines[0]]
 				continue
 			}
@@ -237,6 +233,7 @@ func BuildTree(tr *Transcript) *Tree {
 		t.unitOf[l] = u
 		t.Units = append(t.Units, u)
 	}
+	t.foldBetween(order)
 	sort.SliceStable(t.Units, func(i, j int) bool { return t.Units[i].first < t.Units[j].first })
 
 	// Link each unit to its parent: the unit of the parent of the line
@@ -273,8 +270,7 @@ func BuildTree(tr *Transcript) *Tree {
 	// Break cycles: the first unit met again on a walk up loses its
 	// parent. Each unit is walked once.
 	const (
-		unseen = iota
-		walking
+		walking = iota + 1
 		done
 	)
 	state := map[*Unit]int{}
@@ -304,7 +300,7 @@ func BuildTree(tr *Transcript) *Tree {
 	// Side records follow the tree line written before them.
 	var last *Unit
 	for _, l := range tr.Lines {
-		if l.Err == nil && l.InTree() {
+		if l.InTree() {
 			if u := t.unitOf[l]; u != nil {
 				last = u
 			}
@@ -317,4 +313,101 @@ func BuildTree(tr *Transcript) *Tree {
 		}
 	}
 	return t
+}
+
+// placeResults gives a result line's blocks their calls. The line
+// belongs to the response its first answered call is of; a block that
+// answers no call of that response, or one already answered, is
+// unplaced. It returns the owning response, or nil when no block
+// answers a call.
+func (t *Tree) placeResults(l *Line, uses map[string]*Call, callResponse map[*Call]*Response, lineResponse map[*Line]*Response) *Response {
+	results := l.ToolResults()
+	// The call a block answers: the one on the line it hangs from, when
+	// that line holds it, else the latest with its id.
+	callOf := func(b *ContentBlock) *Call {
+		if pl := t.byUUID[l.ParentUUID]; pl != nil {
+			if r := lineResponse[pl]; r != nil {
+				for _, c := range r.Calls {
+					if c.Use.ID == b.ToolUseID && c.Line == pl {
+						return c
+					}
+				}
+			}
+		}
+		return uses[b.ToolUseID]
+	}
+	var owner *Response
+	for _, b := range results {
+		if c := callOf(b); c != nil {
+			owner = callResponse[c]
+			break
+		}
+	}
+	if owner == nil {
+		return nil
+	}
+	placed := false
+	for _, b := range results {
+		c := callOf(b)
+		switch {
+		case c == nil:
+			t.Unplaced = append(t.Unplaced, Unplaced{Line: l, Block: b, Why: "no-call"})
+		case callResponse[c] != owner:
+			t.Unplaced = append(t.Unplaced, Unplaced{Line: l, Block: b, Why: "other-response"})
+		case c.Result != nil:
+			t.Unplaced = append(t.Unplaced, Unplaced{Line: l, Block: b, Why: "duplicate"})
+		default:
+			c.Result, c.ResultBlock = l, b
+			placed = true
+		}
+	}
+	if !placed || len(results) != len(l.Message.Content.Blocks) {
+		owner.Extra = append(owner.Extra, l)
+	}
+	return owner
+}
+
+// foldBetween moves into a response the single lines on the chain from
+// one of its blocks back to the block before: written between the two,
+// they were sent with the response's results.
+func (t *Tree) foldBetween(order []*Response) {
+	folded := map[*Unit]bool{}
+	for _, r := range order {
+		u := t.unitOf[r.Lines[0]]
+		for _, l := range r.Lines[1:] {
+			var chain []*Line
+			seen := map[*Line]bool{}
+			p := t.byUUID[l.ParentUUID]
+			for p != nil && t.unitOf[p] != u && !seen[p] {
+				pu := t.unitOf[p]
+				if pu == nil || pu.Response != nil || folded[pu] ||
+					p.Type == TypeSystem && p.Subtype == SubtypeCompactBoundary {
+					chain = nil
+					break
+				}
+				seen[p] = true
+				chain = append(chain, p)
+				p = t.byUUID[p.ParentUUID]
+			}
+			if p == nil || t.unitOf[p] != u {
+				continue
+			}
+			for i := len(chain) - 1; i >= 0; i-- {
+				x := chain[i]
+				folded[t.unitOf[x]] = true
+				t.unitOf[x] = u
+				r.Between = append(r.Between, x)
+			}
+		}
+	}
+	if len(folded) == 0 {
+		return
+	}
+	kept := t.Units[:0]
+	for _, x := range t.Units {
+		if !folded[x] {
+			kept = append(kept, x)
+		}
+	}
+	t.Units = kept
 }

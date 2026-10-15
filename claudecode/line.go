@@ -1,7 +1,9 @@
 package claudecode
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"time"
 )
 
@@ -117,7 +119,10 @@ type Line struct {
 	// Raw is the line as read, without NUL bytes.
 	Raw json.RawMessage `json:"-"`
 	// Err is set when the line is JSON but does not decode as a line of
-	// this package's types; only Type, No and Raw are then set.
+	// this package's types. The envelope members that are strings
+	// (type, uuid, parentUuid, logicalParentUuid, timestamp, cwd,
+	// gitBranch, version, sessionId, agentId, subtype) are still read,
+	// so the line keeps its place in the tree; Raw is written back.
 	Err error `json:"-"`
 }
 
@@ -156,7 +161,7 @@ func (l *Line) ToolResults() []*ContentBlock {
 	}
 	var out []*ContentBlock
 	for _, b := range l.Message.Content.Blocks {
-		if b.Type == BlockToolResult {
+		if b.Type == BlockToolResult && !b.IsRaw() {
 			out = append(out, b)
 		}
 	}
@@ -165,7 +170,21 @@ func (l *Line) ToolResults() []*ContentBlock {
 
 // IsToolResult reports whether the line carries a tool result.
 func (l *Line) IsToolResult() bool {
-	return l.Type == TypeUser && len(l.ToolResults()) > 0
+	return l.Type == TypeUser && l.Err == nil && len(l.ToolResults()) > 0
+}
+
+// ToolUses returns the line's tool_use blocks.
+func (l *Line) ToolUses() []*ContentBlock {
+	if l.Message == nil || l.Type != TypeAssistant {
+		return nil
+	}
+	var out []*ContentBlock
+	for _, b := range l.Message.Content.Blocks {
+		if b.Type == BlockToolUse && !b.IsRaw() {
+			out = append(out, b)
+		}
+	}
+	return out
 }
 
 // IsSynthetic reports whether the line is an assistant line the CLI
@@ -230,13 +249,30 @@ type Content struct {
 }
 
 // UnmarshalJSON accepts a string or an array of blocks.
+//
+// Each block decodes on its own, so a block of a shape this package
+// does not type, or a null, is kept raw rather than failing the
+// message: see [ContentBlock.Raw].
 func (c *Content) UnmarshalJSON(data []byte) error {
 	*c = Content{}
 	if len(data) > 0 && data[0] == '"' {
 		c.IsText = true
 		return json.Unmarshal(data, &c.Text)
 	}
-	return json.Unmarshal(data, &c.Blocks)
+	var raws []json.RawMessage
+	if err := json.Unmarshal(data, &raws); err != nil {
+		return err
+	}
+	if raws == nil {
+		return nil
+	}
+	c.Blocks = make([]*ContentBlock, len(raws))
+	for i, raw := range raws {
+		b := &ContentBlock{}
+		_ = b.UnmarshalJSON(raw)
+		c.Blocks[i] = b
+	}
+	return nil
 }
 
 // MarshalJSON writes the string or the blocks.
@@ -288,19 +324,50 @@ type ContentBlock struct {
 	ToolName string `json:"tool_name"`
 
 	Members
+
+	// Raw is set, with Err, when the block is not of the shapes this
+	// type declares: a server tool result whose content is an object, a
+	// block whose source is a string, a null. Only Type is decoded
+	// then, when the block has a string type; Raw is written back
+	// verbatim.
+	Raw json.RawMessage `json:"-"`
+	Err error           `json:"-"`
 }
 
 type plainBlock ContentBlock
 
-// UnmarshalJSON decodes a block, keeping undeclared members.
+// UnmarshalJSON decodes a block, keeping undeclared members. It never
+// fails: a block it cannot type is kept in Raw.
 func (b *ContentBlock) UnmarshalJSON(data []byte) error {
-	return decode(data, (*plainBlock)(b), &b.Members)
+	if t := bytes.TrimSpace(data); len(t) == 0 || t[0] != '{' {
+		*b = ContentBlock{Raw: append(json.RawMessage(nil), data...), Err: errors.New("a block that is not an object")}
+		return nil
+	}
+	if err := decode(data, (*plainBlock)(b), &b.Members); err != nil {
+		*b = ContentBlock{Raw: append(json.RawMessage(nil), data...), Err: err}
+		var head struct {
+			Type string `json:"type"`
+		}
+		if json.Unmarshal(data, &head) == nil {
+			b.Type = head.Type
+		}
+		if b.Err == nil {
+			b.Err = errors.New("not a block")
+		}
+	}
+	return nil
 }
 
 // MarshalJSON writes the block back as it was read.
 func (b ContentBlock) MarshalJSON() ([]byte, error) {
+	if b.Raw != nil {
+		return b.Raw, nil
+	}
 	return encode(plainBlock(b), &b.Members)
 }
+
+// IsRaw reports whether the block was kept raw: see Raw.
+func (b *ContentBlock) IsRaw() bool { return b.Raw != nil }
 
 // MediaSource is where an image's or a document's bytes are.
 type MediaSource struct {
@@ -496,8 +563,8 @@ func (p PreservedMessages) MarshalJSON() ([]byte, error) {
 // RequestShape is the system prompt and tools of a request, on an
 // api-request-shape line (2.1.300).
 type RequestShape struct {
-	System []*ContentBlock `json:"system"`
-	Tools  []*ToolDef      `json:"tools"`
+	System Content    `json:"system"`
+	Tools  []*ToolDef `json:"tools"`
 
 	Members
 }

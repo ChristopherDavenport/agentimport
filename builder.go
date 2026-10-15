@@ -90,6 +90,8 @@ type Builder struct {
 	last time.Time
 	// tail is the entry appended last, the file's last line.
 	tail string
+	// leaf is the entry Leaf named.
+	leaf string
 }
 
 // NewBuilder starts a session with header h.
@@ -119,6 +121,14 @@ func (b *Builder) Member(e agentsession.Entry, name string, v any) error {
 		if raw, err = json.Marshal(v); err != nil {
 			return fmt.Errorf("member %s:%s: %w", b.NS, name, err)
 		}
+	}
+	raw, changed, err := CleanJSON(raw)
+	if err != nil {
+		return fmt.Errorf("member %s:%s: %w", b.NS, name, err)
+	}
+	if changed {
+		b.Report.Addf(Repaired, "agentimport/invalid-text", b.File, 0,
+			"text in member %s:%s that was not valid Unicode was replaced with U+FFFD", b.NS, name)
 	}
 	base := e.Base()
 	if base.Unknown == nil {
@@ -181,19 +191,28 @@ func (b *Builder) Last() string { return b.tail }
 
 // Leaf makes id the leaf a reader resumes from. A reader with no leaf
 // label takes the file's last line, so nothing is written when that
-// line is id or descends from it, which resumes on id's branch; a leaf
-// label is appended otherwise. A converter calls it last, with the
-// entry the native format names as current.
+// line is id; a leaf label naming id is appended otherwise, so the
+// reader resumes on id exactly, never on a later line of another
+// branch. A converter calls it last, with the entry the native format
+// names as current.
 func (b *Builder) Leaf(id string) error {
-	for _, e := range b.S.Path(b.tail) {
-		if e.Base().ID == id {
-			return nil
-		}
+	b.leaf = id
+	if b.tail == id {
+		return nil
 	}
 	l := agentsession.NewLabelEntry(id, agentsession.LeafLabel)
 	l.Timestamp = b.last
 	_, err := b.Append(b.tail, l)
 	return err
+}
+
+// Resume returns the entry a reader of the session resumes from: the
+// one Leaf named, or the last appended.
+func (b *Builder) Resume() string {
+	if b.leaf != "" {
+		return b.leaf
+	}
+	return b.tail
 }
 
 // Verify writes s, reads it back and checks the records on every leaf,

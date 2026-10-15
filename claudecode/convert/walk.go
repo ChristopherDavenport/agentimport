@@ -24,50 +24,77 @@ type converter struct {
 
 	disp map[*claudecode.Line]agentimport.Disposition
 	// calls maps a native tool_use ID to the call ID recorded for it,
-	// the latest call holding it.
-	calls map[string]string
+	// and callEntries to the entry holding the call: the latest call
+	// with the ID.
+	calls       map[string]string
+	callEntries map[string]string
+	// ends maps a native uuid to the last entry of the unit the line is
+	// in: where the conversation was once the line was written. The
+	// builder's own map holds the first entry made from each line.
+	ends map[string]string
 	// agents maps a native tool_use ID to the agent the call spawned.
 	agents map[string]*claudecode.Agent
 	// spawned lists the agents this transcript's calls linked, in the
 	// order the links were written.
 	spawned []spawn
-	// side holds, per side record type, the value last written, so an
-	// unchanged repeat is not written again.
-	state map[string]string
-	// echoWire says the CLI replays a call's arguments as the model
-	// wrote them, so those are what the context held.
+	// echoWire is what the transcript's first prompt snapshot says of
+	// echoing the model's arguments, for the part of a path before any
+	// snapshot.
 	echoWire bool
-	// consumed marks units a compaction folded into its entry.
-	consumed map[*claudecode.Unit]bool
+	// envelope is what every line of the transcript is expected to say
+	// of the members the header and the file's kind already record.
+	envelope expected
+	// copied holds the message IDs of the parent's responses, for a
+	// fork, whose transcript opens with a copy of one.
+	copied map[string]bool
 }
 
-// spawn is an agent a call of this transcript spawned.
+// expected is the envelope a transcript's lines share.
+type expected struct {
+	sessionID  string
+	agentID    string
+	sidechain  bool
+	entrypoint string
+	userType   string
+}
+
+// spawn is an agent a call of this transcript linked. A synchronous
+// one is converted when its link is written, so the call's output can
+// name its leaf; sessions holds what that made.
 type spawn struct {
-	agent  *claudecode.Agent
-	id     string
-	callID string
+	agent    *claudecode.Agent
+	id       string
+	callID   string
+	sessions []*agentsession.Session
 }
 
 // pathState is what is in force at a point of the tree, along the path
-// from its root.
+// from its root. Its maps are replaced, never changed in place, so a
+// branch shares its trunk's.
 type pathState struct {
-	model  string
-	cwd    string
-	branch string
+	model   string
+	cwd     string
+	branch  string
+	version string
 	// tools are the tool definitions a config entry put in force, by
-	// name, as encoded; replaced, never changed in place, so a branch
-	// shares its trunk's map.
+	// name, as encoded.
 	tools map[string]string
+	// echo is what the last prompt snapshot on the path says of
+	// echoing the model's arguments; nil before the first.
+	echo *bool
+	// side holds, per side record type, the value last written on the
+	// path, so an unchanged repeat is not written again.
+	side map[string]string
 }
 
 func newConverter(cv *conversion, tr *claudecode.Transcript, file string, t target, b *agentimport.Builder) *converter {
 	c := &converter{
 		cv: cv, opts: cv.opts, report: cv.report, file: file, tr: tr, b: b, t: t,
-		disp:     map[*claudecode.Line]agentimport.Disposition{},
-		calls:    map[string]string{},
-		agents:   map[string]*claudecode.Agent{},
-		state:    map[string]string{},
-		consumed: map[*claudecode.Unit]bool{},
+		disp:        map[*claudecode.Line]agentimport.Disposition{},
+		calls:       map[string]string{},
+		callEntries: map[string]string{},
+		ends:        map[string]string{},
+		agents:      map[string]*claudecode.Agent{},
 	}
 	c.tree = claudecode.BuildTree(tr)
 	for _, l := range tr.Lines {
@@ -76,8 +103,48 @@ func newConverter(cv *conversion, tr *claudecode.Transcript, file string, t targ
 			break
 		}
 	}
+	c.envelope = expected{sessionID: cv.session.ID, sidechain: t.agent != nil}
+	if t.agent != nil {
+		c.envelope.agentID = t.agent.ID
+	}
+	if e, ok := firstEnvelope(tr); ok {
+		c.envelope.entrypoint, c.envelope.userType = e.Entrypoint, e.UserType
+	}
+	if t.agent != nil && t.parentTr != nil && isFork(t.agent, tr) {
+		c.copied = map[string]bool{}
+		for _, l := range t.parentTr.Lines {
+			if l.Err == nil && l.Type == claudecode.TypeAssistant && l.Message != nil && l.Message.ID != "" {
+				c.copied[l.Message.ID] = true
+			}
+		}
+	}
 	c.linkAgents()
 	return c
+}
+
+// firstEnvelope returns the first tree line, whose entrypoint and
+// userType the header records.
+func firstEnvelope(tr *claudecode.Transcript) (*claudecode.Line, bool) {
+	for _, l := range tr.Lines {
+		if l.Err == nil && l.InTree() {
+			return l, true
+		}
+	}
+	return nil, false
+}
+
+// isFork reports whether an agent is a fork: its meta file says so, or
+// its transcript opens with a fork-context-ref.
+func isFork(a *claudecode.Agent, tr *claudecode.Transcript) bool {
+	if a.Meta != nil && a.Meta.IsFork {
+		return true
+	}
+	for _, l := range tr.Lines {
+		if l.Type == claudecode.TypeForkContextRef {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *converter) addf(kind agentimport.Kind, code string, l *claudecode.Line, format string, args ...any) {
@@ -92,6 +159,16 @@ func (c *converter) addf(kind agentimport.Kind, code string, l *claudecode.Line,
 func (c *converter) mark(l *claudecode.Line, d agentimport.Disposition) {
 	if _, ok := c.disp[l]; !ok {
 		c.disp[l] = d
+	}
+}
+
+// bind records the first entry made from a native line.
+func (c *converter) bind(l *claudecode.Line, id string) {
+	if l.UUID == "" {
+		return
+	}
+	if _, ok := c.b.ID(l.UUID); !ok {
+		c.b.Bind(l.UUID, id)
 	}
 }
 
@@ -114,7 +191,8 @@ func (c *converter) run() error {
 	}
 	if head != nil {
 		// A transcript of side records alone.
-		if _, err := c.side(head, ""); err != nil {
+		st := pathState{}
+		if _, err := c.side(head, "", &st); err != nil {
 			return err
 		}
 	}
@@ -140,7 +218,7 @@ func (c *converter) walk(u *claudecode.Unit, parent string, st pathState, head [
 		return err
 	}
 	if len(head) > 0 {
-		if tail, err = c.side(head, tail); err != nil {
+		if tail, err = c.side(head, tail, &st); err != nil {
 			return err
 		}
 	}
@@ -148,22 +226,28 @@ func (c *converter) walk(u *claudecode.Unit, parent string, st pathState, head [
 	switch {
 	case u.Response != nil:
 		tail, err = c.response(u.Response, tail, &st)
-	case start.Type == claudecode.TypeSystem && start.Subtype == claudecode.SubtypeCompactBoundary:
-		tail, summary, err = c.compaction(u, tail)
+	case start.Err == nil && start.Type == claudecode.TypeSystem && start.Subtype == claudecode.SubtypeCompactBoundary:
+		tail, summary, err = c.compaction(u, tail, &st)
 	default:
 		tail, err = c.line(start, tail, &st)
 	}
 	if err != nil {
 		return err
 	}
-	if tail, err = c.side(u.Side, tail); err != nil {
+	for _, l := range u.Lines() {
+		if l.UUID != "" {
+			c.ends[l.UUID] = tail
+		}
+	}
+	if tail, err = c.side(u.Side, tail, &st); err != nil {
 		return err
 	}
 	children := u.Children
 	if summary != nil {
 		// The summary is folded into the compaction: its side records
 		// and its children follow it.
-		if tail, err = c.side(summary.Side, tail); err != nil {
+		c.ends[summary.Start().UUID] = tail
+		if tail, err = c.side(summary.Side, tail, &st); err != nil {
 			return err
 		}
 		children = append(append([]*claudecode.Unit(nil), summary.Children...), without(children, summary)...)
@@ -251,10 +335,10 @@ func requestModel(r *claudecode.Response) string {
 	return ""
 }
 
-// env writes an env entry when a line's working directory or branch
-// differs from what is in force.
+// env writes an env entry where a line's working directory, branch or
+// Claude Code version differs from what is in force.
 func (c *converter) env(l *claudecode.Line, tail string, st *pathState) (string, error) {
-	if l.CWD == "" || l.CWD == st.cwd && l.GitBranch == st.branch {
+	if l.CWD == "" || l.CWD == st.cwd && l.GitBranch == st.branch && l.Version == st.version {
 		return tail, nil
 	}
 	e := agentsession.NewEnvEntry(l.CWD)
@@ -265,28 +349,34 @@ func (c *converter) env(l *claudecode.Line, tail string, st *pathState) (string,
 		}
 		c.addf(agentimport.Gap, "agentimport/vcs-branch", l, "the git branch is the vcs member %s:branch; the format's vcs has no branch", Source)
 	}
+	if l.Version != "" {
+		if err := c.b.Member(e, "version", l.Version); err != nil {
+			return "", err
+		}
+		if st.version != "" && st.version != l.Version {
+			c.addf(agentimport.Kept, "claudecode/version-change", l,
+				"Claude Code changed version mid-session; the env entry's %s:version says from where", Source)
+		}
+	}
 	e.Timestamp = l.Time()
-	st.cwd, st.branch = l.CWD, l.GitBranch
+	st.cwd, st.branch, st.version = l.CWD, l.GitBranch, l.Version
 	return c.append(tail, e, nil)
 }
 
-// leaf names the entry the transcript was last at: the leafUuid of the
-// last last-prompt record, or the last tree line.
+// leaf names the entry the transcript was last at: where the
+// conversation was once the line the last last-prompt record names was
+// written, or the last tree line when that record names none it holds.
 func (c *converter) leaf() error {
 	var target *claudecode.Line
-	for _, l := range c.tr.Lines {
-		if l.Err != nil {
-			continue
-		}
-		if l.Type == claudecode.TypeLastPrompt && l.LeafUUID != "" {
-			if x := c.tree.Line(l.LeafUUID); x != nil {
-				target = x
-			}
+	for i := len(c.tr.Lines) - 1; i >= 0; i-- {
+		if l := c.tr.Lines[i]; l.Err == nil && l.Type == claudecode.TypeLastPrompt {
+			target = c.tree.Line(l.LeafUUID)
+			break
 		}
 	}
 	if target == nil {
 		for i := len(c.tr.Lines) - 1; i >= 0; i-- {
-			if l := c.tr.Lines[i]; l.Err == nil && l.InTree() {
+			if l := c.tr.Lines[i]; l.InTree() && c.tree.Unit(l) != nil {
 				target = l
 				break
 			}
@@ -295,7 +385,7 @@ func (c *converter) leaf() error {
 	if target == nil {
 		return nil
 	}
-	id, ok := c.b.ID(target.UUID)
+	id, ok := c.ends[target.UUID]
 	if !ok {
 		return nil
 	}
@@ -304,6 +394,12 @@ func (c *converter) leaf() error {
 
 // tally accounts for every line of the transcript.
 func (c *converter) tally() {
+	for _, u := range c.tree.Unplaced {
+		if c.disp[u.Line] == agentimport.LineMapped {
+			c.addf(agentimport.Dropped, "claudecode/unplaced-result", u.Line,
+				"a result for call %s on a line whose other results were written is left out (%s)", u.Block.ToolUseID, u.Why)
+		}
+	}
 	for _, l := range c.tr.Lines {
 		d, ok := c.disp[l]
 		if !ok {
@@ -321,32 +417,52 @@ func (c *converter) tally() {
 	}
 }
 
-// lineMembers keeps the members of a line the converter does not map
-// in the entry's member claudecode:line.
-func (c *converter) lineMembers(e agentsession.Entry, l *claudecode.Line) error {
-	m := map[string]json.RawMessage{}
-	for k, v := range nonNull(l.Extra) {
-		if !envelopeExtra[k] {
-			m[k] = v
-		}
-	}
-	if l.PermissionMode != "" {
-		m["permissionMode"], _ = json.Marshal(l.PermissionMode)
-	}
-	if len(m) == 0 {
-		return nil
-	}
-	if c.opts.Slim {
-		c.addf(agentimport.Dropped, "claudecode/line-members", l, "left out: %s", memberNames(m))
-		return nil
-	}
-	c.addf(agentimport.Kept, "claudecode/line-members", l, "kept in %s:line: %s", Source, memberNames(m))
-	return c.b.Member(e, "line", m)
+// custom keeps a whole native line as a custom entry.
+func (c *converter) custom(l *claudecode.Line, tail, code string, format string, args ...any) (string, error) {
+	return c.customAs(agentimport.Kept, l, tail, code, format, args...)
 }
 
-// envelopeExtra are undeclared members every line repeats, which the
-// header and the env entries already say.
-var envelopeExtra = map[string]bool{"session_id": true, "slug": true}
+// customAs is custom with the finding's kind given.
+func (c *converter) customAs(kind agentimport.Kind, l *claudecode.Line, tail, code string, format string, args ...any) (string, error) {
+	e := &agentsession.CustomEntry{NS: Source, Data: c.clean(l.Raw, l)}
+	id, err := c.append(tail, e, l)
+	if err != nil {
+		return "", err
+	}
+	c.mark(l, agentimport.LineKept)
+	c.bind(l, id)
+	c.addf(kind, code, l, format, args...)
+	return id, nil
+}
+
+// clean makes raw native JSON valid Unicode, as the session format
+// needs, and reports a change.
+func (c *converter) clean(raw json.RawMessage, l *claudecode.Line) json.RawMessage {
+	out, changed, err := agentimport.CleanJSON(raw)
+	if err != nil {
+		// raw came from the reader, which only keeps JSON.
+		return raw
+	}
+	if changed {
+		c.addf(agentimport.Repaired, "agentimport/invalid-text", l, "text that was not valid Unicode was replaced with U+FFFD")
+	}
+	return out
+}
+
+// compactJSON is raw with insignificant space removed; raw itself when
+// it is not JSON.
+func compactJSON(raw json.RawMessage) string {
+	var b bytes.Buffer
+	if err := json.Compact(&b, raw); err != nil {
+		return string(raw)
+	}
+	return b.String()
+}
+
+// itemEntry wraps an item.
+func itemEntry(item openresponses.Item) *agentsession.ItemEntry {
+	return agentsession.NewItemEntry(item)
+}
 
 // nonNull returns the members whose value is not null: a null member
 // says nothing an absent one does not.
@@ -367,39 +483,4 @@ func memberNames(m map[string]json.RawMessage) string {
 	}
 	sortStrings(names)
 	return strings.Join(names, ", ")
-}
-
-// custom keeps a whole native line as a custom entry.
-func (c *converter) custom(l *claudecode.Line, tail, code string, format string, args ...any) (string, error) {
-	return c.customAs(agentimport.Kept, l, tail, code, format, args...)
-}
-
-// customAs is custom with the finding's kind given.
-func (c *converter) customAs(kind agentimport.Kind, l *claudecode.Line, tail, code string, format string, args ...any) (string, error) {
-	e := &agentsession.CustomEntry{NS: Source, Data: l.Raw}
-	id, err := c.append(tail, e, l)
-	if err != nil {
-		return "", err
-	}
-	c.mark(l, agentimport.LineKept)
-	if l.UUID != "" {
-		c.b.Bind(l.UUID, id)
-	}
-	c.addf(kind, code, l, format, args...)
-	return id, nil
-}
-
-// compactJSON is raw with insignificant space removed; raw itself when
-// it is not JSON.
-func compactJSON(raw json.RawMessage) string {
-	var b bytes.Buffer
-	if err := json.Compact(&b, raw); err != nil {
-		return string(raw)
-	}
-	return b.String()
-}
-
-// itemEntry wraps an item.
-func itemEntry(item openresponses.Item) *agentsession.ItemEntry {
-	return agentsession.NewItemEntry(item)
 }
