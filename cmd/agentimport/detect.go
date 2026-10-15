@@ -1,0 +1,274 @@
+package main
+
+import (
+	"bufio"
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+
+	"github.com/ChristopherDavenport/agentimport"
+	"github.com/ChristopherDavenport/agentimport/claudecode"
+	ccconvert "github.com/ChristopherDavenport/agentimport/claudecode/convert"
+	"github.com/ChristopherDavenport/agentimport/codex"
+	codexconvert "github.com/ChristopherDavenport/agentimport/codex/convert"
+	"github.com/ChristopherDavenport/agentimport/pi"
+	piconvert "github.com/ChristopherDavenport/agentimport/pi/convert"
+)
+
+// source is one native format the command converts.
+type source struct {
+	name string
+	// find returns the sessions under a directory, or the file itself.
+	find    func(root string) ([]string, error)
+	convert func(path string, slim bool) (*agentimport.Result, error)
+}
+
+var sources = []source{
+	{
+		name: ccconvert.Source,
+		find: claudecode.FindSessions,
+		convert: func(path string, slim bool) (*agentimport.Result, error) {
+			return ccconvert.ConvertFile(path, ccconvert.Options{Slim: slim})
+		},
+	},
+	{
+		name: piconvert.Source,
+		find: pi.FindSessions,
+		convert: func(path string, slim bool) (*agentimport.Result, error) {
+			return piconvert.ConvertFile(path, piconvert.Options{Slim: slim})
+		},
+	},
+	{
+		name: codexconvert.Source,
+		find: codex.FindSessions,
+		convert: func(path string, slim bool) (*agentimport.Result, error) {
+			return codexconvert.ConvertFile(path, codexconvert.Options{Slim: slim})
+		},
+	},
+}
+
+func sourceNamed(name string) (source, bool) {
+	for _, s := range sources {
+		if s.name == name {
+			return s, true
+		}
+	}
+	return source{}, false
+}
+
+// fromValues is what -from takes.
+func fromValues() string {
+	names := []string{"auto"}
+	for _, s := range sources {
+		names = append(names, s.name)
+	}
+	return strings.Join(names, "|")
+}
+
+// input is one session to convert.
+type input struct {
+	path   string
+	source source
+}
+
+// skipped is a file found in a directory that is not a session to
+// convert, and why.
+type skipped struct {
+	Path   string `json:"path"`
+	Reason string `json:"reason"`
+}
+
+// errUnknown is a file whose source could not be told.
+var errUnknown = errors.New("not a session of any source this command reads; name one with -from")
+
+// collect turns the arguments into the sessions to convert. With a
+// source named, a directory is searched with that source's finder and a
+// file is taken as that source's. With auto, a directory is searched
+// with every finder and each file found is detected; a Claude Code
+// sub-agent transcript, part of its main session, is skipped.
+func collect(args []string, from string) ([]input, []skipped, error) {
+	var (
+		ins  []input
+		skip []skipped
+		seen = map[string]bool{}
+	)
+	add := func(path string, s source) {
+		if !seen[path] {
+			seen[path] = true
+			ins = append(ins, input{path, s})
+		}
+	}
+	for _, arg := range args {
+		info, err := os.Stat(arg)
+		if err != nil {
+			return nil, nil, err
+		}
+		if from != "auto" {
+			s, _ := sourceNamed(from)
+			paths, err := s.find(arg)
+			if err != nil {
+				return nil, nil, err
+			}
+			for _, p := range paths {
+				add(p, s)
+			}
+			continue
+		}
+		if !info.IsDir() {
+			s, err := detect(arg)
+			if err != nil {
+				return nil, nil, fmt.Errorf("%s: %w", arg, err)
+			}
+			add(arg, s)
+			continue
+		}
+		// Every finder's candidates, each detected.
+		var candidates []string
+		for _, s := range sources {
+			paths, err := s.find(arg)
+			if err != nil {
+				return nil, nil, err
+			}
+			candidates = append(candidates, paths...)
+		}
+		slices.Sort(candidates)
+		for _, p := range slices.Compact(candidates) {
+			if seen[p] {
+				continue
+			}
+			s, err := detect(p)
+			switch {
+			case err != nil:
+				skip = append(skip, skipped{p, err.Error()})
+			case s.name == ccconvert.Source && isSubagent(p):
+				skip = append(skip, skipped{p, "a Claude Code sub-agent transcript, converted with its main session"})
+			default:
+				add(p, s)
+			}
+		}
+	}
+	return ins, skip, nil
+}
+
+// isSubagent reports whether a path is a Claude Code sub-agent's
+// transcript, <session>/subagents/agent-<id>.jsonl, which is converted
+// with its main session.
+func isSubagent(p string) bool {
+	return filepath.Base(filepath.Dir(p)) == "subagents" && strings.HasPrefix(filepath.Base(p), "agent-")
+}
+
+// probeLines is how many lines detection reads; probeLineSize the
+// longest line it parses. Claude Code writes side records with no
+// session envelope first, and lines of megabytes.
+const (
+	probeLines    = 20
+	probeLineSize = 8 << 20
+)
+
+// detect tells a file's source from its name and first lines:
+//   - a Codex rollout by its rollout-*.jsonl name, a first line of type
+//     session_meta, a record_type state line, or the 2025 bare layout's
+//     first line, an object with an id and a timestamp and no type;
+//   - a pi session by a first line of type session that is not an
+//     agentsession header;
+//   - a Claude Code transcript by a sessionId member on one of its
+//     first lines.
+//
+// An agentsession file, which is already converted, is an error.
+func detect(path string) (source, error) {
+	cx, _ := sourceNamed(codexconvert.Source)
+	if codex.IDFromFileName(path) != "" {
+		return cx, nil
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return source{}, err
+	}
+	defer f.Close()
+	br := bufio.NewReaderSize(f, 1<<16)
+	first := true
+	for range probeLines {
+		line, err := readProbe(br)
+		if obj := parseObject(line); obj != nil {
+			typ := stringMember(obj, "type")
+			if first {
+				first = false
+				switch {
+				case typ == "session" && strings.HasPrefix(stringMember(obj, "format"), "agentsession/"):
+					return source{}, errors.New("already an agentsession file")
+				case typ == "session":
+					s, _ := sourceNamed(piconvert.Source)
+					return s, nil
+				case typ == "session_meta" && obj["payload"] != nil:
+					return cx, nil
+				case typ == "" && obj["id"] != nil && obj["timestamp"] != nil && obj["sessionId"] == nil:
+					return cx, nil
+				}
+			}
+			if obj["record_type"] != nil {
+				return cx, nil
+			}
+			if obj["sessionId"] != nil {
+				s, _ := sourceNamed(ccconvert.Source)
+				return s, nil
+			}
+		}
+		if err != nil {
+			break
+		}
+	}
+	return source{}, errUnknown
+}
+
+// readProbe reads one line, giving nil for a line over probeLineSize.
+func readProbe(br *bufio.Reader) ([]byte, error) {
+	var buf []byte
+	over := false
+	for {
+		frag, err := br.ReadSlice('\n')
+		if !over {
+			if len(buf)+len(frag) > probeLineSize {
+				over, buf = true, nil
+			} else {
+				buf = append(buf, frag...)
+			}
+		}
+		if err == bufio.ErrBufferFull {
+			continue
+		}
+		return buf, err
+	}
+}
+
+func parseObject(line []byte) map[string]json.RawMessage {
+	line = bytes.TrimSpace(bytes.ReplaceAll(line, []byte{0}, nil))
+	if len(line) == 0 || line[0] != '{' {
+		return nil
+	}
+	var obj map[string]json.RawMessage
+	if json.Unmarshal(line, &obj) != nil {
+		return nil
+	}
+	return obj
+}
+
+func stringMember(obj map[string]json.RawMessage, name string) string {
+	var s string
+	_ = json.Unmarshal(obj[name], &s)
+	return s
+}
+
+// displayPath shortens a path under the working directory for output.
+func displayPath(p string) string {
+	if wd, err := os.Getwd(); err == nil {
+		if rel, err := filepath.Rel(wd, p); err == nil && !strings.HasPrefix(rel, "..") {
+			return rel
+		}
+	}
+	return p
+}

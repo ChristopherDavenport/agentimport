@@ -194,14 +194,32 @@ the command writes each as its own file.
 ## The command
 
 ```
-agentimport convert [-from auto|claudecode|pi|codex] [-o dir] [-strict] [-report text|json] <file>...
-agentimport report  [-from ...] [-json] <file|dir>...
+agentimport convert -o <store> [-from auto|claudecode|pi|codex] [-strict] [-slim] [-force] [-report text|json] <file|dir>...
+agentimport report [-from auto|claudecode|pi|codex] [-strict] [-slim] [-json] <file|dir>...
 ```
 
-`convert` writes sessions under `-o` with the jsonl store's layout and
-prints the report. `report` converts without writing and aggregates
-findings across files, which is how a corpus is surveyed. `-strict`
-exits 1 on any `dropped` or `gap` finding.
+`convert` writes every session a conversion makes into the jsonl store
+rooted at `-o` through the store's own API, so the result is a store
+`agentsession` and dax read, and prints the report: in full for one
+input, a line per input and the reports added up per source for
+several. A session the store holds is refused unless `-force`.
+`report` converts without writing and adds the findings up per source,
+which is how a corpus is surveyed. `-strict` exits 1 on any `dropped`
+or `gap` finding; a failed conversion exits 1 either way.
+
+With `-from auto`, a directory is searched with every source's finder
+and each file is detected by name and first lines: a Codex rollout by
+its `rollout-*` name, a `session_meta` or `record_type` line or the 2025
+bare layout's first object; a pi session by a first line of type
+`session` that is not an agentsession header; a Claude Code transcript
+by a `sessionId` on one of its first lines. A Claude Code sub-agent
+transcript is converted with its main session, and an agentsession file
+is skipped.
+
+The store names a session's file by its ID and its directory by its
+working directory, both taken from the native log; the command refuses
+an ID that is not a single file name and a working directory whose
+project key is `.` or `..`, so a crafted log cannot write outside `-o`.
 
 ## Tests
 

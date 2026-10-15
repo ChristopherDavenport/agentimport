@@ -7,6 +7,15 @@ versions may break the API.
 
 ## Unreleased
 
+- Added: the `agentimport` command. `convert -o <store>` writes every
+  session a conversion makes into an agentsession jsonl store and
+  prints the report; `report` converts without writing and adds the
+  findings up per source, for surveying a corpus. Each file's source is
+  detected from its name and first lines, or named with `-from`;
+  `-strict` fails on dropped or gap findings, `-slim` drops what the
+  model never saw, `-force` replaces a session the store holds. A
+  session ID or working directory that would put a file outside the
+  store is refused.
 - Added: `claudecode`, a reader for Claude Code session transcripts
   (written from 2.1.271 to 2.1.300 and the Agent SDK's typings): line
   types that keep every member they do not declare and round-trip;
