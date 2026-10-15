@@ -152,7 +152,51 @@ func collect(args []string, from string) ([]input, []skipped, error) {
 			}
 		}
 	}
+	ins, skip = groupCodex(ins, skip)
 	return ins, skip, nil
+}
+
+// groupCodex leaves out a Codex sub-agent's rollout whose parent is
+// among the inputs and would find it: converting the parent converts its
+// sub-agents, at any depth, from the sessions tree that holds the
+// parent (codex.SessionsRoot).
+func groupCodex(ins []input, skip []skipped) ([]input, []skipped) {
+	type thread struct{ id, parent, root string }
+	threads := map[string]thread{}
+	byID := map[string][]string{}
+	for _, in := range ins {
+		if in.source.name != codexconvert.Source {
+			continue
+		}
+		m, err := codex.ReadMeta(in.path)
+		if err != nil || m == nil || m.ID == "" {
+			continue
+		}
+		threads[in.path] = thread{m.ID, m.ParentThread(), codex.SessionsRoot(in.path)}
+		byID[m.ID] = append(byID[m.ID], in.path)
+	}
+	covered := func(child string) bool {
+		t, ok := threads[child]
+		if !ok || t.parent == "" {
+			return false
+		}
+		for _, p := range byID[t.parent] {
+			rel, err := filepath.Rel(threads[p].root, child)
+			if err == nil && !filepath.IsAbs(rel) && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				return true
+			}
+		}
+		return false
+	}
+	out := ins[:0:0]
+	for _, in := range ins {
+		if covered(in.path) {
+			skip = append(skip, skipped{in.path, "a Codex sub-agent's rollout, converted with its parent"})
+			continue
+		}
+		out = append(out, in)
+	}
+	return out, skip
 }
 
 // isSubagent reports whether a path is a Claude Code sub-agent's

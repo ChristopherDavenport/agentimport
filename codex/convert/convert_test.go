@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -41,19 +42,48 @@ func fixtures(t *testing.T) map[string]string {
 }
 
 // convertFixture converts a fixture and checks what every conversion
-// must hold: every line accounted for, every code documented.
+// must hold: every line accounted for, every code documented, every
+// link agreeing with the session it names. A fixture's relatives, the
+// rollouts of the threads it spawned, sit beside it at any depth and
+// convert with it.
 func convertFixture(t *testing.T, path string, opts Options) *agentimport.Result {
 	t.Helper()
-	f, err := codex.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
 	res, err := ConvertFile(path, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := res.Report.Lines(), f.LineCount(); got != want {
-		t.Errorf("the report accounts for %d lines; the file holds %d", got, want)
+	want := 0
+	for _, s := range res.Sessions {
+		p := path
+		if s != res.Sessions[0] {
+			x, err := codex.IndexDir(filepath.Dir(path))
+			if err != nil {
+				t.Fatal(err)
+			}
+			rs := x.Rollouts(s.ID())
+			if len(rs) == 0 {
+				t.Fatalf("session %s converted from no rollout of the fixture", s.ID())
+			}
+			p = rs[len(rs)-1].Path
+		}
+		f, err := codex.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want += f.LineCount()
+	}
+	if got := res.Report.Lines(); got != want {
+		t.Errorf("the report accounts for %d lines; the files converted hold %d", got, want)
+	}
+	byID := map[string]*agentsession.Session{}
+	for _, s := range res.Sessions {
+		byID[s.ID()] = s
+	}
+	resolve := func(id string) (*agentsession.Session, error) { return byID[id], nil }
+	for _, s := range res.Sessions {
+		if err := s.VerifyLinks(resolve); err != nil {
+			t.Errorf("session %s: %v", s.ID(), err)
+		}
 	}
 	for _, fd := range res.Report.Findings {
 		if fd.Code == "codex/unreached" {
@@ -455,5 +485,85 @@ func TestRecordOrderGuess(t *testing.T) {
 	resps, tied := responses(t, res.Sessions[0])
 	if len(resps) != 2 || tied[resps[0].ResponseID] != 3 || resps[0].Usage == nil || resps[0].Usage.InputTokens != 50 {
 		t.Errorf("responses = %+v, %v", resps, tied)
+	}
+}
+
+// TestSubagentLinks converts the family fixtures: each spawn's output is
+// preceded by a peer link naming the thread it started, every thread
+// the index holds converts after its parent, a fork's copied spawn links
+// nothing, and a spawn whose rollout is absent keeps its link.
+func TestSubagentLinks(t *testing.T) {
+	const (
+		parent = "01990000-0000-7000-8000-0000000000f0"
+		plain  = "01990000-0000-7000-8000-0000000000f1"
+		fork   = "01990000-0000-7000-8000-0000000000f2"
+		grand  = "01990000-0000-7000-8000-0000000000f3"
+		absent = "01990000-0000-7000-8000-0000000000f4"
+	)
+	type link struct{ rel, session, call string }
+	links := func(s *agentsession.Session) []link {
+		var out []link
+		for _, e := range s.Entries() {
+			if l, ok := e.(*agentsession.LinkEntry); ok {
+				out = append(out, link{l.Rel, l.Session, l.CallID})
+			}
+		}
+		return out
+	}
+	res := convertFixture(t, fixtures(t)["family"], Options{})
+	var ids []string
+	for _, s := range res.Sessions {
+		ids = append(ids, s.ID())
+	}
+	if got := strings.Join(ids, " "); got != strings.Join([]string{parent, plain, grand, fork}, " ") {
+		t.Fatalf("sessions = %s", got)
+	}
+	for i, want := range [][]link{
+		{{agentsession.RelPeer, plain, "call_a"}, {agentsession.RelPeer, fork, "call_b"}, {agentsession.RelPeer, absent, "call_d"}},
+		{{agentsession.RelPeer, grand, "call_g"}},
+		nil,
+		{{agentsession.RelForkOf, parent, ""}},
+	} {
+		if got := links(res.Sessions[i]); !reflect.DeepEqual(got, want) {
+			t.Errorf("session %d links = %v, want %v", i, got, want)
+		}
+	}
+	for i, wantParent := range []string{"", parent, plain, parent} {
+		if h := res.Sessions[i].Header(); h.ParentSession != wantParent || h.SpawnedBy != "" {
+			t.Errorf("session %d header: parent_session %q, spawned_by %q", i, h.ParentSession, h.SpawnedBy)
+		}
+	}
+	// The link sits right before the spawn's output.
+	entries := res.Sessions[0].Entries()
+	for i, e := range entries {
+		if l, ok := e.(*agentsession.LinkEntry); ok {
+			next, ok := entries[i+1].(*agentsession.ItemEntry)
+			out, isOut := next.Item.(*openresponses.FunctionCallOutput)
+			if !ok || !isOut || out.CallID != l.CallID {
+				t.Errorf("the link for %s is not followed by its call's output", l.CallID)
+			}
+		}
+	}
+	codes := map[string]int{}
+	for _, f := range res.Report.Findings {
+		codes[f.Code]++
+	}
+	if codes["codex/subagent-missing"] != 1 || codes["codex/subagent-unlinked"] != 0 {
+		t.Errorf("codes = %v", codes)
+	}
+
+	// Alone: the one rollout, its links kept, every child missing.
+	alone := convertFixture(t, fixtures(t)["family"], Options{Alone: true})
+	if len(alone.Sessions) != 1 || len(links(alone.Sessions[0])) != 3 {
+		t.Errorf("alone: %d sessions, links %v", len(alone.Sessions), links(alone.Sessions[0]))
+	}
+
+	// MultiAgentV2: the output names the task, the record the thread.
+	v2 := convertFixture(t, fixtures(t)["family-v2"], Options{})
+	if len(v2.Sessions) != 2 {
+		t.Fatalf("v2: %d sessions", len(v2.Sessions))
+	}
+	if got := links(v2.Sessions[0]); !reflect.DeepEqual(got, []link{{agentsession.RelPeer, "01990000-0000-7000-8000-0000000000e1", "call_c"}}) {
+		t.Errorf("v2 links = %v", got)
 	}
 }

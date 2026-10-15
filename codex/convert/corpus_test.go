@@ -9,11 +9,14 @@ import (
 	"github.com/ChristopherDavenport/agentimport"
 	"github.com/ChristopherDavenport/agentimport/codex"
 	"github.com/ChristopherDavenport/agentimport/internal/doccheck"
+	"github.com/ChristopherDavenport/agentsession"
 )
 
 // TestCorpus converts every rollout under AGENTIMPORT_CORPUS_CODEX, such
 // as ~/.codex/sessions, where it is: each must convert, verify and
-// account for every line. A compressed rollout is counted and skipped.
+// account for every line. A sub-agent whose parent is in the corpus
+// converts with its parent, and the links must agree with the sessions
+// they name. A compressed rollout is counted and skipped.
 // The aggregate report is logged, and written to
 // AGENTIMPORT_CORPUS_REPORT when that is set. Real sessions are private,
 // so nothing is copied and nothing of their content is printed.
@@ -23,6 +26,10 @@ func TestCorpus(t *testing.T) {
 		t.Skip("AGENTIMPORT_CORPUS_CODEX is not set")
 	}
 	paths, err := codex.FindSessions(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	x, err := codex.IndexDir(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,14 +46,36 @@ func TestCorpus(t *testing.T) {
 			failed++
 			continue
 		}
-		res, err := Convert(f, Options{})
+		if m := f.MetaLine(); m != nil && len(x.Rollouts(m.Meta.ParentThread())) > 0 {
+			continue // converted with its parent
+		}
+		res, err := Convert(f, Options{Index: x})
 		if err != nil {
 			t.Errorf("%s: %v", p, err)
 			failed++
 			continue
 		}
-		if got, want := res.Report.Lines(), f.LineCount(); got != want {
-			t.Errorf("%s: report accounts for %d lines, the file holds %d", p, got, want)
+		want := f.LineCount()
+		byID := map[string]*agentsession.Session{}
+		for _, s := range res.Sessions {
+			byID[s.ID()] = s
+			if s == res.Sessions[0] {
+				continue
+			}
+			rs := x.Rollouts(s.ID())
+			cf, err := codex.ReadFile(rs[len(rs)-1].Path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want += cf.LineCount()
+		}
+		if got := res.Report.Lines(); got != want {
+			t.Errorf("%s: report accounts for %d lines, the files converted hold %d", p, got, want)
+		}
+		for _, s := range res.Sessions {
+			if err := s.VerifyLinks(func(id string) (*agentsession.Session, error) { return byID[id], nil }); err != nil {
+				t.Errorf("%s: %v", p, err)
+			}
 		}
 		doccheck.Check(t, Source, res.Report)
 		// Only the tally and the codes are aggregated: details and line

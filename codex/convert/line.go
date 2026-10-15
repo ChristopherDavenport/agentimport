@@ -165,6 +165,11 @@ func (c *converter) item(l *codex.Line) error {
 	if err := c.itemMembers(e, l, item, extra, hm); err != nil {
 		return err
 	}
+	if answerTypes[it.Type] && !output && it.CallID != "" {
+		if err := c.linkSpawn(l, it); err != nil {
+			return err
+		}
+	}
 	if output {
 		if c.pending == nil {
 			c.pending = &pending{first: l}

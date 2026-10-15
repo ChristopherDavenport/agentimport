@@ -165,7 +165,8 @@ func TestConvertFixtures(t *testing.T) {
 		}
 	}
 	for _, s := range res.Skipped {
-		if !strings.Contains(s.Path, "golden") && !strings.Contains(s.Path, "/subagents/agent-") {
+		if !strings.Contains(s.Path, "golden") && !strings.Contains(s.Path, "/subagents/agent-") &&
+			s.Reason != "a Codex sub-agent's rollout, converted with its parent" {
 			t.Errorf("skipped %s: %s", s.Path, s.Reason)
 		}
 	}
@@ -359,5 +360,53 @@ func TestNoEscape(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+// TestCodexFamily checks a Codex sub-agent's rollout converts with its
+// parent when both are inputs, and on its own when its parent is not.
+func TestCodexFamily(t *testing.T) {
+	dir := "../../codex/convert/testdata/family"
+	ins, skip, err := collect([]string{dir}, "auto")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ins) != 1 || !strings.HasSuffix(ins[0].path, "0000000000f0.jsonl") {
+		t.Errorf("inputs = %v", ins)
+	}
+	const withParent = "a Codex sub-agent's rollout, converted with its parent"
+	children := 0
+	for _, s := range skip {
+		switch {
+		case s.Reason == withParent:
+			children++
+		case !strings.Contains(s.Path, "/golden/"):
+			t.Errorf("skipped %s: %s", s.Path, s.Reason)
+		}
+	}
+	if children != 3 {
+		t.Errorf("skipped %d sub-agent rollouts, want 3: %v", children, skip)
+	}
+	// Named without its parent, a child converts on its own, with its
+	// own child.
+	ins, skip, err = collect([]string{filepath.Join(dir, "relatives")}, "auto")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ins) != 2 || len(skip) != 1 || skip[0].Reason != withParent {
+		t.Errorf("relatives: inputs %v, skipped %v", ins, skip)
+	}
+
+	store := t.TempDir()
+	code, out, errOut := runCmd(t, "convert", "-o", store, "-report", "json", dir)
+	if code != 0 {
+		t.Fatalf("exit %d: %s\n%s", code, errOut, out)
+	}
+	var res convertResult
+	if err := json.Unmarshal([]byte(out), &res); err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Sessions) != 1 || len(res.Sessions[0].Written) != 4 {
+		t.Errorf("converted %+v", res.Sessions)
 	}
 }

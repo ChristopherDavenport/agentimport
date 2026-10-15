@@ -7,6 +7,22 @@ versions may break the API.
 
 ## Unreleased
 
+- Added: Codex sub-agents are linked. A thread converts with the
+  threads it spawned, at any depth, each a session of its own after its
+  parent's, and the parent gets a `peer` link before each `spawn_agent`
+  output naming the thread it started, read from the output
+  (`multi_agent_v1`) or the `sub_agent_activity` / `item_completed`
+  record beside it (MultiAgentV2). `spawn_agent` returns once the agent
+  starts and the agent works on until closed, so by the RFC's lifetime
+  rule it is a peer. `codex.IndexDir`, `codex.ReadMeta` and
+  `codex.SessionsRoot` index a sessions tree by session meta;
+  `ConvertFile` indexes the tree a rollout is in, and `Options.Index`
+  and `Options.Alone` choose otherwise. The command converts a sub-agent's
+  rollout with its parent when both are among its inputs.
+- Changed: `codex/subagent-unlinked` now marks only a sub-agent
+  converted without its parent, or whose parent's rollout names no spawn
+  of it; new codes `codex/subagent-missing`, `codex/subagent-foreign` and
+  `codex/subagent-rollouts`.
 - Fixed: `claudecode.FindSessions` skipped every directory named
   `subagents`, `tool-results` or `memory`, wherever it was, so a
   project or fixture directory of that name, or a root of that name,

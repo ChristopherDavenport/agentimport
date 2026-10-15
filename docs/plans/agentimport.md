@@ -186,10 +186,18 @@ session replays through the same provider adapter:
 ### Sub-sessions
 
 A sub-agent with its own transcript (Claude Code `subagents/`, Codex
-child rollouts) becomes its own session with `parent_session` and
-`spawned_by`, and the parent gets a `subsession` link before the call's
-output. One conversion returns the main session and its subsessions;
-the command writes each as its own file.
+child rollouts) becomes its own session with `parent_session`, and the
+parent gets a link before the spawning call's output. Which link follows
+RFC 0001's lifetime rule: an agent the call waited for, whose result is
+the call's output, is a `subsession`, and its header carries
+`spawned_by`; an agent the call only started, which works on after the
+call returns, is a `peer`, and its `parent_session` is provenance alone.
+Codex's `spawn_agent` always returns once the agent is started, so its
+sub-agents are peers. One conversion returns the main session and its
+sub-agents' sessions, each after its parent's; the command writes each
+as its own file. Codex rollouts live in separate files of one sessions
+tree, so the Codex converter indexes that tree (the session meta line
+of each rollout) to find a thread's children.
 
 ## The command
 
@@ -213,8 +221,9 @@ its `rollout-*` name, a `session_meta` or `record_type` line or the 2025
 bare layout's first object; a pi session by a first line of type
 `session` that is not an agentsession header; a Claude Code transcript
 by a `sessionId` on one of its first lines. A Claude Code sub-agent
-transcript is converted with its main session, and an agentsession file
-is skipped.
+transcript is converted with its main session, as is a Codex sub-agent's
+rollout whose parent is among the inputs and in the same sessions tree;
+an agentsession file is skipped.
 
 The store names a session's file by its ID and its directory by its
 working directory, both taken from the native log. The jsonl store

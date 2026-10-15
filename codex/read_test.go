@@ -32,6 +32,12 @@ func TestRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// A fixture's relatives, the rollouts of the threads it spawned.
+	relatives, err := filepath.Glob("convert/testdata/*/relatives/*.jsonl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	files = append(files, relatives...)
 	if len(files) < 9 {
 		t.Fatalf("found %d fixture files", len(files))
 	}
