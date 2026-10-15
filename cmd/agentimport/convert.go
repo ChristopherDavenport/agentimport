@@ -6,9 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"path/filepath"
-	"regexp"
-	"strings"
 
 	"github.com/ChristopherDavenport/agentimport"
 	"github.com/ChristopherDavenport/agentsession"
@@ -177,9 +174,6 @@ func writeAll(ctx context.Context, st *jsonl.Store, res *agentimport.Result, for
 
 func write(ctx context.Context, st *jsonl.Store, s *agentsession.Session, force bool) (written, error) {
 	h := s.Header()
-	if err := safePath(st.Root(), h); err != nil {
-		return written{}, err
-	}
 	if _, err := st.Path(h.ID); err == nil {
 		if !force {
 			return written{}, fmt.Errorf("session %s is already in the store; -force replaces it", h.ID)
@@ -209,23 +203,4 @@ func write(ctx context.Context, st *jsonl.Store, s *agentsession.Session, force 
 		return written{}, err
 	}
 	return written{ID: h.ID, File: path}, st.Release(h.ID)
-}
-
-// safeID is a session ID the command writes: one file name component,
-// as every source's IDs are. The store names a file by the ID and a
-// directory by the working directory, and a converted header carries
-// both from the native log, which this command does not trust.
-var safeID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
-
-// safePath refuses a session whose file would not be a file directly
-// inside a project directory of root.
-func safePath(root string, h agentsession.Header) error {
-	if !safeID.MatchString(h.ID) || strings.Contains(h.ID, "..") {
-		return fmt.Errorf("session id %q is not a file name the store can hold safely", h.ID)
-	}
-	key := jsonl.ProjectKey(h.CWD)
-	if key == "." || key == ".." || strings.ContainsAny(key, `/\`) || key != filepath.Base(key) {
-		return fmt.Errorf("session %s: working directory %q makes the project directory %q, outside the store", h.ID, h.CWD, key)
-	}
-	return nil
 }

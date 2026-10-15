@@ -315,13 +315,18 @@ func TestReport(t *testing.T) {
 }
 
 // TestNoEscape converts sessions whose native IDs and working
-// directories would put a file outside the store, and checks that each
-// is refused and nothing is written beside the store.
+// directories would put a file outside the store: the store refuses
+// such an ID (jsonl.ErrBadName, agentsession v0.0.26) and files a
+// working directory of "/.." under "default", so nothing is written
+// beside the store.
 func TestNoEscape(t *testing.T) {
-	for _, tc := range []struct{ name, id, cwd string }{
-		{"id", "../../../escaped", "/work"},
-		{"absolute id", "/tmp/escaped", "/work"},
-		{"cwd", "01a00099-0000-7000-8000-000000000099", "/.."},
+	for _, tc := range []struct {
+		name, id, cwd string
+		ok            bool
+	}{
+		{"id", "../../../escaped", "/work", false},
+		{"absolute id", "/tmp/escaped", "/work", false},
+		{"cwd", "01a00099-0000-7000-8000-000000000099", "/..", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
@@ -338,11 +343,14 @@ func TestNoEscape(t *testing.T) {
 				t.Fatal(err)
 			}
 			code, out, _ := runCmd(t, "convert", "-o", store, path)
-			if code != 1 || !strings.Contains(out, "failed: ") {
+			switch {
+			case tc.ok && code != 0:
+				t.Errorf("exit %d, want 0:\n%s", code, out)
+			case !tc.ok && (code != 1 || !strings.Contains(out, "failed: ")):
 				t.Errorf("exit %d, want 1 with a failure:\n%s", code, out)
 			}
 			err := filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
-				if err == nil && !d.IsDir() && p != path {
+				if err == nil && !d.IsDir() && p != path && !strings.HasPrefix(p, store+string(filepath.Separator)) {
 					t.Errorf("wrote %s", p)
 				}
 				return err
@@ -351,31 +359,5 @@ func TestNoEscape(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
-	}
-}
-
-func TestSafePath(t *testing.T) {
-	for _, tc := range []struct {
-		id, cwd string
-		ok      bool
-	}{
-		{"11111111-1111-4111-8111-000000000001", "/home/u/proj", true},
-		{"01a00001-0000-7000-8000-000000000001", "", true},
-		{"agent.v1_x", `C:\work`, true},
-		{"../x", "/w", false},
-		{"a/b", "/w", false},
-		{`a\b`, "/w", false},
-		{"..", "/w", false},
-		{"a..b", "/w", false},
-		{".hidden", "/w", false},
-		{"", "/w", false},
-		{"ok", "/..", false},
-		{"ok", "..", false},
-		{"ok", "/.", false},
-	} {
-		h := agentsession.Header{ID: tc.id, CWD: tc.cwd}
-		if err := safePath("/store", h); (err == nil) != tc.ok {
-			t.Errorf("safePath(%q, %q) = %v, want ok %v", tc.id, tc.cwd, err, tc.ok)
-		}
 	}
 }
