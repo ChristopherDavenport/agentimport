@@ -1,0 +1,381 @@
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/ChristopherDavenport/agentimport"
+	"github.com/ChristopherDavenport/agentsession"
+)
+
+// fixtureRoots are the converters' fixture directories, whose inputs
+// the command reads; their golden outputs are agentsession files, which
+// it must skip.
+var fixtureRoots = []string{
+	"../../claudecode/convert/testdata",
+	"../../pi/convert/testdata",
+	"../../codex/convert/testdata",
+}
+
+func runCmd(t *testing.T, args ...string) (int, string, string) {
+	t.Helper()
+	var out, errb bytes.Buffer
+	code := run(args, &out, &errb)
+	return code, out.String(), errb.String()
+}
+
+func TestRun(t *testing.T) {
+	for _, tc := range []struct {
+		args []string
+		code int
+		out  string
+	}{
+		{nil, 2, ""},
+		{[]string{"help"}, 0, "usage: agentimport"},
+		{[]string{"version"}, 0, "agentimport "},
+		{[]string{"nope"}, 2, ""},
+		{[]string{"convert", "x"}, 2, ""},                   // no -o
+		{[]string{"convert", "-o", t.TempDir()}, 2, ""},     // no input
+		{[]string{"report", "-from", "gemini", "x"}, 2, ""}, // unknown source
+		{[]string{"convert", "-report", "yaml", "-o", "o", "x"}, 2, ""},
+		{[]string{"report"}, 2, ""},
+	} {
+		code, out, _ := runCmd(t, tc.args...)
+		if code != tc.code || !strings.Contains(out, tc.out) {
+			t.Errorf("%v: exit %d, out %q; want %d containing %q", tc.args, code, out, tc.code, tc.out)
+		}
+	}
+}
+
+func TestDetect(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, body string) string {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	for _, tc := range []struct {
+		path, want, err string
+	}{
+		{"../../claudecode/convert/testdata/plain/11111111-1111-4111-8111-000000000001.jsonl", "claudecode", ""},
+		{"../../pi/convert/testdata/anthropic/2026-09-01T10-00-00-000Z_01a00001-0000-7000-8000-000000000001.jsonl", "pi", ""},
+		{"../../pi/convert/testdata/v1/" + firstJSONL(t, "../../pi/convert/testdata/v1"), "pi", ""},
+		{"../../codex/convert/testdata/plain/rollout-2026-10-01T10-00-00-01990000-0000-7000-8000-000000000001.jsonl", "codex", ""},
+		// Codex's 2025 bare layout, whatever the file is called.
+		{write("bare.jsonl", `{"id":"0198","timestamp":"2025-08-01T00:00:00Z","instructions":null}`+"\n"+`{"record_type":"state"}`+"\n"), "codex", ""},
+		{write("envelope.jsonl", `{"timestamp":"2026-10-01T00:00:00Z","type":"session_meta","payload":{"id":"x"}}`+"\n"), "codex", ""},
+		// Claude Code side records come first and carry only a sessionId.
+		{write("side.jsonl", `{"type":"queue-operation","operation":"enqueue","sessionId":"s"}`+"\n"), "claudecode", ""},
+		{"../../claudecode/convert/testdata/plain/golden/0.jsonl", "", "already an agentsession file"},
+		{write("notes.jsonl", `{"hello":"world"}`+"\n"), "", "-from"},
+		{write("empty.jsonl", ""), "", "-from"},
+	} {
+		s, err := detect(tc.path)
+		if tc.err != "" {
+			if err == nil || !strings.Contains(err.Error(), tc.err) {
+				t.Errorf("detect(%s) = %s, %v; want error containing %q", filepath.Base(tc.path), s.name, err, tc.err)
+			}
+			continue
+		}
+		if err != nil || s.name != tc.want {
+			t.Errorf("detect(%s) = %s, %v; want %s", filepath.Base(tc.path), s.name, err, tc.want)
+		}
+	}
+}
+
+func firstJSONL(t *testing.T, dir string) string {
+	t.Helper()
+	ents, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range ents {
+		if strings.HasSuffix(e.Name(), ".jsonl") {
+			return e.Name()
+		}
+	}
+	t.Fatalf("no .jsonl in %s", dir)
+	return ""
+}
+
+// convertResult is convert -report json's output.
+type convertResult struct {
+	Sessions []struct {
+		Path    string
+		Source  string
+		Written []written
+		Error   string
+	}
+	Aggregate map[string]summary
+	Skipped   []skipped
+}
+
+// TestConvertFixtures converts every fixture into one store and checks
+// that each file written reads back as the session the converter made:
+// the same header, the same entries in the same order, the same leaf,
+// and that it verifies.
+func TestConvertFixtures(t *testing.T) {
+	store := t.TempDir()
+	args := append([]string{"convert", "-o", store, "-report", "json"}, fixtureRoots...)
+	code, out, errOut := runCmd(t, args...)
+	if code != 0 {
+		t.Fatalf("exit %d: %s\n%s", code, errOut, out)
+	}
+	var res convertResult
+	if err := json.Unmarshal([]byte(out), &res); err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	bySource := map[string]int{}
+	for _, in := range res.Sessions {
+		if in.Error != "" {
+			t.Errorf("%s: %s", in.Path, in.Error)
+			continue
+		}
+		bySource[in.Source]++
+		s, _ := sourceNamed(in.Source)
+		want, err := s.convert(in.Path, false)
+		if err != nil {
+			t.Fatalf("%s: %v", in.Path, err)
+		}
+		if len(in.Written) != len(want.Sessions) {
+			t.Errorf("%s: wrote %d sessions, the conversion made %d", in.Path, len(in.Written), len(want.Sessions))
+			continue
+		}
+		for i, w := range in.Written {
+			if !strings.HasPrefix(w.File, store+string(filepath.Separator)) {
+				t.Errorf("%s: wrote %s outside the store", in.Path, w.File)
+			}
+			got := readSession(t, w.File)
+			sameSession(t, w.File, got, want.Sessions[i])
+		}
+	}
+	for _, name := range []string{"claudecode", "pi", "codex"} {
+		if bySource[name] == 0 {
+			t.Errorf("no %s fixture was converted", name)
+		}
+		if res.Aggregate[name].Lines == 0 {
+			t.Errorf("no aggregate for %s", name)
+		}
+	}
+	for _, s := range res.Skipped {
+		if !strings.Contains(s.Path, "golden") && !strings.Contains(s.Path, "/subagents/agent-") {
+			t.Errorf("skipped %s: %s", s.Path, s.Reason)
+		}
+	}
+}
+
+func readSession(t *testing.T, path string) *agentsession.Session {
+	t.Helper()
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	s, err := agentsession.Read(f)
+	if err != nil {
+		t.Fatalf("%s: %v", path, err)
+	}
+	if err := agentimport.Verify(s); err != nil {
+		t.Errorf("%s: %v", path, err)
+	}
+	return s
+}
+
+func sameSession(t *testing.T, name string, got, want *agentsession.Session) {
+	t.Helper()
+	gh, wh := got.Header(), want.Header()
+	if gh.ID != wh.ID || gh.ParentSession != wh.ParentSession || gh.SpawnedBy != wh.SpawnedBy || !gh.CreatedAt.Equal(wh.CreatedAt) {
+		t.Errorf("%s: header %+v, want %+v", name, gh, wh)
+	}
+	ids := func(s *agentsession.Session) []string {
+		var out []string
+		for _, e := range s.Entries() {
+			out = append(out, e.Base().ID)
+		}
+		return out
+	}
+	if !slices.Equal(ids(got), ids(want)) {
+		t.Errorf("%s: entries differ from the conversion's", name)
+	}
+	var gb, wb bytes.Buffer
+	if err := agentsession.Write(&gb, got); err != nil {
+		t.Fatal(err)
+	}
+	if err := agentsession.Write(&wb, want); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(gb.Bytes(), wb.Bytes()) {
+		t.Errorf("%s: the stored session writes differently from the conversion", name)
+	}
+	// The leaf a reader of the file resumes from, which is what the
+	// converter sets; the converter's session in memory follows its
+	// appends instead.
+	back, err := agentsession.Read(&wb)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Leaf() != back.Leaf() {
+		t.Errorf("%s: leaf %s, want %s", name, got.Leaf(), back.Leaf())
+	}
+}
+
+func TestConvertOverwrite(t *testing.T) {
+	store := t.TempDir()
+	in := "../../claudecode/convert/testdata/plain"
+	if code, out, errOut := runCmd(t, "convert", "-o", store, in); code != 0 {
+		t.Fatalf("first convert: exit %d\n%s%s", code, out, errOut)
+	}
+	code, out, _ := runCmd(t, "convert", "-o", store, in)
+	if code != 1 || !strings.Contains(out, "already in the store; -force replaces it") {
+		t.Errorf("second convert: exit %d\n%s", code, out)
+	}
+	code, out, _ = runCmd(t, "convert", "-force", "-o", store, in)
+	if code != 0 || !strings.Contains(out, "wrote ") {
+		t.Errorf("-force: exit %d\n%s", code, out)
+	}
+	files, _ := filepath.Glob(filepath.Join(store, "*", "*.jsonl"))
+	if len(files) != 1 {
+		t.Errorf("store holds %v", files)
+	}
+}
+
+func TestStrict(t *testing.T) {
+	// Every conversion reports the provenance gap, so -strict refuses
+	// any; without it the same run passes.
+	in := "../../pi/convert/testdata/anthropic"
+	for _, tc := range []struct {
+		args []string
+		code int
+	}{
+		{[]string{"report", in}, 0},
+		{[]string{"report", "-strict", in}, 1},
+		{[]string{"convert", "-o", t.TempDir(), in}, 0},
+		{[]string{"convert", "-strict", "-o", t.TempDir(), in}, 1},
+	} {
+		if code, out, errOut := runCmd(t, tc.args...); code != tc.code {
+			t.Errorf("%v: exit %d, want %d\n%s%s", tc.args, code, tc.code, out, errOut)
+		}
+	}
+}
+
+func TestReport(t *testing.T) {
+	code, out, errOut := runCmd(t, append([]string{"report"}, fixtureRoots...)...)
+	if code != 0 {
+		t.Fatalf("exit %d\n%s%s", code, out, errOut)
+	}
+	for _, want := range []string{"converted: claudecode ", "claudecode: ", "pi: ", "codex: ", "gap      agentimport/provenance"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("report lacks %q:\n%s", want, out)
+		}
+	}
+
+	code, out, _ = runCmd(t, append([]string{"report", "-json", "-slim"}, fixtureRoots...)...)
+	if code != 0 {
+		t.Fatalf("-json: exit %d", code)
+	}
+	var res struct {
+		Files []struct {
+			Path, Source string
+			Sessions     int
+			Report       *summary
+			Error        string
+		}
+		Aggregate map[string]summary
+	}
+	if err := json.Unmarshal([]byte(out), &res); err != nil {
+		t.Fatal(err)
+	}
+	lines := map[string]int{}
+	for _, f := range res.Files {
+		if f.Error != "" || f.Report == nil || f.Sessions == 0 {
+			t.Errorf("%s: %+v", f.Path, f)
+			continue
+		}
+		lines[f.Source] += f.Report.Lines
+	}
+	for name, agg := range res.Aggregate {
+		if agg.Lines != lines[name] {
+			t.Errorf("%s: aggregate %d lines, files add up to %d", name, agg.Lines, lines[name])
+		}
+		n := 0
+		for _, c := range agg.Tally {
+			n += c
+		}
+		if n != agg.Lines {
+			t.Errorf("%s: tally %v does not add up to %d", name, agg.Tally, agg.Lines)
+		}
+	}
+}
+
+// TestNoEscape converts sessions whose native IDs and working
+// directories would put a file outside the store, and checks that each
+// is refused and nothing is written beside the store.
+func TestNoEscape(t *testing.T) {
+	for _, tc := range []struct{ name, id, cwd string }{
+		{"id", "../../../escaped", "/work"},
+		{"absolute id", "/tmp/escaped", "/work"},
+		{"cwd", "01a00099-0000-7000-8000-000000000099", "/.."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			in := filepath.Join(dir, "in")
+			store := filepath.Join(dir, "deep", "store")
+			if err := os.MkdirAll(in, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			hdr, _ := json.Marshal(map[string]any{"type": "session", "version": 3, "id": tc.id, "timestamp": "2026-09-01T10:00:00.000Z", "cwd": tc.cwd})
+			body := string(hdr) + "\n" +
+				`{"type":"message","id":"m1","parentId":null,"timestamp":"2026-09-01T10:00:01.000Z","message":{"role":"user","content":"hi","timestamp":1788256801000}}` + "\n"
+			path := filepath.Join(in, "session.jsonl")
+			if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			code, out, _ := runCmd(t, "convert", "-o", store, path)
+			if code != 1 || !strings.Contains(out, "failed: ") {
+				t.Errorf("exit %d, want 1 with a failure:\n%s", code, out)
+			}
+			err := filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
+				if err == nil && !d.IsDir() && p != path {
+					t.Errorf("wrote %s", p)
+				}
+				return err
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestSafePath(t *testing.T) {
+	for _, tc := range []struct {
+		id, cwd string
+		ok      bool
+	}{
+		{"11111111-1111-4111-8111-000000000001", "/home/u/proj", true},
+		{"01a00001-0000-7000-8000-000000000001", "", true},
+		{"agent.v1_x", `C:\work`, true},
+		{"../x", "/w", false},
+		{"a/b", "/w", false},
+		{`a\b`, "/w", false},
+		{"..", "/w", false},
+		{"a..b", "/w", false},
+		{".hidden", "/w", false},
+		{"", "/w", false},
+		{"ok", "/..", false},
+		{"ok", "..", false},
+		{"ok", "/.", false},
+	} {
+		h := agentsession.Header{ID: tc.id, CWD: tc.cwd}
+		if err := safePath("/store", h); (err == nil) != tc.ok {
+			t.Errorf("safePath(%q, %q) = %v, want ok %v", tc.id, tc.cwd, err, tc.ok)
+		}
+	}
+}

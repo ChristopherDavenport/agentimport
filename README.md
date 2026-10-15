@@ -10,9 +10,23 @@ lost without saying so.
 ```sh
 go install github.com/ChristopherDavenport/agentimport/cmd/agentimport@latest
 
+# What converting would change, added up across a corpus; writes nothing.
+agentimport report ~/.claude/projects ~/.pi/agent/sessions ~/.codex/sessions
+
+# Convert one session, or every session under a directory, into an
+# agentsession jsonl store: <store>/<project-key>/<created-at>_<id>.jsonl.
 agentimport convert -o ~/sessions ~/.claude/projects/<project>/<session>.jsonl
-agentimport report ~/.pi/agent/sessions        # what a conversion would lose, across a corpus
+agentimport convert -o ~/sessions -report json ~/.codex/sessions
 ```
+
+Each file's source is told from its name and first lines; `-from
+claudecode|pi|codex` names it instead. A Claude Code session is
+converted with its sub-agents, each a session of its own linked to its
+parent. A session already in the store is refused unless `-force`
+replaces it. `-slim` drops what the model never saw rather than keep it
+in namespaced members, and `-strict` exits 1 when anything was dropped
+or had no place in the format. A Codex rollout compressed with zstd is
+refused; decompress it with `zstd -d` first.
 
 Each source is two packages: one that reads the native format as it
 is, importing the standard library alone, and a `convert` package that
