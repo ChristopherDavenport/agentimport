@@ -259,7 +259,6 @@ func (c *docConv) exporterAgent(i int, s *atif.Step, ext, or map[string]json.Raw
 		entries = append(entries, delta)
 	}
 	local := map[string][]*call{}
-	var order []*call
 	var calls []string
 	for _, raw := range raws {
 		e, err := c.itemEntry(i, raw, nil)
@@ -285,7 +284,6 @@ func (c *docConv) exporterAgent(i int, s *atif.Step, ext, or map[string]json.Raw
 			cl := &call{id: id, native: native, step: i}
 			c.calls = append(c.calls, cl)
 			local[native] = append(local[native], cl)
-			order = append(order, cl)
 			calls = append(calls, native)
 		}
 		entries = append(entries, e)
