@@ -1,0 +1,214 @@
+# agentimport
+
+Converters from other coding agents' session logs into the Agent
+Session Format (`agentsession`, RFC 0001). The RFC promises converters
+for pi, Claude Code and Codex so the format arrives with existing
+corpora behind it (RFC 0001, *Prior art*); this repository is where
+they live.
+
+## Goals
+
+- Read each native log faithfully, as its own format, in a package that
+  depends on the standard library alone, so a program that only wants to
+  read Claude Code or pi transcripts can.
+- Convert each into sessions that `agentsession.Read` and
+  `VerifyRecords` accept, with the conversation the model saw on every
+  path.
+- Surface every difference between the two formats. The RFC requires a
+  converter to document which native entries it maps and which it drops
+  (RFC 0001, *Conformance*). Here that is a document per source and a
+  structured report per conversion, and the two are kept in step by
+  tests.
+
+Not goals: writing native formats back, resuming a native session in its
+own agent, or reading formats with no on-disk spec we can follow
+(Antigravity's encrypted protobuf).
+
+## Layout
+
+One module, `github.com/ChristopherDavenport/agentimport`.
+
+| Package | What it is | May import |
+| --- | --- | --- |
+| `agentimport` | the report, the shared building blocks every converter uses | agentsession, openresponses, stdlib |
+| `claudecode` | the Claude Code transcript format: line types, reader, tree | stdlib |
+| `claudecode/convert` | Claude Code → agentsession | the above |
+| `pi` | the pi session format (session version 3) | stdlib |
+| `pi/convert` | pi → agentsession | the above |
+| `codex` | the Codex CLI rollout format | stdlib |
+| `codex/convert` | Codex → agentsession | the above |
+| `cmd/agentimport` | the command-line program | all of the above |
+
+A format package never imports `agentsession`; a test enforces it. The
+converter packages are all named `convert`, since a program almost
+always wants one source; `cmd/agentimport` imports them under aliases.
+
+A new source is two packages, `<source>` and `<source>/convert`, a
+`docs/formats/<source>.md`, and a case in the command's detection.
+Gemini CLI (JSONL with `$set`/`$patch`/`$rewindTo` records to replay)
+and VS Code chat sessions (a UI mutation log, lossy by nature) are the
+next candidates; they are not in the first cut.
+
+## Format packages
+
+Each format package reads a file into typed lines and keeps everything
+it does not type:
+
+- Every struct has `Extra map[string]json.RawMessage` holding the
+  members it does not declare, and marshals them back. A line decoded
+  and re-encoded is the same JSON value; a test checks this over every
+  fixture.
+- A line of an unknown `type` decodes to a line holding only its
+  envelope and its raw bytes.
+- A malformed line never stops the reader. It is recorded with its line
+  number and the reader goes on: Claude Code files hold runs of NUL bytes
+  and truncated objects mid-file, not only at the end.
+- The reader does not interpret. Building the conversation tree is a
+  separate, exported step (`claudecode.BuildTree`, and the like), since it
+  is where the native format's rules live and a reader of the format
+  wants it without the conversion.
+
+The formats are documented by their owners to different degrees: pi
+ships `docs/session-format.md` and TypeScript types; Codex's are its
+Rust source; Claude Code's are undocumented and change per release (the
+Agent SDK calls the line union "CLI-internal"). The Claude Code package
+is written from the transcripts of versions 2.1.271 to 2.1.300 and the
+Agent SDK's typings, and says so.
+
+## The conversion
+
+Every converter follows the same rules.
+
+### Every native line is accounted for
+
+Each native line ends in exactly one of four places, and the report
+counts them:
+
+| Disposition | Meaning |
+| --- | --- |
+| `mapped` | it became core entries: items, responses, config, compaction, env, info, link |
+| `kept` | it became a namespaced extension other readers carry but do not interpret: a `custom` entry with the source's `ns`, or a namespaced member |
+| `dropped` | it is not in the output |
+| `malformed` | it could not be read |
+
+`mapped + kept + dropped + malformed` equals the number of lines read;
+a test asserts it for every fixture. The default drops only lines that
+carry no information beyond what the output already says (a line whose
+content is fully re-derived elsewhere); every drop has a finding.
+
+### Findings
+
+Below line level, a finding records each place the output differs from
+the input:
+
+```go
+type Finding struct {
+	Code   string // stable: "claudecode/thinking-signature"
+	Kind   Kind   // lossy, kept, dropped, repaired, gap
+	File   string // the source file, relative to the input
+	Line   int    // 1-based, 0 when not tied to a line
+	Detail string
+}
+```
+
+- `lossy`: mapped, with a change of meaning or precision. Anthropic
+  usage summed into Responses usage; a tool result's `is_error`.
+- `kept`: carried as a namespaced extension. Opaque to other readers,
+  but present.
+- `dropped`: not in the output.
+- `repaired`: the source broke a rule of its own and the converter
+  fixed it. A skipped malformed line, a repeated call ID renamed, an
+  orphaned tool result reattached.
+- `gap`: the agentsession format has no place for this. Every `gap`
+  code is listed in `docs/incompatibilities.md` as a question for the
+  RFC, and the converter falls back to `kept` or `dropped` for it.
+
+Codes are stable strings, namespaced by source, and each is documented
+in `docs/formats/<source>.md`. A test fails when a converter emits a
+code its document does not list, so the document cannot fall behind the
+code.
+
+`Report` groups findings by code with counts and the first few line
+numbers, prints as text or JSON, and answers `Has(kinds...)` so a
+caller can refuse a lossy conversion (`agentimport convert -strict`).
+
+### Identity and provenance
+
+- The session ID is the native session ID when it is one; a sub-agent
+  session's ID is `agentsession.SubsessionID(parent, call_id)`, as the
+  RFC derives it.
+- `harness` names the source agent and the version on its first line.
+- The header carries `agentimport:source`, a namespaced member:
+  `{format, native_id, converter}` (the converter's module version).
+  The RFC defines no import provenance; this is a `gap`.
+- Every entry made from a native line carries the native identity in a
+  namespaced member beside the body (`claudecode:uuid`, `pi:id`), as
+  the RFC suggests for a native call ID. The converter keeps its own
+  native-to-hash map; `legacy_id` is migration's and is not used.
+- `records` is left empty: a converter over a log without run,
+  dispatch and decision entries promises none (RFC 0001, `records`).
+
+### Building
+
+`agentimport.Builder` wraps `agentsession.Session` for the converters:
+
+- Appends in topological order, parent first, whatever the order of
+  the native file (Claude Code writes children before their parents).
+- Takes timestamps from the native lines, never from the clock, and
+  never sorts by them; Claude Code's are not monotonic in file order.
+- Two identical entries under one parent at one instant are one entry
+  in agentsession; the builder nudges the second by a nanosecond and
+  reports `repaired`.
+- `CallIDs` assigns call IDs unique across the session, as the RFC
+  requires: a repeated or empty native ID gets the native ID with
+  characters outside `[A-Za-z0-9_-]` made `_`, cut to fit 64 with a
+  `_n` suffix, the scheme `export.ItemsFrom` and agentturn use. The
+  native ID is kept in `<ns>:call_id`.
+- The output is verified before it is returned: written, read back
+  with `agentsession.Read`, and `VerifyRecords` run on every leaf. A
+  converter that produces an invalid session is a bug, not a finding.
+
+### Payload mapping
+
+Payload choices follow `openresponses/providers` so that a converted
+session replays through the same provider adapter:
+
+- Anthropic `thinking` → `reasoning`, the text as a `summary_text`, the
+  signature in `encrypted_content`, as `providers/anthropic` does.
+  `redacted_thinking`, server tools and blocks newer than the converter
+  → `anthropic.<block type>` items carrying the block.
+- Anthropic usage → Responses usage: `input_tokens` is input + cache
+  read + cache creation, `cached_tokens` is cache read; the cache-write
+  split, server tool counts and service tier are kept, `lossy`.
+- A tool call's arguments are its input re-encoded as a JSON string.
+- Images stay inline as data URLs.
+
+### Sub-sessions
+
+A sub-agent with its own transcript (Claude Code `subagents/`, Codex
+child rollouts) becomes its own session with `parent_session` and
+`spawned_by`, and the parent gets a `subsession` link before the call's
+output. One conversion returns the main session and its subsessions;
+the command writes each as its own file.
+
+## The command
+
+```
+agentimport convert [-from auto|claudecode|pi|codex] [-o dir] [-strict] [-report text|json] <file>...
+agentimport report  [-from ...] [-json] <file|dir>...
+```
+
+`convert` writes sessions under `-o` with the jsonl store's layout and
+prints the report. `report` converts without writing and aggregates
+findings across files, which is how a corpus is surveyed. `-strict`
+exits 1 on any `dropped` or `gap` finding.
+
+## Tests
+
+Fixtures are synthetic and hand-written per shape, under
+`<source>/testdata` and `<source>/convert/testdata`; never copied from a
+real session. Golden outputs (the session file and the report) are
+regenerated with `-update`. A corpus test runs every converter over a
+local directory named by `AGENTIMPORT_CORPUS_<SOURCE>` and asserts that
+each conversion verifies and accounts for every line; it is skipped
+without the variable and is not part of `make check`.
