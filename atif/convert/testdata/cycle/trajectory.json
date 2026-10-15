@@ -1,0 +1,15 @@
+{
+  "schema_version": "ATIF-v1.6",
+  "session_id": "cyc-run",
+  "agent": {"name": "toy", "version": "1.0"},
+  "steps": [
+    {"step_id": 1, "timestamp": "2026-10-05T06:00:00Z", "source": "user", "message": "Loop."},
+    {"step_id": 2, "timestamp": "2026-10-05T06:00:02Z", "source": "agent", "message": "",
+     "tool_calls": [{"tool_call_id": "s1", "function_name": "spawn", "arguments": {}}, {"tool_call_id": "s2", "function_name": "spawn", "arguments": {}}],
+     "observation": {"results": [
+       {"source_call_id": "s1", "content": "child done", "subagent_trajectory_ref": [{"trajectory_path": "child.json"}]},
+       {"source_call_id": "s2", "content": "again", "subagent_trajectory_ref": [{"trajectory_path": "./child.json"}, {"trajectory_path": "missing.json"}, {"trajectory_path": "s3://bucket/x.json"}]}
+     ]}}
+  ],
+  "continued_trajectory_ref": "next.json"
+}

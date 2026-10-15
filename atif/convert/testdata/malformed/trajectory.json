@@ -1,0 +1,16 @@
+{
+  "schema_version": "ATIF-v1.7",
+  "session_id": "mal-run",
+  "agent": {"name": "toy", "version": "1.0"},
+  "steps": [
+    "a step that is a string",
+    null,
+    {"step_id": 3, "timestamp": "2026-10-03T08:00:00Z", "source": "user", "message": ["not a part", {"type": "text", "text": "Hello"}, {"type": "video", "url": "v.mp4"}]},
+    {"step_id": 4, "timestamp": "2026-10-03T08:00:02Z", "source": "agent", "message": 42,
+     "tool_calls": [null, {"tool_call_id": "m1", "function_name": "f", "arguments": [1, 2]}, {"tool_call_id": "m2", "function_name": "", "arguments": null}],
+     "observation": {"results": [7, {"source_call_id": "m1", "content": {"odd": true}}]},
+     "metrics": {"prompt_tokens": 12.5, "completion_tokens": "x"}},
+    {"step_id": 5, "timestamp": "2026-10-03T08:00:03Z", "source": "agent", "message": "ok", "observation": "not an object", "metrics": "nope", "llm_call_count": "many"}
+  ],
+  "subagent_trajectories": [null, "not a trajectory", {"schema_version": "ATIF-v1.7", "agent": {"name": "toy", "version": "1.0"}, "steps": [{"step_id": 1, "timestamp": "2026-10-03T08:00:04Z", "source": "user", "message": "orphan without id"}]}]
+}

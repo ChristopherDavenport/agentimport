@@ -1,0 +1,13 @@
+{
+  "schema_version": "ATIF-v1.8",
+  "session_id": "toy-run-4",
+  "agent": {"name": "toy", "version": "0.4"},
+  "steps": [
+    {"step_id": 1, "timestamp": "2026-09-22T09:00:00Z", "source": "user", "message": [
+      {"type": "text", "text": "Transcribe these."},
+      {"type": "audio", "source": {"media_type": "audio/wav", "path": "audio/q.wav", "duration_sec": 1.5}},
+      {"type": "audio", "source": {"media_type": "audio/mp3", "path": "audio/r.mp3"}}
+    ]},
+    {"step_id": 2, "timestamp": "2026-09-22T09:00:04Z", "source": "agent", "message": "Hello; goodbye."}
+  ]
+}

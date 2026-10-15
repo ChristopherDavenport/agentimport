@@ -1,0 +1,23 @@
+{
+  "schema_version": "ATIF-v1.7",
+  "session_id": "bnd-run",
+  "agent": {"name": "toy", "version": "1.0", "model_name": "m"},
+  "steps": [
+    {"step_id": 1, "timestamp": "2026-09-27T04:00:00Z", "source": "user", "message": "Plan a trip."},
+    {"step_id": 2, "timestamp": "2026-09-27T04:00:01Z", "source": "system", "message": "Knowledge injected",
+     "observation": {"results": [{"content": "Fact: trains run hourly."}]},
+     "extra": {"context_management": {"type": "injection", "boundary": "append"}}},
+    {"step_id": 3, "timestamp": "2026-09-27T04:00:04Z", "source": "agent", "message": "Take a train.",
+     "metrics": {"prompt_tokens": 20, "completion_tokens": 4}},
+    {"step_id": 4, "timestamp": "2026-09-27T04:00:05Z", "source": "system", "message": "Older turns pruned",
+     "extra": {"context_management": {"type": "pruning", "boundary": "truncate"}}},
+    {"step_id": 5, "timestamp": "2026-09-27T04:00:06Z", "source": "system", "message": "Context rewritten",
+     "extra": {"context_management": {"type": "rewrite", "boundary": "rotate"}}},
+    {"step_id": 6, "timestamp": "2026-09-27T04:00:07Z", "source": "system", "message": "Folded",
+     "extra": {"context_management": {"type": "compaction", "boundary": "replace"}}},
+    {"step_id": 7, "timestamp": "2026-09-27T04:00:08Z", "source": "system", "message": "Reminder: be brief."},
+    {"step_id": 8, "timestamp": "2026-09-27T04:00:09Z", "source": "user", "message": "Which station?"},
+    {"step_id": 9, "timestamp": "2026-09-27T04:00:12Z", "source": "agent", "message": "Central.",
+     "metrics": {"prompt_tokens": 30, "completion_tokens": 2}}
+  ]
+}

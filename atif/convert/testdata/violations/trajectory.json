@@ -1,0 +1,18 @@
+{
+  "schema_version": "ATIF-v1.9",
+  "session_id": "bad-run",
+  "agent": {"name": "toy", "version": "unknown", "model_name": null, "tool_definitions": null, "flavour": "x"},
+  "unexpected_root": {"a": 1},
+  "steps": [
+    {"step_id": 1, "timestamp": "2026-10-02T09:00:00", "source": "user", "message": "Go.", "model_name": "should-not-be-here", "metrics": null},
+    {"step_id": 3, "timestamp": "2026-10-02T09:00:02+0000", "source": "agent", "message": "Calling.",
+     "tool_calls": [{"tool_call_id": "r1", "function_name": "f", "arguments": {"x": 1}}, {"tool_call_id": "bad id!", "function_name": "g", "arguments": "{\"y\":2}"}],
+     "observation": {"results": [{"source_call_id": "bad id!", "content": "g done", "subagent_trajectory_ref": {"session_id": "lost"}}]}},
+    {"step_id": 4, "timestamp": "not a time", "source": "agent", "message": "Again.",
+     "tool_calls": [{"tool_call_id": "r1", "function_name": "f", "arguments": {"x": 2}}],
+     "observation": {"results": [{"source_call_id": "r1", "content": "f done"}, {"source_call_id": "r1", "content": "f done twice"}]},
+     "extra_step_member": true},
+    {"step_id": 5, "timestamp": null, "source": "narrator", "message": "An aside."},
+    {"step_id": 6, "source": "system", "message": "", "tool_calls": null}
+  ]
+}

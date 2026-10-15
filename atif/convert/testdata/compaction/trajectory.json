@@ -1,0 +1,31 @@
+{
+  "schema_version": "ATIF-v1.7",
+  "session_id": "cmp-run",
+  "agent": {"name": "toy", "version": "1.0", "model_name": "m"},
+  "steps": [
+    {"step_id": 1, "timestamp": "2026-09-26T05:00:00Z", "source": "user", "message": "Explore topic X."},
+    {"step_id": 2, "timestamp": "2026-09-26T05:00:04Z", "source": "agent", "message": "X has three parts.",
+     "metrics": {"prompt_tokens": 30, "completion_tokens": 6}},
+    {"step_id": 3, "timestamp": "2026-09-26T05:00:05Z", "source": "user", "message": "Go deeper."},
+    {"step_id": 4, "timestamp": "2026-09-26T05:00:09Z", "source": "agent", "message": "Part one is A; part two is B.",
+     "metrics": {"prompt_tokens": 60, "completion_tokens": 12}},
+    {"step_id": 5, "timestamp": "2026-09-26T05:00:10Z", "source": "system", "message": "Context compaction performed",
+     "observation": {"results": [{"content": "Summary: prior conversation covered topic X, parts A and B.",
+       "subagent_trajectory_ref": [{"trajectory_id": "compact-001", "trajectory_path": null}]}]},
+     "extra": {"context_management": {"type": "compaction", "boundary": "replace"}}},
+    {"step_id": 6, "timestamp": "2026-09-26T05:00:11Z", "source": "user", "message": "And part three?"},
+    {"step_id": 7, "timestamp": "2026-09-26T05:00:14Z", "source": "agent", "message": "Part three is C.",
+     "metrics": {"prompt_tokens": 40, "completion_tokens": 5}}
+  ],
+  "subagent_trajectories": [
+    {
+      "schema_version": "ATIF-v1.7",
+      "trajectory_id": "compact-001",
+      "agent": {"name": "toy-compactor", "version": "1.0"},
+      "steps": [
+        {"step_id": 1, "timestamp": "2026-09-26T05:00:09.5Z", "source": "user", "message": "Summarise the conversation."},
+        {"step_id": 2, "timestamp": "2026-09-26T05:00:09.9Z", "source": "agent", "message": "Summary: prior conversation covered topic X, parts A and B."}
+      ]
+    }
+  ]
+}

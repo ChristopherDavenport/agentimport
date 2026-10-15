@@ -1,0 +1,54 @@
+{
+  "schema_version": "ATIF-v1.7",
+  "session_id": "run-1",
+  "trajectory_id": "main",
+  "agent": {"name": "toy-tree", "version": "1.0", "model_name": "m-large"},
+  "steps": [
+    {"step_id": 1, "timestamp": "2026-09-23T08:00:00Z", "source": "user", "message": "Survey the repo."},
+    {"step_id": 2, "timestamp": "2026-09-23T08:00:02Z", "source": "agent", "message": "Delegating.",
+     "tool_calls": [{"tool_call_id": "task_1", "function_name": "task", "arguments": {"prompt": "List the packages."}}],
+     "observation": {"results": [{"source_call_id": "task_1", "content": "summary: three packages",
+       "subagent_trajectory_ref": [{"trajectory_id": "sub-1", "session_id": "run-1"}]}]},
+     "metrics": {"prompt_tokens": 50, "completion_tokens": 10}},
+    {"step_id": 3, "timestamp": "2026-09-23T08:00:09Z", "source": "agent", "message": "Three packages.",
+     "metrics": {"prompt_tokens": 70, "completion_tokens": 4}}
+  ],
+  "subagent_trajectories": [
+    {
+      "schema_version": "ATIF-v1.7",
+      "session_id": "run-1",
+      "trajectory_id": "sub-1",
+      "agent": {"name": "toy-tree", "version": "1.0", "model_name": "m-small"},
+      "steps": [
+        {"step_id": 1, "timestamp": "2026-09-23T08:00:03Z", "source": "user", "message": "List the packages."},
+        {"step_id": 2, "timestamp": "2026-09-23T08:00:04Z", "source": "agent", "message": "",
+         "tool_calls": [{"tool_call_id": "task_1", "function_name": "task", "arguments": {"prompt": "Count files."}}],
+         "observation": {"results": [{"source_call_id": "task_1", "content": "12 files",
+           "subagent_trajectory_ref": [{"trajectory_id": "sub-1a"}]}]}},
+        {"step_id": 3, "timestamp": "2026-09-23T08:00:08Z", "source": "agent", "message": "summary: three packages"}
+      ],
+      "subagent_trajectories": [
+        {
+          "schema_version": "ATIF-v1.7",
+          "trajectory_id": "sub-1a",
+          "agent": {"name": "toy-tree", "version": "1.0"},
+          "steps": [
+            {"step_id": 1, "timestamp": "2026-09-23T08:00:05Z", "source": "user", "message": "Count files."},
+            {"step_id": 2, "timestamp": "2026-09-23T08:00:06Z", "source": "agent", "message": "12 files"}
+          ]
+        }
+      ]
+    },
+    {
+      "schema_version": "ATIF-v1.7",
+      "session_id": "run-1",
+      "trajectory_id": "sub-2",
+      "agent": {"name": "toy-tree", "version": "1.0"},
+      "extra": {"parent_session_id": "run-1"},
+      "steps": [
+        {"step_id": 1, "timestamp": "2026-09-23T08:00:10Z", "source": "user", "message": "Background check."},
+        {"step_id": 2, "timestamp": "2026-09-23T08:00:11Z", "source": "agent", "message": "Nothing found."}
+      ]
+    }
+  ]
+}

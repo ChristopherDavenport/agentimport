@@ -1,0 +1,12 @@
+{
+  "schema_version": "ATIF-v1.5",
+  "session_id": "lin-run-cont-1",
+  "agent": {"name": "terminus-2", "version": "2.0.0", "model_name": "m"},
+  "steps": [
+    {"step_id": 1, "source": "user", "message": "Do the task.", "is_copied_context": true},
+    {"step_id": 2, "source": "agent", "message": "Step one done.", "is_copied_context": true},
+    {"step_id": 3, "timestamp": "2026-09-25T06:05:00Z", "source": "user", "message": "Handoff: continue with step two."},
+    {"step_id": 4, "timestamp": "2026-09-25T06:05:04Z", "source": "agent", "message": "Step two done.",
+     "metrics": {"prompt_tokens": 140, "completion_tokens": 9}}
+  ]
+}

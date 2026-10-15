@@ -1,0 +1,14 @@
+{
+  "schema_version": "ATIF-v1.7",
+  "session_id": "nat-run",
+  "agent": {"name": "nat-agent", "version": "0.9", "model_name": "m"},
+  "steps": [
+    {"step_id": 1, "timestamp": "2026-09-29T02:00:00Z", "source": "user", "message": "Fetch the weather."},
+    {"step_id": 2, "timestamp": "2026-09-29T02:00:01Z", "source": "agent", "message": "", "llm_call_count": 0,
+     "tool_calls": [{"tool_call_id": "d1", "function_name": "router", "arguments": {"route": "weather"}}],
+     "observation": {"results": [{"source_call_id": "d1", "content": "routed"}]}},
+    {"step_id": 3, "timestamp": "2026-09-29T02:00:05Z", "source": "agent", "message": "Sunny.", "llm_call_count": 3,
+     "reasoning_effort": 0.5,
+     "metrics": {"prompt_tokens": 300.0, "completion_tokens": "12", "cached_tokens": 1.5}}
+  ]
+}

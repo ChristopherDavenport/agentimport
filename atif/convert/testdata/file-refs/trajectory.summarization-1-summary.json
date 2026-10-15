@@ -1,0 +1,12 @@
+{
+  "schema_version": "ATIF-v1.6",
+  "session_id": "t2-run-summarization-1-summary",
+  "agent": {"name": "terminus-2-summarization-summary", "version": "2.0.0", "model_name": "anthropic/claude-x"},
+  "steps": [
+    {"step_id": 1, "source": "user", "message": "Task: fix the failing build.\nRespond in JSON.", "is_copied_context": true, "extra": {"note": "Copied context; metrics stripped."}},
+    {"step_id": 2, "source": "agent", "message": "Analysis: the build fails.\nPlan: run make.", "is_copied_context": true},
+    {"step_id": 3, "timestamp": "2026-09-24T07:00:30Z", "source": "user", "message": "Summarise the work so far."},
+    {"step_id": 4, "timestamp": "2026-09-24T07:00:40Z", "source": "agent", "message": "The build fails at make.",
+     "metrics": {"prompt_tokens": 450, "completion_tokens": 30}}
+  ]
+}

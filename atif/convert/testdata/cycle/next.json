@@ -1,0 +1,9 @@
+{
+  "schema_version": "ATIF-v1.6",
+  "session_id": "cyc-run",
+  "agent": {"name": "toy", "version": "1.0"},
+  "steps": [
+    {"step_id": 1, "timestamp": "2026-10-05T06:01:00Z", "source": "user", "message": "Next segment."}
+  ],
+  "continued_trajectory_ref": "next.json"
+}
