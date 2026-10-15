@@ -16,7 +16,7 @@
        {"session_id": "t2-run-summarization-1-answers", "trajectory_path": "trajectory.summarization-1-answers.json"}
      ]}]},
      "extra": {"context_management": {"type": "compaction", "boundary": "replace"}}},
-    {"step_id": 4, "timestamp": "2026-09-24T07:01:01Z", "source": "user", "message": "Summary so far: the build fails at make.\nContinue."},
+    {"step_id": 4, "timestamp": "2026-09-24T07:01:01Z", "source": "user", "message": "Here are the answers the other agent provided.\n\nThe all target.\n\nContinue working on this task."},
     {"step_id": 5, "timestamp": "2026-09-24T07:01:06Z", "source": "agent", "model_name": "anthropic/claude-x",
      "message": "Analysis: fixed.\nPlan: done.",
      "tool_calls": [{"tool_call_id": "call_1_1", "function_name": "mark_task_complete", "arguments": {}}],

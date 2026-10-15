@@ -226,11 +226,12 @@ func TestContexts(t *testing.T) {
 			"user: Summary: prior conversation covered topic X, parts A and B.",
 			"user: And part three?", "assistant: Part three is C.",
 		}},
-		// Terminus 2: a replace boundary with no content takes the
-		// handoff after it as its summary; the result that names no
-		// call is a user message.
+		// Terminus 2 continues from its first message, its questions
+		// helper's prompt and questions, then the handoff.
 		{"file-refs", 0, []string{
-			"user: Summary so far: the build fails at make.\nContinue.",
+			"user: Task: fix the failing build.\nRespond in JSON.",
+			"user: What do you need to know?", "assistant: Which target fails?",
+			"user: Here are the answers the other agent provided.\n\nThe all target.\n\nContinue working on this task.",
 			"assistant: Analysis: fixed.\nPlan: done.", "call call_1_1 mark_task_complete {}", "output call_1_1 Task marked complete.",
 		}},
 		// Injection appends; pruning and an unknown boundary keep
@@ -255,6 +256,12 @@ func TestContexts(t *testing.T) {
 		{"claude-code", 0, []string{
 			"user: Read the file.", "reasoning", "assistant: Reading.",
 			`call toolu_1 Read {"file_path":"/work/a.txt"}`, "output toolu_1 hello", "assistant: It says hello.",
+		}},
+		// Vibe: the user step after a boundary with no observation is
+		// its summary; one that carries results is not.
+		{"vibe", 0, []string{
+			"user: Summary: asked for a plan; gave three steps.", "assistant: Step one.",
+			"user: Next.", "user: tool out", "assistant: Step two.",
 		}},
 		// A continuation starts from its copied history.
 		{"continuation", 1, []string{

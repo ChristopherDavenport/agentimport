@@ -360,31 +360,41 @@ func (c *docConv) replace(i int, s *atif.Step) (int, error) {
 		}
 	}
 	taken := 0
-	if len(parts) == 0 {
-		if i+1 < len(c.t.Steps) {
-			if next := c.t.Steps[i+1]; next != nil && next.Err == nil && next.Source == atif.SourceUser && !c.leading[i+1] {
-				parts = c.inputParts(i+1, next.Message)
-				taken = 1
-				c.mark(i+1, agentimport.LineMapped)
-				c.addf(agentimport.Lossy, "atif/compaction-summary-next", i+1,
-					"the replace boundary's results hold no content; its summary is the user step after it, which is what the context continues from")
-				if r := c.stepRest(i+1, next); len(r) > 0 {
-					if rest == nil {
-						rest = map[string]json.RawMessage{}
-					}
-					raw, err := json.Marshal(r)
-					if err != nil {
-						return 0, err
-					}
-					rest["summary_step"] = raw
-				}
-				if !atif.IsNull(next.Ext) {
-					if rest == nil {
-						rest = map[string]json.RawMessage{}
-					}
-					rest["summary_step_extra"] = next.Ext
-				}
+	var pinned openresponses.Items
+	switch {
+	case len(parts) > 0:
+	case c.agentName() == "terminus-2":
+		parts, pinned = c.terminusHandoff(i, s)
+	case i+1 < len(c.t.Steps):
+		// Vibe writes the summary as the user step after the boundary.
+		// A step that carries results is not a summary alone.
+		next := c.t.Steps[i+1]
+		if next == nil || next.Err != nil || next.Source != atif.SourceUser || c.leading[i+1] || next.Observation != nil {
+			break
+		}
+		parts = c.inputParts(i+1, next.Message)
+		taken = 1
+		c.mark(i+1, agentimport.LineMapped)
+		c.addf(agentimport.Lossy, "atif/compaction-summary-next", i+1,
+			"the replace boundary's results hold no content; its summary is the user step after it, as Vibe writes it, which RFC 0001 of ATIF does not say")
+		if r := c.stepRest(i+1, next); len(r) > 0 {
+			if rest == nil {
+				rest = map[string]json.RawMessage{}
 			}
+			raw, err := json.Marshal(r)
+			if err != nil {
+				return 0, err
+			}
+			rest["summary_step"] = raw
+		}
+		for k, v := range map[string]json.RawMessage{"summary_step_extra": next.Ext, "summary_step_id": next.StepID, "summary_step_timestamp": jsonString(next.Timestamp)} {
+			if atif.IsNull(v) {
+				continue
+			}
+			if rest == nil {
+				rest = map[string]json.RawMessage{}
+			}
+			rest[k] = v
 		}
 	}
 	if len(parts) == 0 {
@@ -415,7 +425,7 @@ func (c *docConv) replace(i int, s *atif.Step) (int, error) {
 		}
 		settings = ctx.Settings
 	}
-	e := &agentsession.CompactionEntry{FirstKept: firstKept, Summary: openresponses.UserMessage(parts...), Config: settings}
+	e := &agentsession.CompactionEntry{FirstKept: firstKept, Summary: openresponses.UserMessage(parts...), Pinned: pinned, Config: settings}
 	if hasContent(s.Message) {
 		if rest == nil {
 			rest = map[string]json.RawMessage{}
@@ -431,6 +441,78 @@ func (c *docConv) replace(i int, s *atif.Step) (int, error) {
 	}
 	c.mark(i, agentimport.LineMapped)
 	return taken, nil
+}
+
+// agentName is the document's agent.name.
+func (c *docConv) agentName() string {
+	if a := c.t.Agent; a != nil && a.Err == nil {
+		return a.Name
+	}
+	return ""
+}
+
+// terminusHandoff rebuilds the context Terminus 2 continues from after
+// it summarises (terminus_2.py, _summarize): its first message, then
+// the question prompt and the questions of its questions helper, then
+// the handoff, which is the user step after the boundary and converts
+// as one. The first message is the compaction's summary, the question
+// prompt and the questions its pinned items. The helper's file is read
+// for them; without it the pinned items are missing, and reported.
+func (c *docConv) terminusHandoff(i int, s *atif.Step) (openresponses.Contents, openresponses.Items) {
+	line := i + 1
+	var first *atif.Step
+	for k, st := range c.t.Steps[:i] {
+		if st != nil && st.Err == nil && st.Source == atif.SourceUser && !c.leading[k] {
+			first = st
+			break
+		}
+	}
+	if first == nil {
+		return nil, nil
+	}
+	parts := c.inputParts(i, first.Message)
+	var prompt, questions *atif.Step
+	if o := s.Observation; o != nil && o.Err == nil {
+		for _, r := range o.Results {
+			if r == nil || r.Err != nil {
+				continue
+			}
+			for _, ref := range r.Refs.List {
+				if ref == nil || ref.Err != nil || !strings.HasSuffix(ref.TrajectoryPath, "-questions.json") {
+					continue
+				}
+				real, err := c.fam.resolve(c.in.dir, ref.TrajectoryPath)
+				if err != nil {
+					continue
+				}
+				f, err := c.fam.readDoc(real)
+				if err != nil {
+					continue
+				}
+				for _, st := range f.Doc.Steps {
+					switch {
+					case st == nil || st.Err != nil || st.Copied():
+					case st.Source == atif.SourceUser:
+						prompt = st
+					case st.Source == atif.SourceAgent:
+						questions = st
+					}
+				}
+			}
+		}
+	}
+	if prompt == nil || questions == nil {
+		c.addf(agentimport.Lossy, "atif/terminus-handoff", line,
+			"Terminus 2 continues from its first message, its questions helper's prompt and questions, and the handoff; the helper's file cannot be read, so the context is the first message and the handoff alone")
+		return parts, nil
+	}
+	pinned := openresponses.Items{
+		openresponses.UserMessage(c.inputParts(i, prompt.Message)...),
+		&openresponses.Message{Role: openresponses.RoleAssistant, Content: c.outputParts(i, questions.Message)},
+	}
+	c.addf(agentimport.Lossy, "atif/terminus-handoff", line,
+		"Terminus 2 continues from its first message, its questions helper's prompt and questions, and the handoff: the compaction's summary is the first message and its pinned items the prompt and the questions, copied from the helper's file")
+	return parts, pinned
 }
 
 // keepNone returns the entry a compaction that keeps nothing names as

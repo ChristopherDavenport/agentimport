@@ -135,7 +135,7 @@ previous step's: a document is a line, never a tree.
 | `user` step | `item`, user `message` | text as `input_text`, parts as below |
 | leading `system` steps | the first `config` | see above |
 | later `system` step | `item`, `system` message | its results as below |
-| `system` step, `context_management` boundary `replace` | `compaction`: `summary` the user message of its results' content, `first_kept` a marker (nothing before the boundary is kept), `config` the settings in force | with no content, the user step after it is the summary, as Vibe and Terminus 2 write it; with none, a custom entry; the step's message in `atif:step` |
+| `system` step, `context_management` boundary `replace` | `compaction`: `summary` the user message of its results' content, `first_kept` a marker (nothing before the boundary is kept), `config` the settings in force | with no content, Terminus 2's is rebuilt as below; another's takes the user step after it as its summary, as Vibe writes it, when that step carries no results; with neither, a custom entry; the step's message in `atif:step` |
 | `system` step, boundary `append` or type `injection` | each result's content a user message | |
 | `system` step, boundary `truncate` or type `pruning` | `custom` `{"step": …}` | a gap: it names nothing removed |
 | `system` step, another boundary | `custom` `{"step": …}` | |
@@ -160,6 +160,17 @@ previous step's: a document is a line, never a tree.
 | `subagent_trajectory_ref` | see *Sub-agents* | |
 
 ATIF records no response status: every response has none.
+
+### Terminus 2's summarisation
+
+Terminus 2 records a summarisation as a replace boundary with no
+content, three helper files and a handoff user step. What it sends the
+model next is not the RFC's rule: it keeps its first message, the
+questions helper's prompt and the questions it asked, then the handoff
+(`terminus_2.py`, `_summarize`). The conversion rebuilds that: the
+compaction's summary is the first user step's message, its pinned items
+are the questions helper's last user and agent steps, read from its
+file, and the handoff converts as the user step it is.
 
 ### Session IDs
 
@@ -265,7 +276,8 @@ every converter can report are in [README.md](README.md).
 | `atif/unreached` | dropped | The converter did not reach a step; a bug if it occurs. |
 | `atif/branch-summary` | lossy | An exporter's branch summary names an entry of the exported session as `from`. |
 | `atif/call-without-result` | lossy | A tool call no result answers is left without an output. |
-| `atif/compaction-summary-next` | lossy | A replace boundary's results hold no content; the user step after it is the summary. |
+| `atif/compaction-summary-next` | lossy | A replace boundary's results hold no content; the user step after it, which carries no results, is the summary, as Vibe writes it. |
+| `atif/terminus-handoff` | lossy | Terminus 2's summarisation: the compaction's summary is its first message and its pinned items the questions helper's prompt and questions; without the helper's file they are missing. |
 | `atif/context-injection` | lossy | An append boundary's results are user messages. |
 | `atif/copied-context` | lossy | Copied history is converted as the session's own entries, its usage in `atif:usage`. |
 | `atif/exporter-config` | lossy | The exporter writes no compaction checkpoint; the compaction's config is the settings where it is rebuilt. |
