@@ -436,7 +436,7 @@ func (c *converter) tally() {
 	}
 	for _, e := range c.f.Errors {
 		c.report.Line(agentimport.LineMalformed)
-		c.report.Addf(agentimport.Repaired, "codex/malformed-line", "", e.No, "skipped, as Codex skips it: %v", e.Err)
+		c.report.Addf(agentimport.Repaired, "codex/malformed-line", "", e.No, "skipped, as Codex skips it: %s", agentimport.ErrorText(e.Err))
 	}
 }
 

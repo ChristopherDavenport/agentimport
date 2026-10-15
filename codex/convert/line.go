@@ -16,10 +16,10 @@ import (
 // line converts one line in file order.
 func (c *converter) line(l *codex.Line) error {
 	if l.Err != nil {
-		return c.custom(l, "codex/undecodable-line", "a line that is not a rollout line (%v) is a custom entry", l.Err)
+		return c.custom(l, "codex/undecodable-line", "a line that is not a rollout line (%s) is a custom entry", agentimport.ErrorText(l.Err))
 	}
 	if l.PayloadErr != nil {
-		return c.custom(l, "codex/undecodable-payload", "a %s line whose payload does not decode (%v) is a custom entry", l.Kind, l.PayloadErr)
+		return c.custom(l, "codex/undecodable-payload", "a %s line whose payload does not decode (%s) is a custom entry", l.Kind, agentimport.ErrorText(l.PayloadErr))
 	}
 	if ms := l.MistypedMembers(); len(ms) > 0 {
 		c.addf(agentimport.Kept, "codex/mistyped-member", l,
@@ -143,7 +143,7 @@ func (c *converter) item(l *codex.Line) error {
 	}
 	item, extra, err := c.convertItem(l, l.PayloadRaw(), it)
 	if err != nil {
-		return c.custom(l, "codex/undecodable-item", "a %s item that does not decode as one (%v) is a custom entry", it.Type, err)
+		return c.custom(l, "codex/undecodable-item", "a %s item that does not decode as one (%s) is a custom entry", it.Type, agentimport.ErrorText(err))
 	}
 	if answerTypes[it.Type] && c.pending != nil && !output {
 		c.pending.inputSeen = true

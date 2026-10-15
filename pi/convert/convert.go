@@ -354,7 +354,7 @@ func (c *converter) tally() {
 	}
 	for _, e := range c.f.Errors {
 		c.report.Line(agentimport.LineMalformed)
-		c.report.Addf(agentimport.Repaired, "pi/malformed-line", "", e.No, "skipped, as pi skips it: %v", e.Err)
+		c.report.Addf(agentimport.Repaired, "pi/malformed-line", "", e.No, "skipped, as pi skips it: %s", agentimport.ErrorText(e.Err))
 	}
 	for _, no := range c.f.Surrogates {
 		c.report.Addf(agentimport.Repaired, "pi/lone-surrogate", "", no,

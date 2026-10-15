@@ -246,7 +246,7 @@ func (c *converter) compacted(l *codex.Line) error {
 		cp, err := c.copyItem(l, raw, it)
 		if err != nil {
 			c.addf(agentimport.Lossy, "codex/window-item-skipped", l,
-				"a %s item of the replacement history that does not decode as one (%v) is left out of the window", it.Type, err)
+				"a %s item of the replacement history that does not decode as one (%s) is left out of the window", it.Type, agentimport.ErrorText(err))
 			continue
 		}
 		items, natives, copies = append(items, raw), append(natives, it), append(copies, cp)
@@ -308,7 +308,7 @@ func (c *converter) compacted(l *codex.Line) error {
 		item, extra, err := c.convertItem(l, items[i], natives[i])
 		if err != nil {
 			c.addf(agentimport.Lossy, "codex/window-item-skipped", l,
-				"an item of the replacement history that does not decode (%v) is left out of the window", err)
+				"an item of the replacement history that does not decode (%s) is left out of the window", agentimport.ErrorText(err))
 			continue
 		}
 		keep(natives[i])

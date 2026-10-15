@@ -8,4 +8,4 @@ claudecode: 10 lines: mapped 8 kept 2 dropped 0 malformed 0
   kept     claudecode/anthropic-block                        2  a server_tool_use block is an anthropic.server_tool_use item (at 2, 3)
   kept     claudecode/line-members                           5  kept in claudecode:line: effort (at 2, 3, 6, 9, 10)
   kept     claudecode/orphan-result                          1  a result for a call the CLI wrote, not the model, is a custom entry (at 8)
-  kept     claudecode/undecodable-line                       1  a line that does not decode as its type (json: cannot unmarshal string into Go struct field plainLine.apiBlockIndex of type int) is a custom entry (at 4)
+  kept     claudecode/undecodable-line                       1  a line that does not decode as its type (json: member "apiBlockIndex" is a JSON string, not int) is a custom entry (at 4)

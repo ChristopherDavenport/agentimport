@@ -59,7 +59,7 @@ func (st *pathState) answer(id string) {
 // entry converts one entry under tail and returns the new tail.
 func (c *converter) entry(l *pi.Line, tail string, st *pathState) (string, error) {
 	if l.Err != nil {
-		return c.custom(l, tail, "pi/undecodable-line", "a line that does not decode as its type (%v) is a custom entry", l.Err)
+		return c.custom(l, tail, "pi/undecodable-line", "a line that does not decode as its type (%s) is a custom entry", agentimport.ErrorText(l.Err))
 	}
 	if ms := l.MistypedMembers(); len(ms) > 0 {
 		c.addf(agentimport.Kept, "pi/mistyped-member", l,

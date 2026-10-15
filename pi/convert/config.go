@@ -491,7 +491,7 @@ func (c *converter) contextEdit(l *pi.Line, tail string) (string, error) {
 	}
 	repl, err := l.EditReplacement()
 	if err != nil {
-		return c.custom(l, tail, "pi/context-edit-unreadable", "a context edit whose replacement does not decode (%v) is a custom entry", err)
+		return c.custom(l, tail, "pi/context-edit-unreadable", "a context edit whose replacement does not decode (%s) is a custom entry", agentimport.ErrorText(err))
 	}
 	var items, summaries []string
 	for _, id := range ids {

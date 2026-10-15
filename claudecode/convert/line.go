@@ -16,7 +16,7 @@ import (
 // did not decode.
 func (c *converter) line(l *claudecode.Line, tail string, st *pathState) (string, error) {
 	if l.Err != nil {
-		return c.custom(l, tail, "claudecode/undecodable-line", "a line that does not decode as its type (%v) is a custom entry", l.Err)
+		return c.custom(l, tail, "claudecode/undecodable-line", "a line that does not decode as its type (%s) is a custom entry", agentimport.ErrorText(l.Err))
 	}
 	switch l.Type {
 	case claudecode.TypeUser:
@@ -466,7 +466,7 @@ var stateRecords = map[string]bool{
 
 func (c *converter) sideRecord(l *claudecode.Line, tail string, st *pathState) (string, error) {
 	if l.Err != nil {
-		return c.custom(l, tail, "claudecode/undecodable-line", "a line that does not decode as its type (%v) is a custom entry", l.Err)
+		return c.custom(l, tail, "claudecode/undecodable-line", "a line that does not decode as its type (%s) is a custom entry", agentimport.ErrorText(l.Err))
 	}
 	switch l.Type {
 	case claudecode.TypeAITitle, claudecode.TypeCustomTitle, claudecode.TypeSummary:

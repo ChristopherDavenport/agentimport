@@ -5,7 +5,7 @@ codex: 15 lines: mapped 14 kept 0 dropped 1 malformed 0
   dropped  codex/event-echo                                  1  a context_compacted event, which repeats an item or record the rollout holds, for Codex's own display (at 13)
   lossy    codex/response-id                                 1  the rollout names no response ids (only the token usage records of newer rollouts do); a response is named codex-line-<n> after its first item's line (at 5)
   lossy    codex/tools-unrecorded                            1  Codex does not record the tool definitions it sends the model; the session's config has none (at 1)
-  lossy    codex/window-item-skipped                         1  a function_call item of the replacement history that does not decode as one (item "function_call": json: cannot unmarshal object into Go struct field FunctionCall.arguments of type string) is left out of the window (at 12)
+  lossy    codex/window-item-skipped                         1  a function_call item of the replacement history that does not decode as one (item "function_call": json: member "arguments" is a JSON object, not string) is left out of the window (at 12)
   kept     codex/compaction                                  1  the compaction is a compaction entry after a custom entry holding its record: its window's first item is the summary, 3 items copying the path are pinned, and the 1 after them, new or not pinnable, follow it as hidden entries marked codex:window (at 12)
   kept     codex/rate-limits                                 3  the rate limits reported with the usage are kept in codex:rate_limits (at 8, 11, 15)
   kept     codex/repository-url                              1  the repository URL is the vcs member codex:repository_url (at 1)

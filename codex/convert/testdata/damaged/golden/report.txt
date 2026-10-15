@@ -16,7 +16,7 @@ codex: 19 lines: mapped 7 kept 8 dropped 1 malformed 3
   kept     codex/system-message                              1  a system message, which Codex never keeps in the history it sends, is a custom entry (at 6)
   kept     codex/token-count                                 1  the thread's running total and context window are kept in codex:token_count (at 13)
   kept     codex/turn-event                                  1  a turn_aborted event is a custom entry (at 17)
-  kept     codex/undecodable-item                            1  a message item that does not decode as one (item "message": json: cannot unmarshal number into Go struct field .plain.status of type openresponses.Status) is a custom entry (at 19)
+  kept     codex/undecodable-item                            1  a message item that does not decode as one (item "message": json: member "status" is a JSON number, not openresponses.Status) is a custom entry (at 19)
   kept     codex/undecodable-payload                         1  a response_item line whose payload does not decode (response_item payload is not an object) is a custom entry (at 15)
   kept     codex/unknown-item                                1  an item of type "telepathy", which Codex reads as Other and neither sends nor keeps, is a custom entry (at 8)
   kept     codex/unknown-line-type                           1  a line of unknown type "future_kind" is a custom entry (at 16)
