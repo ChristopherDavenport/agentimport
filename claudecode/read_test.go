@@ -122,3 +122,75 @@ func TestOpenFindsAgents(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestFindSessions walks trees whose directory names the old finder
+// skipped on sight: a fixture directory called "subagents", and a root
+// called "memory" or "tool-results". A session's own directory, beside
+// its transcript, is still not searched.
+func TestFindSessions(t *testing.T) {
+	const (
+		main  = "11111111-1111-4111-8111-00000000aaaa"
+		other = "11111111-1111-4111-8111-00000000bbbb"
+	)
+	root := t.TempDir()
+	files := []string{
+		"subagents/" + main + ".jsonl",
+		"subagents/" + main + "/subagents/agent-a1.jsonl",
+		"subagents/" + main + "/subagents/" + other + ".jsonl",
+		"subagents/" + main + "/tool-results/" + other + ".jsonl",
+		"memory/" + other + ".jsonl",
+		"tool-results/nested/" + other + ".jsonl",
+		"notes.jsonl",
+	}
+	for _, f := range files {
+		p := filepath.Join(root, filepath.FromSlash(f))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("{}\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, tc := range []struct {
+		root string
+		want []string
+	}{
+		{"", []string{"memory/" + other + ".jsonl", "subagents/" + main + ".jsonl", "tool-results/nested/" + other + ".jsonl"}},
+		{"subagents", []string{"subagents/" + main + ".jsonl"}},
+		{"memory", []string{"memory/" + other + ".jsonl"}},
+		{"tool-results", []string{"tool-results/nested/" + other + ".jsonl"}},
+		// A session's own directory holds no main transcript, even
+		// named as the root.
+		{"subagents/" + main, nil},
+	} {
+		paths, err := FindSessions(filepath.Join(root, filepath.FromSlash(tc.root)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got []string
+		for _, p := range paths {
+			rel, _ := filepath.Rel(root, p)
+			got = append(got, filepath.ToSlash(rel))
+		}
+		if !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("FindSessions(%q) = %v, want %v", tc.root, got, tc.want)
+		}
+	}
+
+	// The fixtures: the subagents fixture's main transcript is found
+	// from the directory above it, and no agent transcript is.
+	paths, err := FindSessions(filepath.Join("convert", "testdata"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, p := range paths {
+		if strings.HasPrefix(filepath.Base(p), "agent-") {
+			t.Errorf("an agent transcript was found: %s", p)
+		}
+		found = found || filepath.Base(filepath.Dir(p)) == "subagents"
+	}
+	if !found {
+		t.Errorf("the subagents fixture's transcript was not found under convert/testdata: %v", paths)
+	}
+}
