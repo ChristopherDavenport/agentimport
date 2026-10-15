@@ -1,0 +1,5 @@
+pi: 13 lines: mapped 13 kept 0 dropped 0 malformed 0
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  gap      agentimport/usage-detail                          5  cache writes are folded into input_tokens; the native usage and its cost are pi:usage (at 5, 7, 8, 10, 13)
+  kept     pi/details                                        1  the compaction's details, which pi does not send the model, are pi:details (at 8)
+  kept     pi/message-members                                4  kept in pi:message: api, provider (at 5, 7, 10, 13)

@@ -23,6 +23,7 @@ module's choices rather than the format's limits.
 | `agentimport/tool-error` | Claude Code, pi | `function_call_output` has no error flag; Anthropic's `is_error` and pi's `isError` tell the model the call failed. | Output kept; the item entry carries `<ns>:is_error`. |
 | `agentimport/usage-detail` | Claude Code, pi, Codex | Responses usage has input, cached input, output and reasoning tokens only: no cache-write tokens, cache TTL split, server tool counts, service tier or cost. | Folded where it has a meaning (cache writes into input); the rest on the response entry as `<ns>:usage`. |
 | `agentimport/vcs-branch` | Claude Code | An `env` entry's `vcs` has `system`, `revision` and `dirty`; no branch. Claude Code records the branch on every line and no revision. | vcs member `<ns>:branch`. |
+| `agentimport/context-replace` | pi | An item can be left out of context (`omit`) but not replaced in place. pi's `context_edit` with a replacement changes an earlier message's content where it stands, branch-relative. | The target is omitted; a user or extension message's replacement is a new user message where the edit was written, and any other replacement a custom entry. |
 
 Rows are added by the converters as they find more; a test checks
 that every `gap` code a converter emits is in this table.

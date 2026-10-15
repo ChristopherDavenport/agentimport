@@ -1,0 +1,12 @@
+pi: 13 lines: mapped 8 kept 2 dropped 1 malformed 2
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  gap      agentimport/usage-detail                          2  cache writes are folded into input_tokens; the native usage and its cost are pi:usage (at 4, 14)
+  dropped  pi/extra-header                                   1  a second session line; the first is the header (at 9)
+  kept     pi/message-members                                2  kept in pi:message: api, provider (at 4, 14)
+  kept     pi/orphan-result                                  1  a tool result for a call not on its path is a custom entry (at 12)
+  kept     pi/undecodable-line                               1  a line that does not decode as its type (json: cannot unmarshal number into Go struct field plainLine.message of type pi.plainMessage) is a custom entry (at 6)
+  repaired pi/dangling-parent                                1  parent zzzzzzzz is not in the file; the entry starts a root (at 7)
+  repaired pi/duplicate-id                                   1  an earlier entry has id k0000002; a parentId naming it names this one, as pi resolves it (at 8)
+  repaired pi/malformed-line                                 2  skipped: empty line (at 3, 5)
+  repaired pi/nul-bytes                                      2  NUL bytes removed from the line (at 3, 4)
+  repaired pi/parent-cycle                                   1  the parent links from this entry form a cycle; it starts a root (at 10)

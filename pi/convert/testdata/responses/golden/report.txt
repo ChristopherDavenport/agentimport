@@ -1,0 +1,5 @@
+pi: 7 lines: mapped 7 kept 0 dropped 0 malformed 0
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  gap      agentimport/usage-detail                          2  cache writes are folded into input_tokens; the native usage and its cost are pi:usage (at 5, 7)
+  kept     pi/message-members                                2  kept in pi:message: api, provider (at 5, 7)
+  kept     pi/reasoning-item-members                         1  the reasoning item pi kept holds members the item type does not; the item as pi kept it is pi:thinking_signature (at 7)
