@@ -1,0 +1,10 @@
+claudecode: 11 lines: mapped 4 kept 3 dropped 4 malformed 0
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  gap      agentimport/reasoning-provider                    1  an Anthropic thinking signature in encrypted_content, tagged claudecode:provider (at 3)
+  gap      agentimport/usage-detail                          1  cache writes are folded into input_tokens; the native usage is claudecode:usage (at 4)
+  gap      agentimport/vcs-branch                            1  the git branch is the vcs member claudecode:branch; the format's vcs has no branch (at 2)
+  dropped  claudecode/last-prompt                            2  the last prompt repeats a user message; only the last record's leaf is used (at 6, 11)
+  dropped  claudecode/side-record-repeat                     2  a mode record repeating the value in force (at 9, 10)
+  kept     claudecode/line-members                           3  kept in claudecode:line: permissionMode, promptId, promptSource (at 2, 3, 4)
+  kept     claudecode/side-record                            2  a permission-mode record is a custom entry (at 1, 7)
+  kept     claudecode/system-line                            1  a system line (turn_duration) is a custom entry (at 8)

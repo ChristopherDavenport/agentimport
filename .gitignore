@@ -1,2 +1,4 @@
 .cache/
 /agentimport
+*.test
+*.prof
