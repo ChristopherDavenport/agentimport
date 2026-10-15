@@ -1,0 +1,9 @@
+atif: 4 roots and steps: mapped 4 kept 0 dropped 0 malformed 0
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  gap      atif/deterministic-dispatch                       1  the step has llm_call_count 0: its calls were dispatched by the harness, not produced by a model, and RFC 0001 has no such call; they are function calls marked atif:llm_call_count with no response (at 2)
+  lossy    atif/llm-call-count                               1  the step stands for 3 model calls; the response's attempts is 3, though attempts counts retries of one call and llm_call_count calls that may each have produced part of the step (at 3)
+  lossy    atif/metrics-invalid                              1  cached_tokens is 1.5, not a count; it is not in the usage, and is kept in atif:metrics (at 3)
+  lossy    atif/reasoning-effort                             1  reasoning effort 0.5 is a number, which Responses has no place for; the effort in force stands (at 3)
+  lossy    atif/response-status                              1  ATIF records no response status, so no response has one (responses: 1) (at 3)
+  kept     atif/metrics                                      1  the metrics beside the token counts are in atif:metrics (at 3)
+  repaired atif/metrics-count                                2  prompt_tokens is written 300.0; it is read as 300, as Harbor's models read it (at 3, 3)

@@ -1,0 +1,11 @@
+atif: 18 roots and steps: mapped 18 kept 0 dropped 0 malformed 0
+  gap      agentimport/provenance                            4  the import is recorded in the header member agentimport:source
+  gap      atif/callless-subagent                            3  a sub-agent no tool call spawned (a harness's helper, such as a summariser) is session t2-run-summarization-1-summary with parent_session and no spawned_by, linked by a subsession link with no call_id, which RFC 0001 does not define (at 3, 3, 3)
+  lossy    atif/compaction-summary-next                      1  the replace boundary's results hold no content; its summary is the user step after it, which is what the context continues from (at 3)
+  lossy    atif/copied-context                               2  steps copied from another document's history are converted as this session's own entries, marked atif:copied, their responses' usage in atif:usage so it counts once (steps: 2) (at trajectory.summarization-1-summary.json:1, trajectory.summarization-1-answers.json:1)
+  lossy    atif/response-status                              4  ATIF records no response status, so no response has one (responses: 2) (at trajectory.summarization-1-summary.json:2, trajectory.summarization-1-questions.json:2, trajectory.summarization-1-answers.json:3, 2)
+  lossy    atif/synthetic-tool-calls                         1  Terminus 2 parses its tool calls from the model's text and rewrites the message as analysis and plan; the model emitted no function calls
+  kept     atif/extra                                        2  an extra object is the entry member atif:extra (at trajectory.summarization-1-summary.json:1, 3)
+  kept     atif/final-metrics                                1  final_metrics, whose totals some producers count sub-agents in, and from which no usage is taken: kept in the header member atif:final_metrics
+  kept     atif/metrics                                      1  the metrics beside the token counts are in atif:metrics (at 2)
+  repaired atif/result-paired-by-order                       1  none of the step's 1 results names its call; they are its 1 calls' outputs, in order (at 2)

@@ -1,0 +1,16 @@
+atif: 6 roots and steps: mapped 4 kept 1 dropped 1 malformed 0
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  dropped  atif/empty-step                                   1  the step holds nothing to convert: no message, no calls, no results (at 5)
+  dropped  atif/ref-unresolved                               1  a sub-agent reference names neither an embedded trajectory of this document nor a file; it is kept and no session is made for it (at 2)
+  lossy    atif/call-without-result                          1  tool call r1 has no result in the document; the call is left without an output, which a provider asks for before the next request (at 2)
+  lossy    atif/response-status                              1  ATIF records no response status, so no response has one (responses: 2) (at 2)
+  lossy    atif/version                                      1  schema_version ATIF-v1.9 is not one Harbor defines; it is read as ATIF-v1.8, and members it does not know are kept
+  kept     atif/agent-only-field                             1  a user step carries members Harbor allows on agent steps alone, which are kept in atif:step: model_name (at 1)
+  kept     atif/duplicate-result                             1  a second result for tool call r1, which an output already answers, is a custom entry (at 3)
+  kept     atif/source                                       1  a step of source "narrator", which ATIF does not define, is a custom entry (at 4)
+  kept     atif/unknown-member                               3  members Harbor's models do not declare, which they refuse, are kept in atif:agent_members: flavour (at 3)
+  repaired atif/arguments                                    1  tool call bad id! has a string for arguments, which ATIF requires be an object; the string is the arguments' text (at 2)
+  repaired atif/call-id                                      2  tool call id "bad id!" is empty, repeats another call's in the session, or holds characters providers refuse; it is bad_id__1, the native id in atif:call_id (at 2, 3)
+  repaired atif/ref-object                                   1  subagent_trajectory_ref is one object, as RFC 0001 v1.0 wrote it, not a list; it is read as a list of one (at 2)
+  repaired atif/step-id                                      1  step_id values that are not the step's position are read in document order and kept in atif:step_id (steps: 4) (at 2)
+  repaired atif/timestamp                                    1  step timestamps with no time zone are read as UTC, and those that do not parse take the time before them (steps: 2) (at 1)

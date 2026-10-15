@@ -1,0 +1,11 @@
+atif: 4 roots and steps: mapped 4 kept 0 dropped 0 malformed 0
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  gap      agentimport/usage-detail                          1  Responses usage has no cost and no place for the producer's extra counts; they are in atif:metrics (at 3)
+  lossy    atif/native-available                             1  the document was written by Harbor's codex adapter from codex's own log, which agentimport converts directly (-from codex) with less lost
+  lossy    atif/reasoning-text                               1  reasoning_content is a reasoning item's summary text with no encrypted_content, which a provider that signs its reasoning will not take back (steps: 1) (at 3)
+  lossy    atif/response-status                              1  ATIF records no response status, so no response has one (responses: 1) (at 3)
+  lossy    atif/system-prompt                                1  a system step before the first user or agent step is the instructions; a reader cannot tell it from a message (at 1)
+  kept     atif/extra                                        2  the agent's extra: kept in the header member atif:agent_extra (at 3)
+  kept     atif/metrics                                      1  the metrics beside the token counts are in atif:metrics (at 3)
+  repaired atif/call-id                                      1  tool call id "" is empty, repeats another call's in the session, or holds characters providers refuse; it is call_1, the native id in atif:call_id (at 3)
+  repaired atif/result-paired-by-order                       1  none of the step's 1 results names its call; they are its 1 calls' outputs, in order (at 3)

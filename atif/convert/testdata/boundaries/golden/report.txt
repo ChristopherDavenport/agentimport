@@ -1,0 +1,10 @@
+atif: 10 roots and steps: mapped 7 kept 3 dropped 0 malformed 0
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  gap      atif/compaction-unrecorded                        1  a replace boundary records no summary, in its results or a user step after it; a compaction needs one, so the step is a custom entry and the context keeps what came before (at 6)
+  gap      atif/context-pruning                              1  the step pruned the context without naming what it removed; RFC 0001 can leave out named entries alone, so the step is a custom entry and the context keeps everything (at 4)
+  lossy    atif/context-injection                            1  an append boundary's results are user messages; the step's own message, which describes it, is in atif:step (at 2)
+  lossy    atif/response-status                              1  ATIF records no response status, so no response has one (responses: 2) (at 3)
+  lossy    atif/result-without-call                          1  a result that names no tool call is a user message after the step's outputs, as Harbor's own export sends it (at 2)
+  lossy    atif/system-message                               1  a system step after the conversation started is a system message; Harbor's own readers send it as a user or developer message, or drop it (at 7)
+  kept     atif/context-management                           1  a context-management step of type "rewrite" and boundary "rotate", which RFC 0001 of ATIF does not define, is a custom entry (at 5)
+  kept     atif/extra                                        1  an extra object is the entry member atif:extra (at 2)

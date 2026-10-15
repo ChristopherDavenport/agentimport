@@ -1,0 +1,18 @@
+atif: 10 roots and steps: mapped 6 kept 0 dropped 0 malformed 4
+  gap      agentimport/provenance                            2  the import is recorded in the header member agentimport:source
+  dropped  atif/part-malformed                               1  content part 0 is not an object and is left out (at 3)
+  dropped  atif/result-malformed                             1  result 0 is not an object and is left out (at 4)
+  dropped  atif/tool-call-malformed                          1  tool call 0 is not an object and is left out (at 4)
+  lossy    atif/call-without-result                          1  tool call m2 has no result in the document; the call is left without an output, which a provider asks for before the next request (at 4)
+  lossy    atif/metrics-invalid                              2  prompt_tokens is 12.5, not a count; it is not in the usage, and is kept in atif:metrics (at 4, 4)
+  lossy    atif/response-status                              1  ATIF records no response status, so no response has one (responses: 2) (at 4)
+  lossy    atif/subagent-unlinked                            1  embedded trajectory 2 is referenced by no step; it is session 5bf94b50-c046-5bcf-af32-1b3785ff2f74 with parent_session alone
+  kept     atif/metrics                                      1  the metrics beside the token counts are in atif:metrics (at 4)
+  kept     atif/mistyped-member                              5  members of a JSON type other than the one ATIF defines are kept in atif:step: message (at 4, 4, 5, 5, 5)
+  kept     atif/part-type                                    1  a part of type "video", which ATIF does not define, is an atif.video part carrying it (at 3)
+  repaired atif/arguments                                    2  tool call m1 has arguments that are not an object, which ATIF requires; their JSON is the arguments' text (at 4, 4)
+  repaired atif/session-id                                   1  the document has no session_id; the session ID is derived from its parent's and trajectory/2
+  repaired atif/step-malformed                               2  the step is not an object and is skipped (at 1, 2)
+  repaired atif/subagent-id                                  1  embedded trajectory 2 has no trajectory_id, which ATIF requires; no reference can name it
+  repaired atif/subagent-malformed                           2  embedded trajectory 0 is not an object and is skipped
+  repaired atif/tool-call-name                               1  tool call m2 has no function name, which ATIF requires; the call's name is empty (at 4)

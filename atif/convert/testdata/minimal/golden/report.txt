@@ -1,0 +1,3 @@
+atif: 4 roots and steps: mapped 4 kept 0 dropped 0 malformed 0
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  lossy    atif/response-status                              1  ATIF records no response status, so no response has one (responses: 2) (at 2)
