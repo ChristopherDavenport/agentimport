@@ -410,7 +410,7 @@ func (c *converter) tally() {
 	}
 	for _, e := range c.tr.Errors {
 		c.report.Line(agentimport.LineMalformed)
-		c.report.Addf(agentimport.Repaired, "claudecode/malformed-line", c.file, e.No, "skipped: %v", e.Err)
+		c.report.Addf(agentimport.Repaired, "claudecode/malformed-line", c.file, e.No, "skipped: %s", agentimport.ErrorText(e.Err))
 	}
 	for _, no := range c.tr.NULLines {
 		c.report.Addf(agentimport.Repaired, "claudecode/nul-bytes", c.file, no, "NUL bytes removed from the line")

@@ -1,0 +1,18 @@
+codex: 12 lines: mapped 10 kept 2 dropped 0 malformed 0
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  gap      agentimport/vcs-branch                            1  the git branch is the vcs member codex:branch; the format's vcs has no branch (at 1)
+  lossy    codex/fork-copied-response                        1  the response was copied from the parent thread; its usage, which the parent's session counts, is codex:usage and not the entry's (at 6)
+  lossy    codex/fork-prefix                                 1  the thread was forked from 01990000-0000-7000-8000-0000000000aa; the records it copied from its parent are converted as this session's own entries, not as the prefix of a base, and the responses among them keep their usage only in codex:usage (at 1)
+  lossy    codex/no-model                                    1  no turn context named the model before this response (older rollouts record none); the response has no model (at 4)
+  lossy    codex/subagent-unlinked                           1  the thread is a thread_spawn sub-agent of 01990000-0000-7000-8000-0000000000aa; parent_session names the parent, but the parent's call that spawned it is not in this rollout, so there is no spawned_by and no link (at 1)
+  lossy    codex/tools-unrecorded                            1  Codex does not record the tool definitions it sends the model; the session's config has none (at 1)
+  kept     codex/codex-item                                  2  a message from another agent is the agent_message item Codex sends for it, the extension item codex.agent_message (at 8, 10)
+  kept     codex/copied-session-meta                         1  a later session meta, a forked thread's copy of an ancestor's, is a custom entry (at 2)
+  kept     codex/inter-agent                                 1  the message as recorded (recipients, whether it started a turn) is kept in codex:inter_agent (at 8)
+  kept     codex/rate-limits                                 1  the rate limits reported with the usage are kept in codex:rate_limits (at 5)
+  kept     codex/record                                      1  a inter_agent_communication_metadata record, which the model does not see, is a custom entry (at 9)
+  kept     codex/repository-url                              1  the repository URL is the vcs member codex:repository_url (at 1)
+  kept     codex/session-meta-members                        1  kept in the header member codex:session_meta: agent_nickname, agent_role, forked_from_id, model_provider, multi_agent_version, originator, session_id, source, subagent_history_start_ordinal, thread_source (at 1)
+  kept     codex/token-count                                 1  the thread's running total and context window are kept in codex:token_count (at 5)
+  kept     codex/turn-context                                1  the turn's other settings (approval and sandbox policy and the like), which reach the model as messages the rollout records, are kept in codex:turn_context (at 7)
+  kept     codex/usage-record                                2  the usage record's turn and thread totals are kept in codex:usage_record (at 6, 12)

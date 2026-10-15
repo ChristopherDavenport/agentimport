@@ -61,6 +61,35 @@ versions may break the API.
 - Changed: the format packages share one codec, `internal/jsonline`;
   `TestImportBoundary` allows an internal package that imports the
   standard library alone.
+- Added: `codex`, a reader for Codex CLI rollouts, written from
+  openai/codex at 7ae83199 (2026-10-15): the envelope lines and the
+  layout before it (summer 2025), with every payload kind the source
+  persists typed and every member kept; torn and NUL-filled lines are
+  skipped as Codex skips them; a zstd-compressed rollout is refused
+  with `ErrCompressed`.
+- Added: `codex/convert`, Codex to agentsession, following how Codex
+  rebuilds the history it sends: a run of output items and its token
+  count as a response; turn contexts as config deltas; a rollback as a
+  branch from before the first dropped turn; a compaction as a
+  compaction entry over the window Codex installed, rebuilt as Codex
+  rebuilds it when the rollout predates replacement histories; a custom
+  tool call (apply_patch) as the function call it is, marked
+  `codex:tool_kind`; other items openresponses does not type as
+  `openai.<type>` or `codex.<type>` extension items. Every line is accounted for and every difference
+  reported under a code `docs/formats/codex.md` documents.
+- Changed: `codex/convert` reads a response's records in the order the
+  rollout's Codex wrote them (the token count before a batch of items
+  up to 0.65, after the items from 0.66, after the tool outputs from
+  0.131, with a usage record from 0.159), judging the order when the
+  version is unknown; a rollback undoes a compaction written in the
+  turns it drops, as Codex's reconstruction does; Codex's own messages
+  are told from a person's by a port of Codex's classifier; a response
+  copied into a fork or a context-inheriting sub-agent keeps its usage
+  in `codex:usage` only; nothing in a compaction's window stops a
+  conversion.
+- Added: `Finish` writes a converted session, reads it back, checks it
+  and returns the session as read back; every converter returns that
+  session, so its leaf is the one a reader of the file resumes on.
 - Added: the `agentimport` package: `Report` (a tally of where every
   native line went and findings by stable code), `Builder` (appends a
   native tree to a session, keeps native IDs in namespaced members,

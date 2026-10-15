@@ -89,10 +89,11 @@ func Convert(f *pi.File, opts Options) (*agentimport.Result, error) {
 	if err := c.run(); err != nil {
 		return nil, err
 	}
-	if err := agentimport.Verify(c.b.S); err != nil {
+	s, err := agentimport.Finish(c.b.S)
+	if err != nil {
 		return nil, fmt.Errorf("converted session does not verify: %w", err)
 	}
-	return &agentimport.Result{Report: c.report, Sessions: []*agentsession.Session{c.b.S}}, nil
+	return &agentimport.Result{Report: c.report, Sessions: []*agentsession.Session{s}}, nil
 }
 
 // converter converts one file into one session.
@@ -353,7 +354,7 @@ func (c *converter) tally() {
 	}
 	for _, e := range c.f.Errors {
 		c.report.Line(agentimport.LineMalformed)
-		c.report.Addf(agentimport.Repaired, "pi/malformed-line", "", e.No, "skipped, as pi skips it: %v", e.Err)
+		c.report.Addf(agentimport.Repaired, "pi/malformed-line", "", e.No, "skipped, as pi skips it: %s", agentimport.ErrorText(e.Err))
 	}
 	for _, no := range c.f.Surrogates {
 		c.report.Addf(agentimport.Repaired, "pi/lone-surrogate", "", no,

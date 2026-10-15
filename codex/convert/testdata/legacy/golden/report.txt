@@ -1,0 +1,12 @@
+codex: 8 lines: mapped 6 kept 2 dropped 0 malformed 0
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  gap      agentimport/reasoning-provider                    1  the encrypted reasoning is in encrypted_content, which says nothing of the provider that can replay it; the entry carries codex:provider (at 4)
+  gap      agentimport/vcs-branch                            1  the git branch is the vcs member codex:branch; the format's vcs has no branch (at 1)
+  lossy    codex/legacy-instructions                         1  the legacy session meta's user instructions are the header member codex:instructions; how they reached the model is not recorded (at 1)
+  lossy    codex/legacy-layout                               1  the rollout predates the envelope (before September 2025): its items carry no timestamps, so entries take the time of the last line that had one
+  lossy    codex/no-base-instructions                        1  the session meta records no base instructions (older rollouts); Codex rendered the model's default, which is not recorded, so the session has none (at 1)
+  lossy    codex/no-model                                    1  no turn context named the model before this response (older rollouts record none); the response has no model (at 4)
+  lossy    codex/no-status                                   2  no token count or usage record went with the response, which Codex writes when one completes; it has no status and no usage (at 4, 7)
+  lossy    codex/response-id                                 1  the rollout names no response ids (only the token usage records of newer rollouts do); a response is named codex-line-<n> after its first item's line (at 4)
+  lossy    codex/tools-unrecorded                            1  Codex does not record the tool definitions it sends the model; the session's config has none (at 1)
+  kept     codex/record                                      2  a state record, which the model does not see, is a custom entry (at 2, 8)

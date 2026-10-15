@@ -77,8 +77,12 @@ func TestBuilder(t *testing.T) {
 	if id, ok := b.ID("u1"); !ok || id != p {
 		t.Errorf("ID(u1) = %s, %v", id, ok)
 	}
-	if err := Verify(b.S); err != nil {
+	read, err := Finish(b.S)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if read.Leaf() != a2 {
+		t.Errorf("read-back leaf = %s, want %s", read.Leaf(), a2)
 	}
 
 	got, _ := b.S.Entry(p)
