@@ -4,7 +4,7 @@ hermes: 19 rows: mapped 19 kept 0 dropped 0 malformed 0
   dropped  hermes/system-prompt                              3  the session row holds no system prompt; the settings carry the model alone
   dropped  hermes/tools                                      3  Hermes does not store the session's tool definitions; the settings carry no tools
   lossy    hermes/continuation                               2  a compression ended 20261004_070140_dd0005 and continued it in session 20261004_070320_dd0006, which holds the compacted context a resume sends: a continued_in link, the successor naming it in parent_session
-  lossy    hermes/copied-row                                 2  the row is a copy Hermes wrote of an earlier assistant turn, kept by a compaction, a continuation or a branch; its items carry no response, as no model call of this session made them
+  lossy    hermes/copied-row                                 2  the row is a copy Hermes wrote of an earlier assistant turn, kept by a compaction, a continuation or a branch: a response entry marked hermes:copied, the model call the turn it copies made; Hermes records no usage per response, so none moves off the entry
   lossy    hermes/summary-row                                2  the compaction's summary, which Hermes wrote as an assistant message; it is no model's output and has no response
-  kept     hermes/members                                    4  kept in hermes:model_config
+  kept     hermes/members                                    2  kept in hermes:model_config
   kept     hermes/session-row                                3  the session row's columns the header has no place for are in the header's hermes:session member

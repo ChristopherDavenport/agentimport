@@ -277,7 +277,7 @@ func (w *walk) run() error {
 		return err
 	}
 	if nb > 0 {
-		sc.addf(agentimport.Lossy, "hermes/branch-copy", "", "the branch starts with %d rows Hermes copied from %s; they are this session's own entries, their responses carrying no usage, and parent_session and a fork_of link name the origin", nb, sc.rec.parent.s.ID)
+		sc.addf(agentimport.Lossy, "hermes/branch-copy", "", "the branch starts with %d rows Hermes copied from %s; they are this session's own entries, their responses marked %s:copied, and parent_session and a fork_of link name the origin", nb, sc.rec.parent.s.ID, Source)
 	}
 	w.mainAt = sc.at
 	inRun := false

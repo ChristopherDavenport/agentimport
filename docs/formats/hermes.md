@@ -215,7 +215,10 @@ after it. The context is the generation's rows in Hermes' order. When
 Hermes kept a head, that first item is the head's, verbatim, and the
 summary row follows it: the session format puts a compaction's summary
 first, so this is `agentimport/fold-head`. The head and the tail are
-copies: their assistant rows carry no response.
+copies: their assistant rows are response entries marked
+`hermes:copied`, as codex marks a fork's copied response
+(`codex/fork-copied-response`); Hermes records no usage per response,
+so none moves off the entry.
 
 ### Split compaction
 
@@ -233,8 +236,8 @@ A `/branch` (`hermes_state_mutation_branch.py`) clones the parent's
 live rows into the child with their times. The child is a session of
 its own: `parent_session` and a `fork_of` link name the parent, the
 copied rows, told by matching the parent's live rows in order by
-content and time, are its own entries, and their assistant rows carry
-no response. A reset (`hermes_state_mutation_reset.py`) starts a new
+content and time, are its own entries, and their assistant rows are
+response entries marked `hermes:copied`. A reset (`hermes_state_mutation_reset.py`) starts a new
 conversation on the same chat and copies nothing: it is a session with
 no `parent_session`, the row's `parent_session_id` kept with the
 session row.
@@ -377,7 +380,7 @@ sends a child its goal as that message.
 | `agentimport/vcs-branch` | gap | The session's git branch, in the `env` entry's `vcs.hermes:branch`. |
 | `hermes/alternation` | lossy | User messages follow one another in the context at the leaf; a resume merges them, which is not reproduced. |
 | `hermes/api-content` | lossy | The row's `api_content`, what Hermes sent, is the item; the content it shows is in the row's columns. |
-| `hermes/branch-copy` | lossy | A branch starts with rows copied from its parent; they are its own entries, with no response. |
+| `hermes/branch-copy` | lossy | A branch starts with rows copied from its parent; they are its own entries, their responses marked `hermes:copied`. |
 | `hermes/call-id` | repaired | A call ID empty, malformed or used before in the session was renamed; the native ID is in `hermes:call_id`. |
 | `hermes/call-malformed` | repaired | Entries of `tool_calls` that are not objects; they are kept in the row's columns. |
 | `hermes/child-alone` | lossy | A child session converted on its own, by `Alone`, the bound on nesting or its parent's failure; no link names it. |
@@ -385,7 +388,7 @@ sends a child its goal as that message.
 | `hermes/compaction-empty` | lossy | A generation of in-place compaction holds no item; no compaction is written and the rows before stay in context. |
 | `hermes/content-part` | kept | Content parts Open Responses does not define, carried as extension parts. |
 | `hermes/continuation` | lossy | A compression continued the session in a child: a `continued_in` link. |
-| `hermes/copied-row` | lossy | An assistant row Hermes copied (a compaction's head or tail, a continuation's, a branch's); its items carry no response. |
+| `hermes/copied-row` | lossy | An assistant row Hermes copied (a compaction's head or tail, a continuation's, a branch's): a response entry marked `hermes:copied`, the model call of the turn it copies. |
 | `hermes/created-at` | lossy | The session row has no start time Hermes accepts; `created_at` is its first message's. |
 | `hermes/delegation-delivery` | kept | A background delegation's result, delivered as a user message; its delegation is in the row's columns. |
 | `hermes/denial-text` | lossy | An output carrying the approval gate's refusal; a reject decision, told by the text. |

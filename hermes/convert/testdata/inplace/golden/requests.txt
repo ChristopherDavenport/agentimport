@@ -12,6 +12,13 @@ session 0 20261003_080000_cc0003
     call call_a write_file
     output call_a written
     user: Run them.
+  request of row-9:
+    user: Build the parser.
+  request of row-12:
+    user: Build the parser.
+    assistant: Starting on the parser.
+    assistant: [CONTEXT COMPACTION — REFERENCE ONLY] Earlier tu
+    user: Run them.
   request of row-14:
     user: Build the parser.
     assistant: Starting on the parser.

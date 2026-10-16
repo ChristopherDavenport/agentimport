@@ -12,6 +12,12 @@ session 0 20261007_040000_gg0016
     assistant: Release v1.1 next.
     user: Make it v2.
 session 1 20261007_040140_gg0017
+  request of row-8:
+    user: Plan the release.
+  request of row-10:
+    user: Plan the release.
+    call call_p read_file
+    output call_p v1.0
   request of row-12:
     user: Plan the release.
     call call_p read_file

@@ -29,7 +29,7 @@ func (w *walk) assistant(i int) error {
 	summaryRow := isSummary(m)
 	copied := w.copied[i]
 	respID := ""
-	if !summaryRow && !copied {
+	if !summaryRow {
 		respID = responseID(m)
 	}
 	used := []string{"tool_calls"}
@@ -174,16 +174,17 @@ func (w *walk) assistant(i int) error {
 	sc.mark(m.Unit, agentimport.LineMapped)
 
 	if respID == "" {
-		switch {
-		case summaryRow:
-			sc.addf(agentimport.Lossy, "hermes/summary-row", m.Unit, "the compaction's summary, which Hermes wrote as an assistant message; it is no model's output and has no response")
-		case copied:
-			sc.addf(agentimport.Lossy, "hermes/copied-row", m.Unit, "the row is a copy Hermes wrote of an earlier assistant turn, kept by a compaction, a continuation or a branch; its items carry no response, as no model call of this session made them")
-		}
+		sc.addf(agentimport.Lossy, "hermes/summary-row", m.Unit, "the compaction's summary, which Hermes wrote as an assistant message; it is no model's output and has no response")
 		return nil
 	}
 	resp := &agentsession.ResponseEntry{ResponseID: respID, Status: openresponses.ResponseStatusCompleted}
 	resp.Timestamp = m.Time
+	if copied {
+		if err := sc.b.Member(resp, "copied", true); err != nil {
+			return err
+		}
+		sc.addf(agentimport.Lossy, "hermes/copied-row", m.Unit, "the row is a copy Hermes wrote of an earlier assistant turn, kept by a compaction, a continuation or a branch: a response entry marked %s:copied, the model call the turn it copies made; Hermes records no usage per response, so none moves off the entry", Source)
+	}
 	switch m.FinishReason {
 	case "length":
 		resp.Status = openresponses.ResponseStatusIncomplete

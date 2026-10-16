@@ -5,8 +5,7 @@ hermes: 22 rows: mapped 22 kept 0 dropped 0 malformed 0
   dropped  hermes/tools                                      1  Hermes does not store the session's tool definitions; the settings carry no tools
   lossy    hermes/alternation                                1  1 user messages follow another in the context Hermes resumes with; a resume merges each into the one before (repair_message_sequence), which is not reproduced
   lossy    hermes/compaction                                 2  an in-place compaction: Hermes archived the rows before it and resumes from the head it protected, copied, the summary and the rows after it
-  lossy    hermes/copied-row                                 2  the row is a copy Hermes wrote of an earlier assistant turn, kept by a compaction, a continuation or a branch; its items carry no response, as no model call of this session made them
+  lossy    hermes/copied-row                                 2  the row is a copy Hermes wrote of an earlier assistant turn, kept by a compaction, a continuation or a branch: a response entry marked hermes:copied, the model call the turn it copies made; Hermes records no usage per response, so none moves off the entry
   lossy    hermes/inactive-rows                              1  2 runs of rows Hermes took out of context (a rewind, an undo, or the originals of rows a compaction carried) are each a branch from the row before them; rows of two rewinds in a row read as one branch
   lossy    hermes/summary-row                                1  the compaction's summary, which Hermes wrote as an assistant message; it is no model's output and has no response
-  kept     hermes/members                                    2  kept in hermes:columns
   kept     hermes/session-row                                1  the session row's columns the header has no place for are in the header's hermes:session member
