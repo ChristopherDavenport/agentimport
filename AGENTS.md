@@ -23,7 +23,7 @@ decisions they settled, and what is known of the candidates.
   read OpenCode's database, which keeps its sessions in SQLite since
   1.2 and is in WAL mode while OpenCode runs, and Cline's index,
   `sessions.db` (`opencode/sqlite`, `clinesdk/sqlite`, and
-  `internal/sqlite`, the copy-then-read `clinesdk/sqlite` uses); a
+  `internal/sqlite`, the copy-then-read both use); a
   hand-written reader of pages, records and the log would be a second
   SQLite to get right. No other package may import a driver, the
   convert packages included (they take the opener in their Options).

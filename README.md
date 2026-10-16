@@ -54,7 +54,7 @@ is, importing the standard library alone, and a `convert` package that
 writes `agentsession` sessions. OpenCode and the Cline SDK have a
 third, `opencode/sqlite` and `clinesdk/sqlite`, the packages that
 import a database driver (`modernc.org/sqlite`, SQLite in Go, no cgo),
-through `internal/sqlite` for the Cline SDK.
+both through `internal/sqlite`.
 
 | Source | Format package | Converter | What maps and what does not |
 | --- | --- | --- | --- |
