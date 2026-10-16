@@ -10,3 +10,4 @@ cline: 18 elements and files: mapped 15 kept 2 dropped 1 malformed 0
   kept     cline/members                                     6  the message's members condenseParent are cline:message (at api_conversation_history.json:1, api_conversation_history.json:2, api_conversation_history.json:3, api_conversation_history.json:4, api_conversation_history.json:5)
   kept     cline/task-file                                   1  the task's metadata (files in context, model switches, environments) is the header member cline:task_metadata
   kept     cline/ui-record                                   1  a say api_req_started UI message is a custom entry (at ui_messages.json:4)
+  kept     cline/usage-without-response                      1  the usage this api_req_started record holds, paid for with no response entry, is the custom entry's usage, which readers count (at ui_messages.json:4)

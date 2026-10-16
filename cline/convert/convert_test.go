@@ -2,6 +2,7 @@ package convert
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -343,8 +344,15 @@ func TestUsage(t *testing.T) {
 		// OpenAI's count holds the cache; the retried request counts
 		// once and records two attempts.
 		{"classic-reject", []string{"500/20 cached 300", "600/30 cached 400 attempts 2", "700/10 cached 0", "800/25 cached 0", "900/0 cached 0"}},
-		// Roo writes the total input whatever the protocol.
+		// Roo 3.30 and later write the total input whatever the protocol.
 		{"roo-fresh-start", []string{"1000/20 cached 800", "1000/20 cached 800", "3000/20 cached 0", "3500/20 cached 3000"}},
+		// Before 3.30 the raw count: the cache is added when the count
+		// cannot hold it.
+		{"roo-old-usage", []string{"912/30 cached 800", "55/7 cached 50"}},
+		// A request whose retries were exhausted, then the resumed one
+		// naming the same index: the response is the second's, counted
+		// as its second attempt.
+		{"classic-resume", []string{"100/20 cached 0", "300/30 cached 90 attempts 2"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := convertFixture(t, fx[tc.name], Options{}).Sessions[0]
@@ -402,5 +410,49 @@ func TestResultOrder(t *testing.T) {
 	want := []string{"call_a", "call_b", "call_c", "call_p", "call_d", "call_e", "call_f"}
 	if !slices.Equal(got, want) {
 		t.Errorf("outputs %v, want %v", got, want)
+	}
+}
+
+// TestPaidUsage checks the model calls no response entry holds keep
+// their usage as a custom entry's top-level usage, which readers count:
+// sub-agents that ran in memory, requests a restore deleted, a request
+// that failed.
+func TestPaidUsage(t *testing.T) {
+	fx := fixtures(t)
+	for name, want := range map[string][]string{
+		"classic-reject": {"50/5", "100/10"},
+		"classic-resume": {"0/0"},
+	} {
+		s := convertFixture(t, fx[name], Options{Slim: name == "classic-resume"}).Sessions[0]
+		var got []string
+		for _, e := range s.Path(s.Leaf()) {
+			ce, ok := e.(*agentsession.CustomEntry)
+			if !ok {
+				continue
+			}
+			var d struct {
+				Usage *openresponses.Usage `json:"usage"`
+			}
+			if err := json.Unmarshal(ce.Data, &d); err != nil {
+				t.Fatal(err)
+			}
+			if d.Usage != nil {
+				got = append(got, fmt.Sprintf("%d/%d", d.Usage.InputTokens, d.Usage.OutputTokens))
+			}
+		}
+		if !slices.Equal(got, want) {
+			t.Errorf("%s: paid usage %v, want %v", name, got, want)
+		}
+	}
+}
+
+// TestResumeStatus checks a failed request does not take the response
+// of the request a resume made after it.
+func TestResumeStatus(t *testing.T) {
+	s := convertFixture(t, fixtures(t)["classic-resume"], Options{}).Sessions[0]
+	for _, e := range s.Path(s.Leaf()) {
+		if r, ok := e.(*agentsession.ResponseEntry); ok && r.ResponseID == "req_2" && r.Status != openresponses.ResponseStatusCompleted {
+			t.Errorf("req_2 status %s", r.Status)
+		}
 	}
 }

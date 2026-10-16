@@ -616,7 +616,7 @@ func Millis(raw json.RawMessage) (time.Time, bool) {
 // of one. exact is false when a fraction was dropped.
 func Int(raw json.RawMessage) (n int64, exact, ok bool) {
 	f, ok := Float(raw)
-	if !ok || f > math.MaxInt64 || f < math.MinInt64 {
+	if !ok || f >= math.MaxInt64 || f < math.MinInt64 {
 		return 0, false, false
 	}
 	return int64(f), f == math.Trunc(f), true

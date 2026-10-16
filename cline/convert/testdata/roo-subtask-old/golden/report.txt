@@ -5,4 +5,4 @@ cline: 8 elements and files: mapped 7 kept 0 dropped 1 malformed 0
   lossy    cline/missing-index                               1  the task has no history_item.json, which older Roo releases kept in VS Code's state database; the working directory, mode and provider profile are unknown, and sub-tasks cannot be linked
   lossy    cline/roo-no-model                                1  Roo records no model ID; the settings have none, and the provider profile and mode are members of the first config entry
   lossy    cline/roo-subtask-unlinked                        2  the new_task output names no sub-task, as releases before 3.35 wrote it; the sub-task is not linked and converts on its own (at api_conversation_history.json:3, api_conversation_history.json:5)
-  lossy    cline/usage-semantics                             1  Roo's request record names no API protocol; tokensIn is read as the total input, cache included, as Roo writes it (at api_conversation_history.json:2)
+  lossy    cline/usage-semantics                             1  the record names no API protocol, as Roo before 3.25 wrote it; its input count is read as holding the cache (at ui_messages.json:2)

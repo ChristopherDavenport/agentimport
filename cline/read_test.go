@@ -247,3 +247,22 @@ func TestReadTaskErrors(t *testing.T) {
 		t.Errorf("raw %s", task.API.Elems[0].Raw)
 	}
 }
+
+// TestIntBounds checks counts at the edge of int64 are refused rather
+// than converted with an implementation-defined result.
+func TestIntBounds(t *testing.T) {
+	for _, tc := range []struct {
+		in string
+		ok bool
+	}{
+		{"9223372036854775807", false},
+		{"9223372036854774784", true},
+		{"-9223372036854775808", true},
+		{"1e300", false},
+		{`"12"`, true},
+	} {
+		if _, _, ok := Int(json.RawMessage(tc.in)); ok != tc.ok {
+			t.Errorf("Int(%s) ok %v, want %v", tc.in, ok, tc.ok)
+		}
+	}
+}

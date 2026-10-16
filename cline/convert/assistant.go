@@ -431,6 +431,23 @@ func (c *conv) matchRequests() {
 			byOrder = false
 		}
 	}
+	// A request whose retries were exhausted keeps its record, and the
+	// request a resume makes after it names the same API index: the
+	// last record naming an index answers it, and earlier ones were
+	// attempts of it that produced no response.
+	superseded := map[int]int{}
+	if !c.roo {
+		lastAt := map[int]int{}
+		for si, i := range starts {
+			if hi, ok := ui[i].HistoryIndex(); ok {
+				if prev, seen := lastAt[hi]; seen {
+					superseded[prev] = si
+				}
+				lastAt[hi] = si
+			}
+		}
+	}
+	extra := map[int]int{}
 	taken := map[int]bool{}
 	lastK := -1
 	for si, i := range starts {
@@ -444,6 +461,20 @@ func (c *conv) matchRequests() {
 			if r := ui[j]; r.Err == nil && r.Type == "say" && r.Say == "api_req_retried" {
 				retried = append(retried, j)
 			}
+		}
+		if by, ok := superseded[si]; ok {
+			// Its attempts count toward the request that answered the
+			// index; its record, with the usage it paid for, is kept.
+			for later := by; ; {
+				next, more := superseded[later]
+				if !more {
+					extra[later] += 1 + len(retried)
+					break
+				}
+				later = next
+			}
+			c.failed[i] = true
+			continue
 		}
 		k := -1
 		if hi, ok := m.HistoryIndex(); ok && !c.roo {
@@ -491,11 +522,12 @@ func (c *conv) matchRequests() {
 				c.uiAt(agentimport.Dropped, "cline/request-placeholder", i, "a request record with no usage and no response is left out")
 				c.mark(unit{uUI, i}, agentimport.LineDropped)
 			}
+			c.failed[i] = true
 			continue
 		}
 		taken[k] = true
 		lastK = max(lastK, k)
-		c.reqs[k] = &uiReq{ui: i, info: info, attempts: 1 + len(retried)}
+		c.reqs[k] = &uiReq{ui: i, info: info, attempts: 1 + len(retried) + extra[si]}
 		c.mark(unit{uUI, i}, agentimport.LineMapped)
 		for _, j := range retried {
 			c.mark(unit{uUI, j}, agentimport.LineMapped)
@@ -513,37 +545,44 @@ var exclusive = map[string]bool{
 	"vercel-ai-gateway": true, "vertex": true,
 }
 
-// semantics says whether a request's input count includes the cache,
-// and why that is assumed.
-func (c *conv) semantics(k int, m *cline.Message, info *cline.ReqInfo) bool {
+// inclusive says whether a usage record's input count already holds
+// the cache reads and writes, for a record written at ts; why says what
+// was assumed, empty when nothing was. provider is the classic
+// provider that answered, when the message names it.
+func (c *conv) inclusive(provider string, ts time.Time, hasTS bool, info *cline.ReqInfo) (bool, string) {
 	if c.roo {
-		if info == nil || info.APIProtocol == "" {
-			c.apiAt(agentimport.Lossy, "cline/usage-semantics", k, "Roo's request record names no API protocol; tokensIn is read as the total input, cache included, as Roo writes it")
+		in, cache := count(info.TokensIn), count(info.CacheReads)+count(info.CacheWrites)
+		switch info.APIProtocol {
+		case "anthropic":
+			// Roo 3.30 and later write the total; before, the raw count,
+			// which leaves the cache out.
+			if in < cache {
+				return false, "the record's input count is smaller than its cache, as Roo before 3.30 wrote it for the Anthropic protocol; the cache is added"
+			}
+			return true, ""
+		case "":
+			if in < cache {
+				return false, "the record names no API protocol, as Roo before 3.25 wrote it, and its input count is smaller than its cache; the cache is added"
+			}
+			return true, "the record names no API protocol, as Roo before 3.25 wrote it; its input count is read as holding the cache"
 		}
-		return true
-	}
-	provider := ""
-	if m.ModelInfo != nil {
-		provider = m.ModelInfo.ProviderID
+		return true, ""
 	}
 	if provider == "" {
-		provider = c.providerAt(m)
+		provider = c.providerAt(ts, hasTS)
 	}
 	if provider == "" {
-		c.apiAt(agentimport.Lossy, "cline/usage-semantics", k, "nothing names the provider; the input count is read as Anthropic's, which leaves the cache out")
-		return false
+		return false, "nothing names the provider; the input count is read as Anthropic's, which leaves the cache out"
 	}
-	return !exclusive[provider]
+	return !exclusive[provider], ""
 }
 
-// providerAt is the provider the metadata says was in use when a
-// message was written.
-func (c *conv) providerAt(m *cline.Message) string {
+// providerAt is the provider the metadata says was in use at ts.
+func (c *conv) providerAt(ts time.Time, ok bool) string {
 	md := c.t.Metadata
 	if md == nil {
 		return ""
 	}
-	ts, ok := m.Time()
 	provider := ""
 	for _, u := range md.ModelUsage {
 		if u == nil || u.ModelProviderID == "" {
@@ -555,6 +594,43 @@ func (c *conv) providerAt(m *cline.Message) string {
 		provider = u.ModelProviderID
 	}
 	return provider
+}
+
+// maxCount bounds a token count: a larger one, or a negative one, is
+// no count.
+const maxCount = 1 << 40
+
+// count reads a token count, 0 when it is absent or out of range.
+func count(raw json.RawMessage) int64 {
+	n, _, ok := cline.Int(raw)
+	if !ok || n < 0 || n >= maxCount {
+		return 0
+	}
+	return n
+}
+
+// inRange reports whether every count a record holds is a count.
+func inRange(raws ...json.RawMessage) bool {
+	for _, raw := range raws {
+		if n, _, ok := cline.Int(raw); ok && (n < 0 || n >= maxCount) {
+			return false
+		}
+	}
+	return true
+}
+
+// recordUsage converts a usage record: input_tokens holds the cache,
+// as openresponses' Anthropic provider has it, and cached_tokens is
+// the cache reads.
+func recordUsage(info *cline.ReqInfo, inclusive bool) *openresponses.Usage {
+	in, out, cr, cw := count(info.TokensIn), count(info.TokensOut), count(info.CacheReads), count(info.CacheWrites)
+	if !inclusive {
+		in += cr + cw
+	}
+	u := openresponses.Usage{InputTokens: int(in), OutputTokens: int(out)}
+	u.InputTokensDetails.CachedTokens = int(cr)
+	u.TotalTokens = u.InputTokens + u.OutputTokens
+	return &u
 }
 
 // usage sets a response's usage: the request's record when one matched,
@@ -578,18 +654,19 @@ func (c *conv) usage(k int, m *cline.Message, e *agentsession.ResponseEntry) err
 	}
 	if req != nil && req.info != nil && req.info.HasUsage() {
 		info := req.info
-		in, _, _ := cline.Int(info.TokensIn)
-		out, _, _ := cline.Int(info.TokensOut)
-		cr, _, _ := cline.Int(info.CacheReads)
-		cw, _, _ := cline.Int(info.CacheWrites)
-		input := in
-		if !c.semantics(k, m, info) {
-			input = in + cr + cw
+		provider := ""
+		if m.ModelInfo != nil {
+			provider = m.ModelInfo.ProviderID
 		}
-		u := openresponses.Usage{InputTokens: int(input), OutputTokens: int(out)}
-		u.InputTokensDetails.CachedTokens = int(cr)
-		u.TotalTokens = u.InputTokens + u.OutputTokens
-		e.Usage = &u
+		ts, ok := m.Time()
+		incl, why := c.inclusive(provider, ts, ok, info)
+		if why != "" {
+			c.uiAt(agentimport.Lossy, "cline/usage-semantics", req.ui, "%s", why)
+		}
+		if !inRange(info.TokensIn, info.TokensOut, info.CacheReads, info.CacheWrites) {
+			c.uiAt(agentimport.Lossy, "cline/usage-out-of-range", req.ui, "a count of the record is negative or above 2^40; it is read as 0")
+		}
+		e.Usage = recordUsage(info, incl)
 		raw, err := json.Marshal(info)
 		if err != nil {
 			return err
@@ -615,17 +692,19 @@ func (c *conv) usage(k int, m *cline.Message, e *agentsession.ResponseEntry) err
 	}
 	if m.Metrics != nil && m.Metrics.Tokens != nil {
 		t := m.Metrics.Tokens
-		prompt, _, pok := cline.Int(t.Prompt)
-		out, _, _ := cline.Int(t.Completion)
-		cached, _, _ := cline.Int(t.Cached)
-		if pok {
-			input := prompt
-			if !c.semantics(k, m, nil) {
-				input = prompt + cached
+		if _, _, pok := cline.Int(t.Prompt); pok {
+			provider := ""
+			if m.ModelInfo != nil {
+				provider = m.ModelInfo.ProviderID
 			}
-			u := openresponses.Usage{InputTokens: int(input), OutputTokens: int(out)}
-			u.TotalTokens = u.InputTokens + u.OutputTokens
-			e.Usage = &u
+			ts, ok := m.Time()
+			info := &cline.ReqInfo{TokensIn: t.Prompt, TokensOut: t.Completion, CacheReads: t.Cached}
+			incl, why := c.inclusive(provider, ts, ok, info)
+			if why != "" {
+				c.apiAt(agentimport.Lossy, "cline/usage-semantics", k, "%s", why)
+			}
+			e.Usage = recordUsage(info, incl)
+			e.Usage.InputTokensDetails.CachedTokens = 0
 			c.apiAt(agentimport.Lossy, "cline/usage-from-metrics", k, "no request record matched the response; its usage is the message's metrics, whose cached count adds cache reads and writes together, so cached_tokens is not set")
 		}
 	}

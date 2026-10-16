@@ -252,11 +252,27 @@ own input count, which leaves the cache out for Anthropic, Bedrock,
 Vertex, OpenRouter, Cline, DeepSeek, Gemini, Groq, OpenAI's native
 (Responses) and a few more, so those get reads and writes added, and
 includes it for the OpenAI-compatible rest; an unknown provider is
-read as Anthropic's and reported. Roo writes the total input, cache
-included, whatever its `apiProtocol`. `cached_tokens` is the cache
-reads. Retries reuse one record, so a request is counted once. With
-no record, a classic message's `metrics` give the usage, whose
-`cached` adds reads and writes, so `cached_tokens` is unset.
+read as Anthropic's and reported. Roo 3.30 and later write the total
+input, cache included, whatever the `apiProtocol`; earlier releases
+wrote the provider's raw count (3.25 to 3.29 beside `apiProtocol`,
+before 3.25 with none), which leaves the cache out for the Anthropic
+protocol. A Roo count smaller than its cache cannot be a total, so the
+cache is added; a record with no protocol is reported either way.
+`cached_tokens` is the cache reads. Retries reuse one record, so a
+request is counted once; a request whose retries were exhausted keeps
+its record, and the request a resume makes after it names the same
+API index, so the last record naming an index answers it and earlier
+ones count as its `attempts`. With no record, a classic message's
+`metrics` give the usage, whose `cached` adds reads and writes, so
+`cached_tokens` is unset. A count above 2^40 or below 0 is read as 0.
+
+Model calls no response entry holds keep their usage as a custom
+entry's top-level `usage`, which RFC 0001 has readers count: a request
+that produced no response, the requests a checkpoint restore deleted
+(`deleted_api_reqs`, `api_req_deleted`), and classic's in-memory
+sub-agents (`subagent_usage`). Roo's condense call records only a
+cost, which Responses usage has no member for; it stays in the
+compaction's `cline:ui`.
 
 ### Sub-tasks
 
@@ -361,6 +377,7 @@ every converter can report are in [README.md](README.md).
 | `cline/unsigned-thinking` | lossy | A thinking block with no signature, which Cline never sends back, is omitted after the response. |
 | `cline/usage-by-order` | lossy | Neither side records an index or a time; request records pair with responses in order. |
 | `cline/usage-from-metrics` | lossy | No request record matched; the usage is the message's metrics, with no cache split. |
+| `cline/usage-out-of-range` | lossy | A usage count that is negative or above 2^40 is read as 0. |
 | `cline/usage-semantics` | lossy | The meaning of the input count is assumed: an unknown provider, or a Roo record with no protocol. |
 | `cline/variant-guessed` | lossy | No storage directory names the agent; the variant is told by shape. |
 | `cline/xml-tool-calls` | lossy | XML-era tool calls and results stay text, as the model saw them; the calls are `cline:xml_tools`. |
@@ -373,6 +390,7 @@ every converter can report are in [README.md](README.md).
 | `cline/orphan-result` | kept | A tool result answering no call of the response before it is a custom entry. |
 | `cline/task-file` | kept, or dropped | The metadata or settings are `cline:task_metadata`, `cline:settings`. |
 | `cline/ui-record` | kept, or dropped | A UI message the API history does not hold is a custom entry. |
+| `cline/usage-without-response` | kept | The usage of model calls no response entry holds (a failed request, requests a restore deleted, sub-agents run in memory) is the custom entry's top-level `usage`, which readers count. |
 | `cline/unknown-role` | kept | An element of another role is a custom entry. |
 | `cline/call-id-renamed` | repaired | A repeated or ill-formed call ID is renamed; the native one is `cline:call_id`. |
 | `cline/malformed-element` | repaired | An element or context edit that does not read is skipped. |

@@ -68,10 +68,12 @@ type conv struct {
 	respIDs     map[string]bool
 	compacts    int
 
-	events  []*event
-	side    []*sideRecord
-	sideAt  int
-	reqs    map[int]*uiReq
+	events []*event
+	side   []*sideRecord
+	sideAt int
+	reqs   map[int]*uiReq
+	// failed marks the request records that answered no response.
+	failed  map[int]bool
 	edits   map[[2]int][]*cline.ContextUpdate
 	nextEvt int
 	// cut is, for classic, the element whose tool results the range in
@@ -110,6 +112,7 @@ func newConv(fam *family, t *cline.Task, tgt target, prefix string, depth int, r
 		pendingFrom:  -2,
 		respIDs:      map[string]bool{},
 		reqs:         map[int]*uiReq{},
+		failed:       map[int]bool{},
 		edits:        map[[2]int][]*cline.ContextUpdate{},
 		cut:          -1,
 		omitted:      map[string]int{},
@@ -772,19 +775,34 @@ func (c *conv) uiRecord(i int) error {
 	case "command_permission_denied", "clineignore_error", "rooignore_error":
 		note = "; the refusal is a decision on the call when the result names it"
 	}
+	paid := c.paidUsage(i, m)
+	fields := map[string]json.RawMessage{}
 	if c.fam.opts.Slim {
 		c.uiAt(kind, "cline/ui-record", i, "a %s %s UI message is left out%s", m.Type, m.Kind(), note)
-		c.mark(unit{uUI, i}, d)
-		return nil
+		if paid == nil {
+			c.mark(unit{uUI, i}, d)
+			return nil
+		}
+		// The usage stays, so the path's cost does.
+		kind, d = agentimport.Kept, agentimport.LineKept
+	} else {
+		raw, err := json.Marshal(m)
+		if err != nil {
+			return err
+		}
+		if raw, err = c.clean(c.t.UI.Name, i+1, raw); err != nil {
+			return err
+		}
+		fields["ui_message"] = raw
 	}
-	raw, err := json.Marshal(m)
-	if err != nil {
-		return err
+	if u := paid; u != nil {
+		ur, err := json.Marshal(u)
+		if err != nil {
+			return err
+		}
+		fields["usage"] = ur
 	}
-	if raw, err = c.clean(c.t.UI.Name, i+1, raw); err != nil {
-		return err
-	}
-	data, err := json.Marshal(map[string]json.RawMessage{"ui_message": raw})
+	data, err := json.Marshal(fields)
 	if err != nil {
 		return err
 	}
@@ -793,9 +811,40 @@ func (c *conv) uiRecord(i int) error {
 	if _, err := c.appendEntry(e); err != nil {
 		return err
 	}
-	c.uiAt(kind, "cline/ui-record", i, "a %s %s UI message is a custom entry%s", m.Type, m.Kind(), note)
+	if !c.fam.opts.Slim {
+		c.uiAt(kind, "cline/ui-record", i, "a %s %s UI message is a custom entry%s", m.Type, m.Kind(), note)
+	}
 	c.mark(unit{uUI, i}, d)
 	return nil
+}
+
+// paidUsage is the usage of model calls a UI record tells of that no
+// response entry holds: a request that produced no response, the
+// requests a checkpoint restore deleted, sub-agents that ran in
+// memory. A custom entry carrying it as top-level usage is counted by
+// a reader as a call the path paid for (RFC 0001, custom). nil when the
+// record tells of none.
+func (c *conv) paidUsage(i int, m *cline.UIMessage) *openresponses.Usage {
+	switch {
+	case m.Say == "api_req_started" && c.failed[i]:
+	case m.Say == "deleted_api_reqs", m.Say == "api_req_deleted", m.Say == "subagent_usage":
+	default:
+		return nil
+	}
+	info := m.ReqInfo()
+	if info == nil || !info.HasUsage() {
+		return nil
+	}
+	ts, ok := m.Time()
+	incl, why := c.inclusive("", ts, ok, info)
+	if why != "" {
+		c.uiAt(agentimport.Lossy, "cline/usage-semantics", i, "%s", why)
+	}
+	if !inRange(info.TokensIn, info.TokensOut, info.CacheReads, info.CacheWrites) {
+		c.uiAt(agentimport.Lossy, "cline/usage-out-of-range", i, "a count of the record is negative or above 2^40; it is read as 0")
+	}
+	c.uiAt(agentimport.Kept, "cline/usage-without-response", i, "the usage this %s record holds, paid for with no response entry, is the custom entry's usage, which readers count", m.Kind())
+	return recordUsage(info, incl)
 }
 
 // contextEdit keeps a classic context edit as a custom entry where it
