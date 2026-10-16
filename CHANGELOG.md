@@ -7,6 +7,25 @@ versions may break the API.
 
 ## Unreleased
 
+- Added: classic Cline (the VS Code extension before 4.0) and Roo Code
+  task directories, one format with a variant told by the storage
+  directory or, failing that, by shape. `cline` reads a task's JSON
+  arrays element by element, keeping every member it does not declare,
+  and its index entry from `history_item.json` or
+  `state/taskHistory.json`. `cline/convert` rebuilds what each request
+  sent: classic's deleted range (messages 0 and 1 and what follows,
+  the first message after the cut without its tool results, `result
+  missing` for the calls it cut) and Roo's three condense eras and
+  sliding window, as the release that wrote the file built them, each
+  a compaction at the time it happened; classic's in-place context
+  edits are custom entries under `agentimport/context-replace`.
+  Request records give each response its usage, by the provider's
+  meaning of its input count, once per request however often it was
+  retried; refusals are reject decisions; XML-era tool calls stay text,
+  parsed into `cline:xml_tools`; a Roo sub-task the parent waited for
+  is a subsession, converted with it. The command detects a task by its
+  files' names, `-from cline` names it, and a Roo sub-task given beside
+  its parent is skipped when the parent's conversion holds it.
 - Added: ATIF, Harbor's Agent Trajectory Interchange Format (v1.0 to
   v1.8), the format Harbor's agents and `agentsession/export` write.
   `atif` reads a document block by block, so a bad step, call, result

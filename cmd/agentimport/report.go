@@ -6,7 +6,7 @@ import (
 	"io"
 )
 
-const reportUsage = `usage: agentimport report [-from auto|claudecode|pi|codex] [-strict] [-slim] [-json] <file|dir>...
+const reportUsage = `usage: agentimport report [-from auto|claudecode|pi|codex|atif|cline] [-strict] [-slim] [-json] <file|dir>...
 
 Converts each session without writing anything and prints what the
 conversions changed, added up per source: where every native line went
