@@ -24,6 +24,9 @@ import (
 	sdksqlite "github.com/ChristopherDavenport/agentimport/clinesdk/sqlite"
 	"github.com/ChristopherDavenport/agentimport/codex"
 	codexconvert "github.com/ChristopherDavenport/agentimport/codex/convert"
+	"github.com/ChristopherDavenport/agentimport/hermes"
+	hermesconvert "github.com/ChristopherDavenport/agentimport/hermes/convert"
+	hsqlite "github.com/ChristopherDavenport/agentimport/hermes/sqlite"
 	"github.com/ChristopherDavenport/agentimport/opencode"
 	occonvert "github.com/ChristopherDavenport/agentimport/opencode/convert"
 	"github.com/ChristopherDavenport/agentimport/opencode/sqlite"
@@ -98,6 +101,13 @@ var sources = []source{
 			return occonvert.ConvertFile(path, occonvert.Options{Slim: r.slim, OpenDatabase: sqlite.OpenStore})
 		},
 	},
+	{
+		name: hermesconvert.Source,
+		find: hermes.FindSessions,
+		convert: func(path string, r *runner) (*agentimport.Result, error) {
+			return hermesconvert.ConvertFile(path, hermesconvert.Options{Slim: r.slim, OpenDatabase: hsqlite.OpenStore})
+		},
+	},
 }
 
 func sourceNamed(name string) (source, bool) {
@@ -151,6 +161,13 @@ func collect(args []string, from string) ([]input, []skipped, error) {
 			// files names it.
 			if root, ok := opencode.StoreOf(path); ok {
 				path = root
+			}
+		}
+		if s.name == hermesconvert.Source {
+			// A Hermes database is converted whole, whether a home or
+			// profile directory or the file names it.
+			if db, ok := hermes.StoreOf(path); ok {
+				path = db
 			}
 		}
 		if s.name == sdkconvert.Source {
@@ -260,12 +277,18 @@ const (
 //   - an OpenCode store by its data directory, holding opencode.db or a
 //     storage/ tree of sessions, by a file in one, or by a database
 //     file, each holding OpenCode's tables: Crush's .opencode/opencode.db
-//     is another program's.
+//     is another program's;
+//   - a Hermes database, state.db, by its tables, or the home or profile
+//     directory holding one.
 //
 // An agentsession file, which is already converted, is an error.
 func detect(path string) (source, error) {
 	if root, ok := opencode.StoreOf(path); ok && isOpenCode(root) {
 		s, _ := sourceNamed(occonvert.Source)
+		return s, nil
+	}
+	if db, ok := hermes.StoreOf(path); ok && hsqlite.Probe(db) {
+		s, _ := sourceNamed(hermesconvert.Source)
 		return s, nil
 	}
 	if info, err := os.Stat(path); err == nil && info.IsDir() {
