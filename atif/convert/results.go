@@ -30,17 +30,22 @@ func (c *docConv) results(i int, s *atif.Step, local map[string][]*call, order [
 	if len(o.Members.Extra) > 0 {
 		c.reportMembers(line, "observation", o.Members.Extra, o.Mistyped())
 	}
-	// mini-swe-agent's chat shape: every result of a step whose calls
-	// have none names no call, one result per call.
-	paired := len(order) > 0 && len(o.Results) == len(order)
+	// mini-swe-agent's chat shape: no result of a step names a call, the
+	// tool messages first, one per call, then the environment's user
+	// messages (mini_swe_agent.py, _add_observation_to_last_agent_step).
+	paired := len(order) > 0 && len(o.Results) >= len(order)
 	for _, r := range o.Results {
 		if r == nil || r.Err != nil || r.SourceCallID != "" {
 			paired = false
 		}
 	}
-	if paired {
+	switch {
+	case paired && len(o.Results) == len(order):
 		c.addf(agentimport.Repaired, "atif/result-paired-by-order", line,
 			"none of the step's %d results names its call; they are its %d calls' outputs, in order", len(o.Results), len(order))
+	case paired:
+		c.addf(agentimport.Repaired, "atif/result-paired-by-order", line,
+			"none of the step's %d results names its call; the first %d are its %d calls' outputs, in order, and the rest user messages after them, as mini-swe-agent's environment messages are", len(o.Results), len(order), len(order))
 	}
 	var outputs, after []agentsession.Entry
 	for j, r := range o.Results {
@@ -50,7 +55,7 @@ func (c *docConv) results(i int, s *atif.Step, local map[string][]*call, order [
 		}
 		var cl *call
 		switch {
-		case paired:
+		case paired && j < len(order):
 			cl = order[j]
 		case r.SourceCallID != "":
 			cl = c.findCall(r.SourceCallID, i, local)

@@ -243,7 +243,8 @@ func TestContexts(t *testing.T) {
 		// Results paired by order; a result naming no call after the
 		// outputs; a result naming an earlier step's call answers it; a
 		// result naming no call of the document is a user message; the
-		// output in a later user step answers its call.
+		// output in a later user step answers its call; a tool output
+		// then an environment message pair the first with the call.
 		{"chat-results", 0, []string{
 			"user: Fix the test.", "assistant: Two commands.",
 			`call t1 bash {"command":"ls"}`, `call t2 bash {"command":"go test"}`,
@@ -251,6 +252,8 @@ func TestContexts(t *testing.T) {
 			"assistant: Looking again.", `call t3 bash {"command":"cat a_test.go"}`, "output t3 package a",
 			"user: Environment note: 3 steps left.", "user: from nowhere",
 			`call t4 bash {"command":"go test"}`, "user: ok", "output t4 PASS",
+			"assistant: Once more.", `call t5 bash {"command":"git diff"}`, "output t5 diff --git",
+			"user: Environment note: 1 step left.",
 		}},
 		// The claude-code adapter's raw block is the output; the
 		// sub-agents' interleaved steps are not the main context.

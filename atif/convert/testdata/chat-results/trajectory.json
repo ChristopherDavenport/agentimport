@@ -26,6 +26,10 @@
      "tool_calls": [{"tool_call_id": "t4", "function_name": "bash", "arguments": {"command": "go test"}}],
      "metrics": {"prompt_tokens": 170, "completion_tokens": 6}},
     {"step_id": 6, "timestamp": "2026-09-28T03:00:12Z", "source": "user", "message": "ok",
-     "observation": {"results": [{"source_call_id": "t4", "content": "PASS"}]}}
+     "observation": {"results": [{"source_call_id": "t4", "content": "PASS"}]}},
+    {"step_id": 7, "timestamp": "2026-09-28T03:00:15Z", "source": "agent", "message": "Once more.",
+     "tool_calls": [{"tool_call_id": "t5", "function_name": "bash", "arguments": {"command": "git diff"}}],
+     "observation": {"results": [{"content": "diff --git"}, {"content": "Environment note: 1 step left."}]},
+     "metrics": {"prompt_tokens": 190, "completion_tokens": 8}}
   ]
 }

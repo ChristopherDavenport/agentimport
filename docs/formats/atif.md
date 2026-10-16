@@ -146,7 +146,7 @@ previous step's: a document is a line, never a tree.
 | `llm_call_count` 0 | items with no `response`, the calls marked `atif:llm_call_count: 0` | a gap |
 | `observation.results[]` naming a call of the step | `item`, `function_call_output` of that call | a string is the output; parts are `input_text` and `input_image` parts; the result's extra in `atif:extra` |
 | a result naming a call of an earlier step | that call's output | |
-| results naming no call, one per call, on a step with calls | the calls' outputs in order | mini-swe-agent's chat shape |
+| results naming no call, at least one per call, on a step with calls | the first one per call the calls' outputs in order, the rest user messages after them | mini-swe-agent's chat shape: tool messages, then the environment's user messages |
 | another result naming no call | `item`, user `message` after the step's outputs | |
 | a result naming a call already answered | `custom` `{"result": …}` | |
 | image part | `input_image`: a URL as written; a file inside the conversion's directory read and inlined as a data URL | anything else a text placeholder `[image: <path>]` |
@@ -344,7 +344,7 @@ every converter can report are in [README.md](README.md).
 | `atif/raw-tool-result` | repaired | Harbor's Claude Code adapter appends the tool's stdout and metadata to a result; the output is the block the model saw. |
 | `atif/ref-object` | repaired | `subagent_trajectory_ref` is one object, as RFC v1.0 wrote it; it is read as a list of one. |
 | `atif/result-foreign-call` | repaired | A result names a call of an earlier step, which Harbor's validator refuses; it is that call's output. |
-| `atif/result-paired-by-order` | repaired | A step's results name no call, one per call; they are the calls' outputs in order. |
+| `atif/result-paired-by-order` | repaired | A step's results name no call, at least one per call; the first one per call are the calls' outputs in order, the rest user messages. |
 | `atif/session-id` | repaired | The session ID is not the document's `session_id`: it has none, a session store refuses it, or another session of the conversion has it. |
 | `atif/step-id` | repaired | `step_id` values are not the steps' positions; steps are read in document order. |
 | `atif/step-malformed` | repaired | A step that is not an object, or the step a truncated document is cut inside, is skipped. |
