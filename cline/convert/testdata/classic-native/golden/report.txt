@@ -1,0 +1,13 @@
+cline: 20 elements and files: mapped 10 kept 3 dropped 7 malformed 0
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  gap      agentimport/reasoning-provider                    1  a reasoning signature from anthropic in encrypted_content, tagged cline:provider (at api_conversation_history.json:2)
+  gap      agentimport/usage-detail                          3  cache writes are folded into input_tokens; the request record's usage and cost are cline:usage (at ui_messages.json:2, ui_messages.json:7, ui_messages.json:9)
+  dropped  cline/request-text                                3  the request record's request text, the user message rendered as Markdown, is left out (at ui_messages.json:2, ui_messages.json:7, ui_messages.json:9)
+  dropped  cline/ui-partial                                  1  a UI message still streaming when the file was written is left out (at ui_messages.json:12)
+  dropped  cline/ui-restated                                 6  a say task UI message restates the API history, or is a prompt carrying nothing (at ui_messages.json:1, ui_messages.json:3, ui_messages.json:4, ui_messages.json:8, ui_messages.json:10)
+  lossy    cline/call-without-result                         1  the last response's calls toolu_3 have no result: the task ended before they were answered
+  lossy    cline/unsigned-thinking                           1  a thinking block with no signature, which Cline leaves out of every request, is a reasoning item the next config entry omits (at api_conversation_history.json:4)
+  kept     cline/history-item                                1  the task's index entry is the header member cline:history_item
+  kept     cline/members                                     6  the text block's members call_id are cline:block (at api_conversation_history.json:2, api_conversation_history.json:2, api_conversation_history.json:2, api_conversation_history.json:3, api_conversation_history.json:4)
+  kept     cline/task-file                                   1  the task's metadata (files in context, model switches, environments) is the header member cline:task_metadata
+  kept     cline/ui-record                                   2  a ask tool UI message is a custom entry (at ui_messages.json:5, ui_messages.json:6)

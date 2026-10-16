@@ -1,0 +1,18 @@
+{
+  "id": "4f1b2c3d-0000-4000-8000-0000000000c6",
+  "number": 1,
+  "ts": 1761400003000,
+  "task": "Write the changelog",
+  "tokensIn": 1,
+  "tokensOut": 1,
+  "cacheWrites": 0,
+  "cacheReads": 0,
+  "totalCost": 0,
+  "size": 100,
+  "workspace": "/work/roo",
+  "mode": "code",
+  "apiConfigName": "default",
+  "parentTaskId": "4f1b2c3d-0000-4000-8000-000000000006",
+  "rootTaskId": "4f1b2c3d-0000-4000-8000-000000000006",
+  "status": "completed"
+}

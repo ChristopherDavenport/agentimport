@@ -1,0 +1,6 @@
+cline: 2 elements and files: mapped 0 kept 0 dropped 1 malformed 1
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  dropped  cline/ui-restated                                 1  a say task UI message restates the API history, or is a prompt carrying nothing (at ui_messages.json:1)
+  lossy    cline/missing-index                               1  the task has no entry in state/taskHistory.json, which older releases kept in VS Code's state database; the working directory is unknown and the deleted range is taken from the UI messages alone
+  lossy    cline/no-model                                    1  no message, index entry or metadata names the model; the settings have none
+  repaired cline/malformed-file                              1  the file is not a JSON array; the 0 elements before the fault are read

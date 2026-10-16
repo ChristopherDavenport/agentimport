@@ -1,0 +1,21 @@
+{
+  "id": "4f1b2c3d-0000-4000-8000-000000000006",
+  "number": 1,
+  "ts": 1761400009500,
+  "task": "Ship the release",
+  "tokensIn": 1,
+  "tokensOut": 1,
+  "cacheWrites": 0,
+  "cacheReads": 0,
+  "totalCost": 0,
+  "size": 100,
+  "workspace": "/work/roo",
+  "mode": "code",
+  "apiConfigName": "default",
+  "childIds": [
+    "4f1b2c3d-0000-4000-8000-0000000000c6"
+  ],
+  "completedByChildId": "4f1b2c3d-0000-4000-8000-0000000000c6",
+  "completionResultSummary": "Changelog written.",
+  "status": "active"
+}

@@ -1,0 +1,1 @@
+[{"ts":1761400001950,"type":"say","say":"text","text":"Write the changelog"},{"ts":1761400001990,"type":"say","say":"api_req_started","text":"{\"apiProtocol\":\"anthropic\",\"tokensIn\":1000,\"tokensOut\":20,\"cacheWrites\":10,\"cacheReads\":800,\"cost\":0.004}"}]

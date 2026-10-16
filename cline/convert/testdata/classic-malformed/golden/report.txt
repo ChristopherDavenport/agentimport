@@ -1,0 +1,21 @@
+cline: 20 elements and files: mapped 3 kept 6 dropped 2 malformed 9
+  gap      agentimport/context-replace                       1  from this point Cline sends a block 0 of API message 4 with its text replaced by other text (1 bytes); the session keeps the original, and the edit is a custom entry (at context_history.json:2)
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  gap      agentimport/tool-error                            1  is_error is the member cline:is_error; function_call_output has no error flag (at api_conversation_history.json:7)
+  dropped  cline/file-unread                                 1  a file of the task directory the converter does not read
+  dropped  cline/null-block                                  1  a content block that is not an object is left out (at api_conversation_history.json:4)
+  dropped  cline/ui-restated                                 1  a say task UI message restates the API history, or is a prompt carrying nothing (at ui_messages.json:1)
+  lossy    cline/invalid-input                               1  a tool_use input that is not a JSON object is recorded as its JSON text (at api_conversation_history.json:4)
+  lossy    cline/missing-index                               1  the task has no entry in state/taskHistory.json, which older releases kept in VS Code's state database; the working directory is unknown and the deleted range is taken from the UI messages alone
+  lossy    cline/mistyped-member                             1  a text block's members text are not of their type; they are kept in cline:block and read as empty (at api_conversation_history.json:4)
+  lossy    cline/range-invalid                               1  a deleted range that is not two counts in order is ignored (at ui_messages.json:5)
+  kept     cline/anthropic-block                             1  a server_tool_use block is an anthropic.server_tool_use item (at api_conversation_history.json:4)
+  kept     cline/content-malformed                           1  a message whose content is neither text nor blocks is a custom entry (at api_conversation_history.json:5)
+  kept     cline/extension-part                              1  a document block is the extension part anthropic.document (at api_conversation_history.json:7)
+  kept     cline/members                                     1  the message's members modelInfo are cline:message (at api_conversation_history.json:4)
+  kept     cline/orphan-result                               1  a tool result for "nope", which no call of the response before it made, is a custom entry (at api_conversation_history.json:7)
+  kept     cline/task-file                                   1  the task's settings snapshot is the header member cline:settings
+  kept     cline/ui-record                                   2  a say brand_new_say UI message is a custom entry (at ui_messages.json:4, ui_messages.json:5)
+  kept     cline/unknown-role                                1  an element with role "system" is a custom entry (at api_conversation_history.json:6)
+  repaired cline/malformed-element                           7  an element that is not an object; it is skipped (at ui_messages.json:2, ui_messages.json:3, context_history.json:1, context_history.json:3, context_history.json:4)
+  repaired cline/malformed-file                              2  the array is cut short or broken after its last whole element; the 7 elements before the fault are read
