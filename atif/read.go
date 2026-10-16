@@ -33,7 +33,9 @@ type File struct {
 	// Cut is set when the document does not parse to its end, as a file
 	// a producer was rewriting in place when it was killed does not:
 	// Doc then holds the root members and the steps that end before
-	// CutAt, the byte the parse stopped at.
+	// CutAt, the byte after the last value that parsed. It is taken
+	// where the parse last succeeded, not where it failed, since where
+	// encoding/json stops on an error differs between Go releases.
 	Cut   error
 	CutAt int64
 	// CutStep says a step was cut short. It is a unit the reader could
@@ -104,9 +106,10 @@ func (f *File) salvage(data []byte) error {
 		f.Cut, f.CutAt = err, at
 	}
 	for {
+		at := dec.InputOffset()
 		tok, err := dec.Token()
 		if err != nil {
-			cut(err, dec.InputOffset())
+			cut(err, at)
 			break
 		}
 		if tok == json.Delim('}') {
@@ -116,7 +119,7 @@ func (f *File) salvage(data []byte) error {
 		}
 		key, ok := tok.(string)
 		if !ok {
-			cut(errors.New("a member name is not a string"), dec.InputOffset())
+			cut(errors.New("a member name is not a string"), at)
 			break
 		}
 		start := dec.InputOffset()
@@ -160,9 +163,9 @@ func (f *File) salvage(data []byte) error {
 
 // salvageArray reads the elements of the array that starts at or after
 // offset start, a member's value following its name, up to the first
-// that does not parse. It returns those elements, where the parse
-// stopped, whether an element was cut short, and why; nil elements when
-// the value is not an array.
+// that does not parse. It returns those elements, the byte after the
+// last of them (where the array starts, with none), whether an element
+// was cut short, and why; nil elements when the value is not an array.
 func salvageArray(data []byte, start int64) (elems []json.RawMessage, at int64, partial bool, err error) {
 	i := int(start)
 	for i < len(data) && (data[i] == ':' || data[i] == ' ' || data[i] == '\t' || data[i] == '\n' || data[i] == '\r') {
@@ -174,7 +177,7 @@ func salvageArray(data []byte, start int64) (elems []json.RawMessage, at int64, 
 		if terr == nil {
 			terr = errors.New("the member is cut short")
 		}
-		return nil, int64(i) + dec.InputOffset(), false, terr
+		return nil, int64(i), false, terr
 	}
 	elems = []json.RawMessage{}
 	for dec.More() {
@@ -184,12 +187,13 @@ func salvageArray(data []byte, start int64) (elems []json.RawMessage, at int64, 
 			// Something of the element was read when the decoder got past
 			// its first byte.
 			rest := bytes.TrimLeft(data[i+int(before):], " \t\r\n,")
-			return elems, int64(i) + dec.InputOffset(), len(rest) > 0, derr
+			return elems, int64(i) + before, len(rest) > 0, derr
 		}
 		elems = append(elems, raw)
 	}
+	end := dec.InputOffset()
 	if _, terr := dec.Token(); terr != nil {
-		return elems, int64(i) + dec.InputOffset(), false, terr
+		return elems, int64(i) + end, false, terr
 	}
 	return elems, int64(i) + dec.InputOffset(), false, errors.New("the document is cut short after the array")
 }
