@@ -2,6 +2,7 @@ package convert
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 
@@ -120,8 +121,29 @@ func (c *docConv) output(i int, s *atif.Step, r *atif.Result, cl *call) ([]agent
 		out.Output.Text = r.Content.Text
 	}
 	e := agentsession.NewItemEntry(out)
-	var entries []agentsession.Entry
+	var entries, after []agentsession.Entry
 	linked := false
+	if rec, ok := c.spawnedBy[cl.native]; ok && !c.sidechains[rec.agent].done {
+		ts := c.stepTime(i, s)
+		if ts.IsZero() {
+			ts = c.last
+		}
+		child, leaf, ok := c.sidechainChild(c.sidechains[rec.agent], cl.id, !rec.waited, ts)
+		switch {
+		case ok && rec.waited:
+			linked = true
+			entries = append(entries, agentsession.NewSubsessionLink(child, cl.id))
+			if leaf != "" {
+				e.Parents = []agentsession.EntryRef{{Session: child, Entry: leaf}}
+			}
+		case ok:
+			// The output is the CLI's acknowledgement that the agent
+			// started; the peer link follows it (RFC 0001, link).
+			link := agentsession.NewLinkEntry(agentsession.RelPeer, child)
+			link.CallID = cl.id
+			after = append(after, link)
+		}
+	}
 	for _, ref := range r.Refs.List {
 		if !linked {
 			child, leaf, ok, err := c.spawn(i, s, ref, cl.id)
@@ -157,7 +179,7 @@ func (c *docConv) output(i int, s *atif.Step, r *atif.Result, cl *call) ([]agent
 	if r.Refs.Object {
 		c.addf(agentimport.Repaired, "atif/ref-object", line, "subagent_trajectory_ref is one object, as RFC 0001 v1.0 wrote it, not a list; it is read as a list of one")
 	}
-	return append(entries, e), nil
+	return append(append(entries, e), after...), nil
 }
 
 // rawToolResult takes the block a Claude Code run recorded as what the
@@ -441,6 +463,38 @@ func (c *docConv) repeated(line int, what string) {
 // sessions, its findings and units in report. A document that fails to
 // convert is a finding, and its units are dropped.
 func (fam *family) child(in docInput, t target, report *agentimport.Report, from string) ([]*agentsession.Session, string, error) {
+	units := in.t.Units()
+	if in.file != nil && in.file.CutStep {
+		units++
+	}
+	if in.synthetic {
+		// Its root is the other document's.
+		units--
+	}
+	drop := func() {
+		for range units {
+			report.Line(agentimport.LineDropped)
+		}
+	}
+	// Each file and embedded trajectory converts once, so neither can
+	// nest without end; this bound holds whatever names a document.
+	key := in.key()
+	if fam.depth >= maxDepth || fam.active[key] {
+		drop()
+		why := fmt.Sprintf("nests %d documents deep, past the %d the conversion follows", fam.depth+1, maxDepth)
+		if fam.active[key] {
+			why = "is one the conversion is converting already, which names itself through it"
+		}
+		report.Addf(agentimport.Dropped, "atif/subagent-nesting", in.name, 0,
+			"the document named from %s %s; its %d units are left out", displayName(from), why, units)
+		return nil, "", errNesting
+	}
+	fam.active[key] = true
+	fam.depth++
+	defer func() {
+		delete(fam.active, key)
+		fam.depth--
+	}()
 	sub := agentimport.NewReport(Source)
 	sub.Unit = Unit
 	sessions, leaf, err := fam.one(in, t, sub)
@@ -448,19 +502,30 @@ func (fam *family) child(in docInput, t target, report *agentimport.Report, from
 		fam.held = append(fam.held, in.real)
 	}
 	if err != nil {
-		units := in.t.Units()
-		if in.file != nil && in.file.CutStep {
-			units++
-		}
-		for range units {
-			report.Line(agentimport.LineDropped)
-		}
+		drop()
 		report.Addf(agentimport.Dropped, "atif/subagent-failed", in.name, 0,
 			"the document named from %s could not be converted (%s); its %d units are left out", displayName(from), agentimport.ErrorText(err), units)
 		return nil, "", err
 	}
 	report.Merge(sub)
 	return sessions, leaf, nil
+}
+
+// maxDepth is how deep the conversion follows sub-agents and
+// continuations below the main document.
+const maxDepth = 32
+
+// errNesting is why a document past maxDepth, or one already being
+// converted, is not.
+var errNesting = errors.New("nested too deep, or a cycle")
+
+// key identifies a document while it converts: its trajectory, and for
+// a sub-agent's interleaved steps, the first of them and the agent.
+func (in docInput) key() string {
+	if in.synthetic && len(in.t.Steps) > 0 {
+		return fmt.Sprintf("steps:%p:%s", in.t.Steps[0], in.name)
+	}
+	return fmt.Sprintf("doc:%p", in.t)
 }
 
 // unlinked converts the trajectories this one embeds that no reference

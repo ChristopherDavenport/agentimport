@@ -131,6 +131,10 @@ type family struct {
 	embedded map[*atif.Trajectory]bool
 	// held lists the files the conversion converted.
 	held []string
+	// active holds the documents being converted, by docInput.key, and
+	// depth how many are below the main one.
+	active map[string]bool
+	depth  int
 }
 
 func newFamily(opts Options) *family {
@@ -138,7 +142,7 @@ func newFamily(opts Options) *family {
 	r.Unit = Unit
 	fam := &family{opts: opts, report: r, ids: map[string]bool{},
 		files: map[string]*atif.File{}, fileErrs: map[string]error{}, done: map[string]bool{},
-		embedded: map[*atif.Trajectory]bool{}}
+		embedded: map[*atif.Trajectory]bool{}, active: map[string]bool{}}
 	if opts.Dir != "" {
 		fam.root = realPath(opts.Dir)
 	}
@@ -156,6 +160,7 @@ func (fam *family) run(f *atif.File, path string) (*agentimport.Result, error) {
 		fam.held = append(fam.held, real)
 	}
 	in := docInput{t: f.Doc, file: f, dir: fam.opts.Dir}
+	fam.active[in.key()] = true
 	id, native, derived := fam.mainID(f.Doc)
 	sessions, _, err := fam.one(in, target{id: id, native: native, derived: derived}, fam.report)
 	if err != nil {

@@ -193,13 +193,23 @@ result is read as a callee the call waited for:
 | a reference on a result with no call (Terminus 2's summarisation helpers, RFC 0001's compaction example) | its own session with `parent_session` and no `spawned_by`; the parent gets a `subsession` link with no `call_id` |
 | an embedded trajectory no reference names (Qwen Code's orphans, Muse Code's children) | its own session with `parent_session`, no link |
 | a reference that cannot be resolved (a URL, a missing file, `session_id` alone as before v1.7, a file outside the conversion's directory) | kept in `atif:refs` on the output, or a custom entry |
+| Claude Code steps with `extra.is_sidechain`, by `extra.agent_id` | its own session, out of the main one: a subsession of the call whose result's `extra.tool_result_metadata.tool_use_result.agentId` names the agent, linked as above, when its `status` is `completed` or absent; else a `peer` of that call, the link after its output and no `spawned_by`; with no such call, `parent_session` alone |
+
+Harbor's Claude Code adapter writes a session and its sub-agents into
+one trajectory, sorted by time, marking a sub-agent's steps
+`is_sidechain` (`claude_code.py`). The main model never saw them, so
+they leave the main session. Their findings name the document with
+`#sidechain-<agent>` after it, and a step by its position in the
+document.
 
 Resolution is scoped as ATIF scopes it: a `trajectory_id` names an
 embedded trajectory of the document holding the reference. Each file
 and each embedded trajectory converts once: a reference to one already
 converted (itself, an ancestor, another reference's), through a
 symbolic link or not, is reported and not converted again, and a
-continuation chain that comes back on itself ends. `Convert` reads no
+continuation chain that comes back on itself ends. Whatever names a
+document, the conversion follows sub-agents and continuations 32 deep
+and never into a document it is converting already. `Convert` reads no
 file unless `Options.Dir` names the directory; `ConvertFile` reads the
 document's own directory, and nothing outside it once symbolic links
 are resolved, so a document cannot pull another file into a session.
@@ -271,6 +281,7 @@ every converter can report are in [README.md](README.md).
 | `atif/ref-unresolved` | dropped | A sub-agent reference resolves nothing; it is kept, and no session is made. |
 | `atif/result-empty` | dropped | A result with no content, no call and no sub-agent. |
 | `atif/result-malformed` | dropped | A result that is not an object. |
+| `atif/subagent-nesting` | dropped | A sub-agent or continuation nested past 32 documents, or one the conversion is converting already, is not converted; its units are dropped. |
 | `atif/subagent-failed` | dropped | A sub-agent's or continuation's document could not be converted; its units are dropped. |
 | `atif/tool-call-malformed` | dropped | A tool call that is not an object. |
 | `atif/unreached` | dropped | The converter did not reach a step; a bug if it occurs. |
@@ -299,6 +310,7 @@ every converter can report are in [README.md](README.md).
 | `atif/result-without-call` | lossy | A result that names no call is a user message after the step's outputs. |
 | `atif/subagent-unlinked` | lossy | An embedded trajectory no reference names is a session with `parent_session` alone. |
 | `atif/synthetic-tool-calls` | lossy | Terminus 2 parsed its calls from the model's text and rewrote its message. |
+| `atif/sidechain` | lossy | Claude Code sub-agent steps the adapter interleaved with the main session's are the sub-agent's own session: a subsession or peer of the call whose result names the agent, or one with `parent_session` alone. |
 | `atif/system-message` | lossy | A system step after the conversation started is a system message. |
 | `atif/system-prompt` | lossy | A system step before the first user or agent step is the instructions. |
 | `atif/tool-definition` | lossy | A tool definition that is not a chat-completions function tool is kept in `atif:tool_definitions`, not in the settings. |

@@ -252,11 +252,15 @@ func TestContexts(t *testing.T) {
 			"user: Environment note: 3 steps left.", "user: from nowhere",
 			`call t4 bash {"command":"go test"}`, "user: ok", "output t4 PASS",
 		}},
-		// The claude-code adapter's raw block is the output.
+		// The claude-code adapter's raw block is the output; the
+		// sub-agents' interleaved steps are not the main context.
 		{"claude-code", 0, []string{
 			"user: Read the file.", "reasoning", "assistant: Reading.",
-			`call toolu_1 Read {"file_path":"/work/a.txt"}`, "output toolu_1 hello", "assistant: It says hello.",
+			`call toolu_1 Read {"file_path":"/work/a.txt"}`, "output toolu_1 hello",
+			`call toolu_2 Task {"description":"look","prompt":"Find the greeting."}`, "output toolu_2 found it",
+			"assistant: It says hello.",
 		}},
+		{"claude-code", 1, []string{"user: Find the greeting.", "assistant: found it"}},
 		// Vibe: the user step after a boundary with no observation is
 		// its summary; one that carries results is not.
 		{"vibe", 0, []string{

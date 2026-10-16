@@ -1,9 +1,10 @@
-atif: 4 roots and steps: mapped 4 kept 0 dropped 0 malformed 0
-  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+atif: 8 roots and steps: mapped 8 kept 0 dropped 0 malformed 0
+  gap      agentimport/provenance                            3  the import is recorded in the header member agentimport:source
   gap      agentimport/usage-detail                          1  Responses usage has no cost and no place for the producer's extra counts; they are in atif:metrics (at 2)
   lossy    atif/native-available                             1  the document was written by Harbor's claude-code adapter from claude-code's own log, which agentimport converts directly (-from claudecode) with less lost
   lossy    atif/reasoning-text                               1  reasoning_content is a reasoning item's summary text with no encrypted_content, which a provider that signs its reasoning will not take back (steps: 1) (at 2)
-  lossy    atif/response-status                              1  ATIF records no response status, so no response has one (responses: 2) (at 2)
-  kept     atif/extra                                        5  the agent's extra: kept in the header member atif:agent_extra (at 1, 2, 2, 2)
+  lossy    atif/response-status                              2  ATIF records no response status, so no response has one (responses: 1) (at #sidechain-a1:5, 2)
+  lossy    atif/sidechain                                    2  Harbor's Claude Code adapter interleaves sub-agent a1's 2 steps with the main session's by time; they are not the main model's context and are session 18fbba9e-4c46-5dbe-b836-1382876082b9, a subsession of call toolu_2, whose result names the agent (at 4, 6)
+  kept     atif/extra                                       10  the agent's extra: kept in the header member atif:agent_extra (at 1, 2, 2, 2, #sidechain-a1:4)
   kept     atif/metrics                                      1  the metrics beside the token counts are in atif:metrics (at 2)
-  repaired atif/raw-tool-result                              1  the result's content is Claude Code's block with the tool's stdout and metadata appended; the output is the block the model saw, from extra.tool_result_metadata.raw_tool_result (at 2)
+  repaired atif/raw-tool-result                              2  the result's content is Claude Code's block with the tool's stdout and metadata appended; the output is the block the model saw, from extra.tool_result_metadata.raw_tool_result (at 2, 3)

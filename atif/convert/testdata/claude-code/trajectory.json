@@ -1,20 +1,180 @@
 {
   "schema_version": "ATIF-v1.7",
   "session_id": "cc-run",
-  "agent": {"name": "claude-code", "version": "2.1.300", "model_name": "claude-x", "extra": {"cwds": ["/work"], "agent_ids": ["a1"]}},
+  "agent": {
+    "name": "claude-code",
+    "version": "2.1.300",
+    "model_name": "claude-x",
+    "extra": {
+      "cwds": [
+        "/work"
+      ],
+      "agent_ids": [
+        "a1",
+        "a2"
+      ]
+    }
+  },
   "steps": [
-    {"step_id": 1, "timestamp": "2026-09-30T01:00:00Z", "source": "user", "message": "Read the file.", "extra": {"cwd": "/work"}},
-    {"step_id": 2, "timestamp": "2026-09-30T01:00:03Z", "source": "agent", "model_name": "claude-x", "llm_call_count": 1,
-     "message": "Reading.", "reasoning_content": "Use the read tool.",
-     "tool_calls": [{"tool_call_id": "toolu_1", "function_name": "Read", "arguments": {"file_path": "/work/a.txt"},
-       "extra": {"tool_use_name": "Read", "status": "completed"}}],
-     "observation": {"results": [{"source_call_id": "toolu_1", "content": "hello\n[stdout]\nhello\n[metadata]\n{}",
-       "extra": {"tool_result_metadata": {"raw_tool_result": {"type": "tool_result", "tool_use_id": "toolu_1", "content": "hello"}, "is_error": false}}}]},
-     "metrics": {"prompt_tokens": 2300, "completion_tokens": 40, "cached_tokens": 2000,
-       "extra": {"cache_creation_input_tokens": 200, "cache_read_input_tokens": 2000, "service_tier": "standard"}},
-     "extra": {"stop_reason": "tool_use", "requestId": "req_1", "is_sidechain": false}},
-    {"step_id": 3, "timestamp": "2026-09-30T01:00:06Z", "source": "agent", "model_name": "claude-x", "llm_call_count": 1,
-     "message": "It says hello.",
-     "metrics": {"prompt_tokens": 2400, "completion_tokens": 6, "cached_tokens": 2300}}
+    {
+      "step_id": 1,
+      "timestamp": "2026-09-30T01:00:00Z",
+      "source": "user",
+      "message": "Read the file.",
+      "extra": {
+        "cwd": "/work"
+      }
+    },
+    {
+      "step_id": 2,
+      "timestamp": "2026-09-30T01:00:03Z",
+      "source": "agent",
+      "model_name": "claude-x",
+      "llm_call_count": 1,
+      "message": "Reading.",
+      "reasoning_content": "Use the read tool.",
+      "tool_calls": [
+        {
+          "tool_call_id": "toolu_1",
+          "function_name": "Read",
+          "arguments": {
+            "file_path": "/work/a.txt"
+          },
+          "extra": {
+            "tool_use_name": "Read",
+            "status": "completed"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "toolu_1",
+            "content": "hello\n[stdout]\nhello\n[metadata]\n{}",
+            "extra": {
+              "tool_result_metadata": {
+                "raw_tool_result": {
+                  "type": "tool_result",
+                  "tool_use_id": "toolu_1",
+                  "content": "hello"
+                },
+                "is_error": false
+              }
+            }
+          }
+        ]
+      },
+      "metrics": {
+        "prompt_tokens": 2300,
+        "completion_tokens": 40,
+        "cached_tokens": 2000,
+        "extra": {
+          "cache_creation_input_tokens": 200,
+          "cache_read_input_tokens": 2000,
+          "service_tier": "standard"
+        }
+      },
+      "extra": {
+        "stop_reason": "tool_use",
+        "requestId": "req_1",
+        "is_sidechain": false
+      }
+    },
+    {
+      "step_id": 3,
+      "timestamp": "2026-09-30T01:00:04Z",
+      "source": "agent",
+      "model_name": "claude-x",
+      "llm_call_count": 1,
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "toolu_2",
+          "function_name": "Task",
+          "arguments": {
+            "description": "look",
+            "prompt": "Find the greeting."
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "toolu_2",
+            "content": "found it\n[metadata] {}",
+            "extra": {
+              "tool_result_metadata": {
+                "tool_use_result": {
+                  "status": "completed",
+                  "agentId": "a1"
+                },
+                "raw_tool_result": {
+                  "type": "tool_result",
+                  "tool_use_id": "toolu_2",
+                  "content": "found it"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "metrics": {
+        "prompt_tokens": 2350,
+        "completion_tokens": 20,
+        "cached_tokens": 2300
+      },
+      "extra": {
+        "is_sidechain": false
+      }
+    },
+    {
+      "step_id": 4,
+      "timestamp": "2026-09-30T01:00:04.5Z",
+      "source": "user",
+      "message": "Find the greeting.",
+      "extra": {
+        "is_sidechain": true,
+        "agent_id": "a1"
+      }
+    },
+    {
+      "step_id": 5,
+      "timestamp": "2026-09-30T01:00:05Z",
+      "source": "agent",
+      "model_name": "claude-x",
+      "llm_call_count": 1,
+      "message": "found it",
+      "metrics": {
+        "prompt_tokens": 100,
+        "completion_tokens": 3
+      },
+      "extra": {
+        "is_sidechain": true,
+        "agent_id": "a1"
+      }
+    },
+    {
+      "step_id": 6,
+      "timestamp": "2026-09-30T01:00:05.5Z",
+      "source": "user",
+      "message": "Background chore.",
+      "extra": {
+        "is_sidechain": true,
+        "agent_id": "a2"
+      }
+    },
+    {
+      "step_id": 7,
+      "timestamp": "2026-09-30T01:00:06Z",
+      "source": "agent",
+      "model_name": "claude-x",
+      "llm_call_count": 1,
+      "message": "It says hello.",
+      "metrics": {
+        "prompt_tokens": 2400,
+        "completion_tokens": 6,
+        "cached_tokens": 2300
+      }
+    }
   ]
 }

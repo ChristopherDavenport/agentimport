@@ -31,6 +31,12 @@ type docInput struct {
 	// real is the file's real path, for a document read from a file
 	// other than the main one.
 	real string
+	// synthetic says the document is steps of another, a sub-agent's
+	// that Harbor's Claude Code adapter interleaved: its root is not a
+	// unit of the input, and the producer's notes are the other's.
+	synthetic bool
+	// pos is, for a synthetic document, each step's index in the other.
+	pos []int
 }
 
 // target is the session a document becomes.
@@ -59,6 +65,7 @@ func (fam *family) one(in docInput, tgt target, report *agentimport.Report) ([]*
 		counts:  map[string]int{},
 		firstAt: map[string]int{},
 	}
+	c.splitSidechains()
 	h, err := c.header()
 	if err != nil {
 		return nil, "", err
@@ -117,6 +124,14 @@ type docConv struct {
 	// counts and firstAt gather findings reported once per document.
 	counts  map[string]int
 	firstAt map[string]int
+	// sidechains are the Claude Code sub-agents whose steps the
+	// document interleaves, in the order they appear; moved marks their
+	// steps, which their own sessions hold; spawnedBy maps a call's
+	// native ID to the agent its result names.
+	sidechains     map[string]*sidechain
+	sidechainOrder []*sidechain
+	moved          map[int]bool
+	spawnedBy      map[string]spawnRecord
 }
 
 // call is one tool call of the document.
@@ -127,7 +142,16 @@ type call struct {
 }
 
 func (c *docConv) addf(kind agentimport.Kind, code string, line int, format string, args ...any) {
-	c.report.Addf(kind, code, c.in.name, line, format, args...)
+	c.report.Addf(kind, code, c.in.name, c.line(line), format, args...)
+}
+
+// line is a step's 1-based position in the document it was written in:
+// a synthetic document's steps are numbered as in the other.
+func (c *docConv) line(line int) int {
+	if line > 0 && line <= len(c.in.pos) {
+		return c.in.pos[line-1] + 1
+	}
+	return line
 }
 
 // count notes a finding reported once per document, with the number of
@@ -151,13 +175,12 @@ func (c *docConv) header() (agentsession.Header, error) {
 	t := c.t
 	h := agentsession.Header{ID: c.tgt.id, ParentSession: c.tgt.parent, SpawnedBy: c.tgt.spawnedBy}
 	for i, s := range t.Steps {
-		if s == nil || s.Err != nil || s.Timestamp == "" {
+		if s == nil || s.Err != nil || s.Timestamp == "" || c.moved[i] {
 			continue
 		}
 		if ts, _, ok := parseTime(s.Timestamp); ok && (h.CreatedAt.IsZero() || ts.Before(h.CreatedAt)) {
 			h.CreatedAt = ts
 		}
-		_ = i
 	}
 	if h.CreatedAt.IsZero() {
 		switch {
@@ -212,6 +235,9 @@ func (c *docConv) header() (agentsession.Header, error) {
 	if as := object(ext["agentsession"]); strings.HasPrefix(str(as["format"]), "agentsession/") {
 		c.exporter = true
 		h.CWD = str(as["cwd"])
+	}
+	if c.in.synthetic {
+		return h, nil
 	}
 	a := t.Agent
 	switch {
@@ -387,7 +413,9 @@ func (c *docConv) clean(line int, raw json.RawMessage) (json.RawMessage, error) 
 // run converts the document's steps, the sub-agents it embeds that no
 // step names and its continuation, and accounts for every unit.
 func (c *docConv) run() error {
-	c.report.Line(agentimport.LineMapped)
+	if !c.in.synthetic {
+		c.report.Line(agentimport.LineMapped)
+	}
 	if f := c.in.file; f != nil && f.Cut != nil {
 		lost := ""
 		if len(f.CutMembers) > 0 {
@@ -413,6 +441,7 @@ func (c *docConv) run() error {
 	if err := c.unlinked(); err != nil {
 		return err
 	}
+	c.unlinkedSidechains()
 	if err := c.continuation(); err != nil {
 		return err
 	}
@@ -424,6 +453,9 @@ func (c *docConv) run() error {
 // document.
 func (c *docConv) tally() {
 	for i := range c.t.Steps {
+		if c.moved[i] {
+			continue
+		}
 		d, ok := c.disp[i]
 		if !ok {
 			d = agentimport.LineDropped
@@ -507,6 +539,9 @@ func (c *docConv) firstConfig() error {
 	var notes []json.RawMessage
 	if !c.exporter {
 		for i, s := range c.t.Steps {
+			if c.moved[i] {
+				continue
+			}
 			text, ok := leadingSystem(s)
 			if !ok {
 				break

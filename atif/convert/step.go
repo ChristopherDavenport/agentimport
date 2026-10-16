@@ -19,7 +19,7 @@ func (c *docConv) steps() error {
 	steps := c.t.Steps
 	for i := 0; i < len(steps); i++ {
 		s := steps[i]
-		if c.leading[i] {
+		if c.leading[i] || c.moved[i] {
 			continue
 		}
 		if s == nil || s.Err != nil {
@@ -65,7 +65,7 @@ func (c *docConv) steps() error {
 
 // checkStepID notes a step_id that is not the step's position.
 func (c *docConv) checkStepID(i int, s *atif.Step) {
-	if n, _, ok := atif.Int(s.StepID); !ok || n != int64(i+1) {
+	if n, _, ok := atif.Int(s.StepID); !ok || n != int64(c.line(i+1)) {
 		c.count("atif/step-id", i+1)
 	}
 }
@@ -568,7 +568,7 @@ func (c *docConv) agentStep(i int, s *atif.Step) error {
 	dispatch := calls == 0
 	respID := ""
 	if !dispatch {
-		respID = fmt.Sprintf("atif-step-%d", line)
+		respID = fmt.Sprintf("atif-step-%d", c.line(line))
 	}
 	item := func(it openresponses.Item) *agentsession.ItemEntry {
 		e := agentsession.NewItemEntry(it)

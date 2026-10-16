@@ -18,8 +18,9 @@ versions may break the API.
   ATIF's RFC has it, sub-agents referenced from a call's result are
   subsessions, those referenced from no call are linked with no
   `call_id` (a gap), embedded trajectories no step names are sessions
-  with `parent_session`, and continuations are sessions the previous
-  one is `continued_in`. A document agentsession's exporter wrote is
+  with `parent_session`, continuations are sessions the previous
+  one is `continued_in`, and the sub-agent steps Harbor's Claude Code
+  adapter interleaves leave the main session for their own. A document agentsession's exporter wrote is
   rebuilt from the raw items it carries, its compaction's kept window
   put back before it. Related files are read inside the document's
   directory alone, each once. The command detects ATIF by its
