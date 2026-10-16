@@ -194,10 +194,7 @@ func (c *docConv) stepRest(i int, s *atif.Step) map[string]json.RawMessage {
 				}
 			}
 			if len(found) > 0 {
-				kind, verb := agentimport.Kept, "kept in "+Source+":step"
-				if c.fam.opts.Slim {
-					kind, verb = agentimport.Dropped, "left out"
-				}
+				kind, verb := c.keeping("step")
 				c.addf(kind, "atif/agent-only-field", i+1, "a %s step carries members Harbor allows on agent steps alone, which are %s: %s", s.Source, verb, strings.Join(found, ", "))
 			}
 		}
@@ -332,8 +329,9 @@ func (c *docConv) injection(i int, s *atif.Step) error {
 		return err
 	}
 	c.mark(i, agentimport.LineMapped)
+	_, verb := c.keeping("step")
 	c.addf(agentimport.Lossy, "atif/context-injection", i+1,
-		"an append boundary's results are user messages; the step's own message, which describes it, is in %s:step", Source)
+		"an append boundary's results are user messages; the step's own message, which describes it, is %s", verb)
 	return nil
 }
 
@@ -567,7 +565,8 @@ func (c *docConv) agentStep(i int, s *atif.Step) error {
 				rest = map[string]json.RawMessage{}
 			}
 			rest["llm_call_count"] = s.LLMCallCount
-			c.addf(agentimport.Kept, "atif/mistyped-member", line, "llm_call_count is not a count; it is kept in %s:step", Source)
+			kind, verb := c.keeping("step")
+			c.addf(kind, "atif/mistyped-member", line, "llm_call_count is not a count; it is %s", verb)
 		}
 	}
 	dispatch := calls == 0

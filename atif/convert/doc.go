@@ -376,6 +376,15 @@ func (c *docConv) keepMembers(h *agentsession.Header, name string, extra map[str
 	return c.headerMember(h, name, json.RawMessage(raw))
 }
 
+// keeping is how a finding states a value kept in member name, or with
+// Slim left out.
+func (c *docConv) keeping(name string) (agentimport.Kind, string) {
+	if c.fam.opts.Slim {
+		return agentimport.Dropped, "left out"
+	}
+	return agentimport.Kept, "kept in " + Source + ":" + name
+}
+
 // reportMembers reports members kept in member name, or dropped with
 // Slim: undeclared ones, which Harbor's models refuse, and declared
 // ones of another type.
@@ -387,10 +396,7 @@ func (c *docConv) reportMembers(line int, name string, extra map[string]json.Raw
 		}
 	}
 	slices.Sort(unknown)
-	kind, verb := agentimport.Kept, "kept in "+Source+":"+name
-	if c.fam.opts.Slim {
-		kind, verb = agentimport.Dropped, "left out"
-	}
+	kind, verb := c.keeping(name)
 	if len(unknown) > 0 {
 		c.addf(kind, "atif/unknown-member", line, "members Harbor's models do not declare, which they refuse, are %s: %s", verb, strings.Join(unknown, ", "))
 	}
@@ -554,6 +560,8 @@ func (c *docConv) firstConfig() error {
 				note := map[string]any{"step": i + 1}
 				if !atif.IsNull(s.Ext) {
 					note["extra"] = s.Ext
+					kind, verb := c.keeping("system_steps")
+					c.addf(kind, "atif/extra", i+1, "a leading system step's extra object is %s", verb)
 				}
 				if len(rest) > 0 {
 					note["members"] = rest

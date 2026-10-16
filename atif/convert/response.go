@@ -30,7 +30,8 @@ func (c *docConv) response(i int, s *atif.Step, respID string, calls int64) (*ag
 					return nil, err
 				}
 			}
-			c.addf(agentimport.Kept, "atif/mistyped-member", line, "the metrics are not an object; they are kept in %s:metrics", Source)
+			kind, verb := c.keeping("metrics")
+			c.addf(kind, "atif/mistyped-member", line, "the metrics are not an object; they are %s", verb)
 			return e, nil
 		}
 		u := c.usage(line, m)
@@ -56,6 +57,11 @@ func (c *docConv) keepMetrics(entries []agentsession.Entry, i int, s *atif.Step)
 		return nil
 	}
 	if s.Metrics.Err != nil {
+		kind, verb := c.keeping("metrics")
+		c.addf(kind, "atif/mistyped-member", i+1, "the metrics are not an object; they are %s", verb)
+		if c.fam.opts.Slim {
+			return nil
+		}
 		return c.b.Member(entries[len(entries)-1], "metrics", s.Metrics.Raw)
 	}
 	raw, err := json.Marshal(s.Metrics)
@@ -102,7 +108,8 @@ func (c *docConv) count64(line int, name string, raw json.RawMessage) (int64, bo
 	n, plain, ok := atif.Int(raw)
 	switch {
 	case !ok:
-		c.addf(agentimport.Lossy, "atif/metrics-invalid", line, "%s is %s, not a count; it is not in the usage, and is kept in %s:metrics", name, string(raw), Source)
+		_, verb := c.keeping("metrics")
+		c.addf(agentimport.Lossy, "atif/metrics-invalid", line, "%s is %s, not a count; it is not in the usage, and is %s", name, string(raw), verb)
 	case !plain:
 		c.addf(agentimport.Repaired, "atif/metrics-count", line, "%s is written %s; it is read as %d, as Harbor's models read it", name, string(raw), n)
 	}
@@ -136,7 +143,8 @@ func (c *docConv) metricsMember(e agentsession.Entry, line int, m *atif.Metrics)
 		return nil
 	}
 	if _, ok := rest["cost_usd"]; ok || rest["extra"] != nil {
-		c.addf(agentimport.Gap, "agentimport/usage-detail", line, "Responses usage has no cost and no place for the producer's extra counts; they are in %s:metrics", Source)
+		_, verb := c.keeping("metrics")
+		c.addf(agentimport.Gap, "agentimport/usage-detail", line, "Responses usage has no cost and no place for the producer's extra counts; they are %s", verb)
 	}
 	if c.fam.opts.Slim {
 		c.addf(agentimport.Dropped, "atif/metrics", line, "the metrics beside the token counts (cost, extra, token ids, logprobs) are left out")

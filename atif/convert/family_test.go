@@ -132,3 +132,49 @@ func TestTimestampCountedOnce(t *testing.T) {
 		t.Errorf("no atif/timestamp: %v", res.Report.Codes())
 	}
 }
+
+// TestSlimFindings checks that what Slim leaves out is reported as left
+// out, never as kept, and that a leading system step's extra is
+// reported either way.
+func TestSlimFindings(t *testing.T) {
+	doc := `{"schema_version":"ATIF-v1.7","session_id":"s","steps":[` +
+		`{"step_id":1,"source":"system","message":"Be brief.","extra":{"origin":"x"}},` +
+		`{"step_id":2,"source":"user","message":"hi"},` +
+		`{"step_id":3,"source":"agent","message":"a","metrics":"bad"},` +
+		`{"step_id":4,"source":"agent","message":"b","llm_call_count":"many"},` +
+		`{"step_id":5,"source":"agent","message":"c","metrics":{"prompt_tokens":"lots","completion_tokens":3,"cost_usd":0.1}},` +
+		`{"step_id":6,"source":"agent","llm_call_count":0,"tool_calls":[{"tool_call_id":"d","function_name":"f","arguments":{}}],"metrics":5,` +
+		`"observation":{"results":[{"source_call_id":"d","content":"ok"}]}},` +
+		`{"step_id":7,"source":"system","message":"note","extra":{"context_management":{"type":"injection","boundary":"append"}},"observation":{"results":[{"content":"fact"}]}}]}`
+	for _, slim := range []bool{false, true} {
+		f, err := atif.Parse([]byte(doc))
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, err := Convert(f, Options{CreatedAt: fixed, Slim: slim})
+		if err != nil {
+			t.Fatal(err)
+		}
+		lines := map[string][]int{}
+		for _, fd := range res.Report.Findings {
+			lines[fd.Code] = append(lines[fd.Code], fd.Line)
+			if !slim {
+				continue
+			}
+			if fd.Kind == "kept" && slices.Contains([]string{"atif/mistyped-member", "atif/metrics", "atif/extra", "atif/unknown-member"}, fd.Code) {
+				t.Errorf("slim: %s is kept: %s", fd.Code, fd.Detail)
+			}
+			for _, claim := range []string{"kept in atif:", "are in atif:", "is in atif:"} {
+				if strings.Contains(fd.Detail, claim) {
+					t.Errorf("slim: %s says %q: %s", fd.Code, claim, fd.Detail)
+				}
+			}
+		}
+		if !slices.Contains(lines["atif/extra"], 1) {
+			t.Errorf("slim %v: the leading system step's extra is not reported: %v", slim, lines["atif/extra"])
+		}
+		if !slices.Contains(lines["atif/mistyped-member"], 6) {
+			t.Errorf("slim %v: the dispatch step's metrics are not reported: %v", slim, lines["atif/mistyped-member"])
+		}
+	}
+}
