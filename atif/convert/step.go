@@ -71,13 +71,18 @@ func (c *docConv) checkStepID(i int, s *atif.Step) {
 }
 
 // stepTime is a step's time, zero when it has none or it does not
-// parse, which the entry before it then lends.
+// parse, which the entry before it then lends. A step it repairs is
+// counted once, however often its time is asked for.
 func (c *docConv) stepTime(i int, s *atif.Step) time.Time {
 	if s.Timestamp == "" {
 		return time.Time{}
 	}
 	t, naive, ok := parseTime(s.Timestamp)
-	if !ok || naive {
+	if (!ok || naive) && !c.timed[i] {
+		if c.timed == nil {
+			c.timed = map[int]bool{}
+		}
+		c.timed[i] = true
 		c.count("atif/timestamp", i+1)
 	}
 	return t

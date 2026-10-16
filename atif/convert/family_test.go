@@ -108,3 +108,27 @@ func TestUnreadableRefNamesNoPath(t *testing.T) {
 		t.Errorf("no atif/ref-unresolved: %v", res.Report.Codes())
 	}
 }
+
+// TestTimestampCountedOnce checks that a step whose time is repaired is
+// counted once, though a reference on its result asks for its time too.
+func TestTimestampCountedOnce(t *testing.T) {
+	f, err := atif.Parse([]byte(`{"schema_version":"ATIF-v1.7","session_id":"s","steps":[` +
+		`{"source":"agent","timestamp":"2026-10-01T00:00:00","message":"","tool_calls":[{"tool_call_id":"c","function_name":"Task","arguments":{}}],` +
+		`"observation":{"results":[{"source_call_id":"c","content":"x","subagent_trajectory_ref":[{"trajectory_id":"t1"}]}]}}],` +
+		`"subagent_trajectories":[{"trajectory_id":"t1","steps":[{"source":"user","timestamp":"2026-10-01T00:00:01Z","message":"go"}]}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := Convert(f, Options{CreatedAt: fixed})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, fd := range res.Report.Findings {
+		if fd.Code == "atif/timestamp" && !strings.Contains(fd.Detail, "(steps: 1)") {
+			t.Errorf("%s", fd.Detail)
+		}
+	}
+	if !slices.Contains(res.Report.Codes(), "atif/timestamp") {
+		t.Errorf("no atif/timestamp: %v", res.Report.Codes())
+	}
+}

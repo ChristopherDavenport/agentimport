@@ -124,6 +124,8 @@ type docConv struct {
 	// counts and firstAt gather findings reported once per document.
 	counts  map[string]int
 	firstAt map[string]int
+	// timed marks the steps atif/timestamp counted.
+	timed map[int]bool
 	// sidechains are the Claude Code sub-agents whose steps the
 	// document interleaves, in the order they appear; moved marks their
 	// steps, which their own sessions hold; spawnedBy maps a call's
