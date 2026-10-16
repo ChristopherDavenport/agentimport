@@ -182,6 +182,13 @@ conversion has it already, which a sub-agent sharing its parent's run
 ID, as ATIF allows, does; it is then derived from its parent's ID and
 the document, and the native one kept in `atif:session_id`.
 
+A session store names a file by the session ID, and agentsession's
+stores take letters, digits, `.`, `_` and `-`, at most 200 of them. A
+`session_id` or `trajectory_id` outside that rule (`run 1`, an
+exporter's `<session>/<leaf>`) is not the ID: one is derived from it,
+the same on every conversion, and the native one kept in
+`atif:session_id` or `atif:trajectory_id`.
+
 ### Sub-agents
 
 ATIF says nothing of a sub-agent's lifetime. A reference on a call's
@@ -338,7 +345,7 @@ every converter can report are in [README.md](README.md).
 | `atif/ref-object` | repaired | `subagent_trajectory_ref` is one object, as RFC v1.0 wrote it; it is read as a list of one. |
 | `atif/result-foreign-call` | repaired | A result names a call of an earlier step, which Harbor's validator refuses; it is that call's output. |
 | `atif/result-paired-by-order` | repaired | A step's results name no call, one per call; they are the calls' outputs in order. |
-| `atif/session-id` | repaired | The session ID is not the document's `session_id`: it has none, or another session of the conversion has it. |
+| `atif/session-id` | repaired | The session ID is not the document's `session_id`: it has none, a session store refuses it, or another session of the conversion has it. |
 | `atif/step-id` | repaired | `step_id` values are not the steps' positions; steps are read in document order. |
 | `atif/step-malformed` | repaired | A step that is not an object, or the step a truncated document is cut inside, is skipped. |
 | `atif/subagent-id` | repaired | An embedded trajectory has no `trajectory_id`, or shares one; no reference can name it, or a reference names the first. |

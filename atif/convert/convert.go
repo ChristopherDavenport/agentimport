@@ -173,13 +173,20 @@ func (fam *family) run(f *atif.File, path string) (*agentimport.Result, error) {
 }
 
 // mainID is the main session's ID: the document's session_id, or its
-// trajectory_id, or one derived from its content.
+// trajectory_id, or one derived from its content. A native ID a session
+// store refuses is replaced by one derived from it.
 func (fam *family) mainID(t *atif.Trajectory) (id, native, derived string) {
 	switch {
-	case t.SessionID != "":
+	case t.SessionID != "" && storeName(t.SessionID):
 		id = t.SessionID
-	case t.TrajectoryID != "":
+	case t.SessionID != "":
+		id = agentsession.SubsessionID(Source, "session/"+t.SessionID)
+		derived = "the document's session_id is not a name a session store takes (" + storeRule + "); the session ID is derived from it, and it is " + Source + ":session_id"
+	case t.TrajectoryID != "" && storeName(t.TrajectoryID):
 		id, derived = t.TrajectoryID, "the document has no session_id; the session ID is its trajectory_id"
+	case t.TrajectoryID != "":
+		id = agentsession.SubsessionID(Source, "trajectory/"+t.TrajectoryID)
+		derived = "the document has no session_id, and its trajectory_id is not a name a session store takes (" + storeRule + "); the session ID is derived from the trajectory_id, which is " + Source + ":trajectory_id"
 	default:
 		raw, _ := json.Marshal(t)
 		sum := sha256.Sum256(raw)
@@ -191,11 +198,11 @@ func (fam *family) mainID(t *atif.Trajectory) (id, native, derived string) {
 }
 
 // claim returns a session ID for a document: its own session_id when
-// no other session of the conversion has it, else one derived from the
-// parent's ID and key. derived explains a derived ID; empty when the
-// native one was taken.
+// a session store takes it and no other session of the conversion has
+// it, else one derived from the parent's ID and key. derived explains a
+// derived ID; empty when the native one was taken.
 func (fam *family) claim(native, parent, key string) (id, derived string) {
-	if native != "" && !fam.ids[native] {
+	if native != "" && !fam.ids[native] && storeName(native) {
 		fam.ids[native] = true
 		return native, ""
 	}
@@ -208,10 +215,34 @@ func (fam *family) claim(native, parent, key string) (id, derived string) {
 		id = agentsession.SubsessionID(base, fmt.Sprintf("%s/%d", key, n))
 	}
 	fam.ids[id] = true
-	if native == "" {
+	switch {
+	case native == "":
 		return id, "the document has no session_id; the session ID is derived from its parent's and " + key
+	case !storeName(native):
+		return id, "the document's session_id is not a name a session store takes (" + storeRule + "); the session ID is derived from its parent's and " + key + ", and it is " + Source + ":session_id"
 	}
 	return id, fmt.Sprintf("the document's session_id %s is another session's of this conversion; the session ID is derived from its parent's and %s", native, key)
+}
+
+// storeRule is the rule storeName keeps, as findings state it.
+const storeRule = "letters, digits, '.', '_' and '-', at most 200"
+
+// storeName reports whether a session store takes id as a session's
+// name: agentsession's jsonl and cas stores refuse any other, so a
+// native ID that breaks the rule would convert and then fail to be
+// written.
+func storeName(id string) bool {
+	if id == "" || id == "." || id == ".." || len(id) > 200 {
+		return false
+	}
+	for _, c := range id {
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '.', c == '_', c == '-':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // errOutside is why a file outside the conversion's directory is not
