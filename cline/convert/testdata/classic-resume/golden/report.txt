@@ -1,0 +1,9 @@
+cline: 12 elements and files: mapped 6 kept 3 dropped 3 malformed 0
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  gap      agentimport/usage-detail                          2  cache writes are folded into input_tokens; the request record's usage and cost are cline:usage (at ui_messages.json:2, ui_messages.json:7)
+  dropped  cline/ui-restated                                 3  a say task UI message restates the API history, or is a prompt carrying nothing (at ui_messages.json:1, ui_messages.json:6, ui_messages.json:8)
+  lossy    cline/missing-index                               1  the task has no entry in state/taskHistory.json, which older releases kept in VS Code's state database; the working directory is unknown and the deleted range is taken from the UI messages alone
+  lossy    cline/usage-semantics                             1  nothing names the provider; the input count is read as Anthropic's, which leaves the cache out (at ui_messages.json:3)
+  kept     cline/members                                     2  the message's members modelInfo are cline:message (at api_conversation_history.json:2, api_conversation_history.json:4)
+  kept     cline/ui-record                                   3  a say api_req_started UI message is a custom entry (at ui_messages.json:3, ui_messages.json:4, ui_messages.json:5)
+  kept     cline/usage-without-response                      1  the usage this api_req_started record holds, paid for with no response entry, is the custom entry's usage, which readers count (at ui_messages.json:3)

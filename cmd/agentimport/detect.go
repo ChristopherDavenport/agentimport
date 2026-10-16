@@ -16,6 +16,8 @@ import (
 	atifconvert "github.com/ChristopherDavenport/agentimport/atif/convert"
 	"github.com/ChristopherDavenport/agentimport/claudecode"
 	ccconvert "github.com/ChristopherDavenport/agentimport/claudecode/convert"
+	"github.com/ChristopherDavenport/agentimport/cline"
+	clineconvert "github.com/ChristopherDavenport/agentimport/cline/convert"
 	"github.com/ChristopherDavenport/agentimport/codex"
 	codexconvert "github.com/ChristopherDavenport/agentimport/codex/convert"
 	"github.com/ChristopherDavenport/agentimport/pi"
@@ -57,6 +59,13 @@ var sources = []source{
 		find: atif.FindSessions,
 		convert: func(path string, r *runner) (*agentimport.Result, error) {
 			return atifconvert.ConvertFile(path, atifconvert.Options{Slim: r.slim, Converted: r.atifDone})
+		},
+	},
+	{
+		name: clineconvert.Source,
+		find: cline.FindSessions,
+		convert: func(path string, r *runner) (*agentimport.Result, error) {
+			return clineconvert.ConvertFile(path, clineconvert.Options{Slim: r.slim, Converted: r.clineDone})
 		},
 	},
 }
@@ -189,13 +198,19 @@ const (
 //     first lines;
 //   - an ATIF document by a .json name and a schema_version starting
 //     "ATIF-v", which a document of any layout carries before its
-//     steps or after them.
+//     steps or after them;
+//   - a classic Cline or Roo Code task by the name of its API history
+//     or UI messages in a task directory, tasks/<id>/.
 //
 // An agentsession file, which is already converted, is an error.
 func detect(path string) (source, error) {
 	cx, _ := sourceNamed(codexconvert.Source)
 	if codex.IDFromFileName(path) != "" {
 		return cx, nil
+	}
+	if cline.IsTaskFile(path) {
+		s, _ := sourceNamed(clineconvert.Source)
+		return s, nil
 	}
 	if strings.HasSuffix(path, ".json") {
 		if _, ok := atif.Probe(path); ok {

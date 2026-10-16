@@ -12,6 +12,8 @@ import (
 
 	"github.com/ChristopherDavenport/agentimport"
 	atifconvert "github.com/ChristopherDavenport/agentimport/atif/convert"
+	"github.com/ChristopherDavenport/agentimport/cline"
+	clineconvert "github.com/ChristopherDavenport/agentimport/cline/convert"
 	"github.com/ChristopherDavenport/agentimport/codex"
 	codexconvert "github.com/ChristopherDavenport/agentimport/codex/convert"
 )
@@ -73,8 +75,10 @@ type runner struct {
 	slim    bool
 	skipped *[]skipped
 	indexes map[indexKey]*codexIndex
-	// atifDone records the ATIF files conversions converted.
-	atifDone *atifconvert.Converted
+	// atifDone records the ATIF files conversions converted, and
+	// clineDone the Cline and Roo task directories.
+	atifDone  *atifconvert.Converted
+	clineDone *clineconvert.Converted
 }
 
 type indexKey struct {
@@ -89,7 +93,7 @@ type codexIndex struct {
 }
 
 func newRunner(slim bool, skip *[]skipped) *runner {
-	return &runner{slim: slim, skipped: skip, indexes: map[indexKey]*codexIndex{}, atifDone: &atifconvert.Converted{}}
+	return &runner{slim: slim, skipped: skip, indexes: map[indexKey]*codexIndex{}, atifDone: &atifconvert.Converted{}, clineDone: &clineconvert.Converted{}}
 }
 
 // index returns the index of the tree a Codex rollout's relatives are
@@ -145,6 +149,8 @@ type planned struct {
 	// named says the input is an ATIF file another input names, as a
 	// continuation or a sub-agent's file.
 	named bool
+	// task says the input is a Roo sub-task whose parent is an input.
+	task bool
 }
 
 // plan splits the inputs into those converted first and the Codex
@@ -156,6 +162,8 @@ type planned struct {
 func (r *runner) plan(ins []input) (first []input, wait []planned) {
 	ins, named := planATIF(ins)
 	wait = append(wait, named...)
+	ins, children := planCline(ins)
+	wait = append(wait, children...)
 	threads := map[string]bool{}
 	ids := make([]string, len(ins))
 	for i, in := range ins {
@@ -219,6 +227,57 @@ func planATIF(ins []input) (rest []input, named []planned) {
 	return rest, named
 }
 
+// planCline takes out of the inputs the Roo tasks whose parent task,
+// at any depth, is among them, which wait for it: the parent's
+// conversion holds the sub-tasks it waited for. A chain of parents is
+// followed through the history_item.json of each task beside it, at
+// most 32 deep, and a cycle ends it.
+func planCline(ins []input) (rest []input, children []planned) {
+	dirs := map[string]bool{}
+	for _, in := range ins {
+		if in.source.name == clineconvert.Source {
+			if d, err := cline.TaskDir(in.path); err == nil {
+				dirs[realPath(d)] = true
+			}
+		}
+	}
+	for _, in := range ins {
+		if in.source.name != clineconvert.Source {
+			rest = append(rest, in)
+			continue
+		}
+		d, err := cline.TaskDir(in.path)
+		if err != nil {
+			rest = append(rest, in)
+			continue
+		}
+		depth := 0
+		seen := map[string]bool{realPath(d): true}
+		for cur := d; depth < 32; {
+			parent := cline.ParentTask(cur)
+			if parent == "" || strings.ContainsAny(parent, `/\`) || parent == "." || parent == ".." {
+				break
+			}
+			next := filepath.Join(filepath.Dir(cur), parent)
+			real := realPath(next)
+			if seen[real] {
+				break
+			}
+			seen[real] = true
+			if dirs[real] {
+				depth++
+			}
+			cur = next
+		}
+		if depth == 0 {
+			rest = append(rest, in)
+			continue
+		}
+		children = append(children, planned{in: in, depth: depth, task: true})
+	}
+	return rest, children
+}
+
 // realPath is p absolute with its links resolved, as Related lists it.
 func realPath(p string) string {
 	if abs, err := filepath.Abs(p); err == nil {
@@ -251,6 +310,14 @@ func (r *runner) each(ins []input, visit func(outcome)) {
 		run(in)
 	}
 	for _, w := range wait {
+		if w.task {
+			if r.clineDone.Has(w.in.path) {
+				*r.skipped = append(*r.skipped, skipped{w.in.path, "a Roo sub-task, converted with the task that delegated to it"})
+				continue
+			}
+			run(w.in)
+			continue
+		}
 		if w.named {
 			if r.atifDone.Has(w.in.path) {
 				*r.skipped = append(*r.skipped, skipped{w.in.path, "an ATIF continuation or sub-agent file, converted with the document naming it"})

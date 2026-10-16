@@ -1,0 +1,1 @@
+[{"ts":1760400000050,"type":"say","say":"task","text":"Fix it"},null,"x",{"ts":1760400000090,"type":"say","say":"brand_new_say","text":"something new","conversationHistoryIndex":-1},{"ts":1760400000095,"type":"ask","ask":"brand_new_ask","text":"a question","conversationHistoryIndex":-1,"conversationHistoryDeletedRange":[5,2]}]

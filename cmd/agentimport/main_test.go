@@ -21,6 +21,7 @@ var fixtureRoots = []string{
 	"../../pi/convert/testdata",
 	"../../codex/convert/testdata",
 	"../../atif/convert/testdata",
+	"../../cline/convert/testdata",
 }
 
 func runCmd(t *testing.T, args ...string) (int, string, string) {
@@ -80,6 +81,9 @@ func TestDetect(t *testing.T) {
 		{"../../atif/convert/testdata/truncated/trajectory.json", "atif", ""},
 		{write("config.json", `{"schema_version":"2.0"}`), "", "-from"},
 		{write("empty.jsonl", ""), "", "-from"},
+		{"../../cline/convert/testdata/classic-native/saoudrizwan.claude-dev/tasks/1760000000000/api_conversation_history.json", "cline", ""},
+		{"../../cline/convert/testdata/classic-xml/saoudrizwan.claude-dev/tasks/1700000000000/claude_messages.json", "cline", ""},
+		{write("api_conversation_history.json", "[]"), "", "-from"},
 	} {
 		s, err := detect(tc.path)
 		if tc.err != "" {
@@ -162,7 +166,7 @@ func TestConvertFixtures(t *testing.T) {
 			sameSession(t, w.File, got, want.Sessions[i])
 		}
 	}
-	for _, name := range []string{"claudecode", "pi", "codex", "atif"} {
+	for _, name := range []string{"claudecode", "pi", "codex", "atif", "cline"} {
 		if bySource[name] == 0 {
 			t.Errorf("no %s fixture was converted", name)
 		}
@@ -173,7 +177,8 @@ func TestConvertFixtures(t *testing.T) {
 	for _, s := range res.Skipped {
 		if !strings.Contains(s.Path, "golden") && !strings.Contains(s.Path, "/subagents/agent-") &&
 			s.Reason != "a Codex sub-agent's rollout, converted with its parent" &&
-			s.Reason != "an ATIF continuation or sub-agent file, converted with the document naming it" {
+			s.Reason != "an ATIF continuation or sub-agent file, converted with the document naming it" &&
+			s.Reason != "a Roo sub-task, converted with the task that delegated to it" {
 			t.Errorf("skipped %s: %s", s.Path, s.Reason)
 		}
 	}
@@ -500,5 +505,39 @@ func TestATIFFamily(t *testing.T) {
 	// A cycle: the child names its parent; each converts once.
 	if got, n := run("../../atif/convert/testdata/cycle"); len(got) != 1 || n != 2 {
 		t.Errorf("cycle: converted %v, %d skipped", got, n)
+	}
+}
+
+// TestClineFamily converts a Roo task that delegated to a sub-task: the
+// sub-task, an input too, converts with its parent and is skipped; on
+// its own it converts.
+func TestClineFamily(t *testing.T) {
+	run := func(args ...string) (converted []string, skippedChildren int) {
+		t.Helper()
+		ins, skip, err := collect(args, "auto")
+		if err != nil {
+			t.Fatal(err)
+		}
+		newRunner(false, &skip).each(ins, func(o outcome) {
+			if o.err != nil {
+				t.Errorf("%s: %v", o.in.path, o.err)
+				return
+			}
+			converted = append(converted, filepath.Base(filepath.Dir(o.in.path)))
+		})
+		for _, s := range skip {
+			if strings.HasPrefix(s.Reason, "a Roo sub-task") {
+				skippedChildren++
+			}
+		}
+		return converted, skippedChildren
+	}
+	root := "../../cline/convert/testdata/roo-delegation"
+	if got, n := run(root); len(got) != 1 || got[0] != "4f1b2c3d-0000-4000-8000-000000000006" || n != 1 {
+		t.Errorf("delegation: converted %v, %d skipped", got, n)
+	}
+	child := filepath.Join(root, "rooveterinaryinc.roo-cline/tasks/4f1b2c3d-0000-4000-8000-0000000000c6")
+	if got, n := run(child); len(got) != 1 || n != 0 {
+		t.Errorf("the sub-task alone: converted %v, %d skipped", got, n)
 	}
 }

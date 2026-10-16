@@ -1,0 +1,15 @@
+{
+  "id": "4f1b2c3d-0000-4000-8000-000000000002",
+  "number": 1,
+  "ts": 1761100005000,
+  "task": "Write docs",
+  "tokensIn": 1,
+  "tokensOut": 1,
+  "cacheWrites": 0,
+  "cacheReads": 0,
+  "totalCost": 0,
+  "size": 100,
+  "workspace": "/work/roo",
+  "mode": "code",
+  "apiConfigName": "default"
+}

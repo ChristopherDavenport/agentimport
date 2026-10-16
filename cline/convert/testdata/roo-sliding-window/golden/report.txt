@@ -1,0 +1,10 @@
+cline: 16 elements and files: mapped 15 kept 0 dropped 1 malformed 0
+  gap      agentimport/fold-head                             1  the requests sent a message ahead of the summary, which is pinned after it (at api_conversation_history.json:4)
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  gap      agentimport/usage-detail                          4  cache writes are folded into input_tokens; the request record's usage and cost are cline:usage (at ui_messages.json:2, ui_messages.json:3, ui_messages.json:4, ui_messages.json:6)
+  dropped  cline/ui-restated                                 1  a say text UI message restates the API history, or is a prompt carrying nothing (at ui_messages.json:1)
+  lossy    cline/call-without-result                         1  the last response's calls toolu_4 have no result: the task ended before they were answered
+  lossy    cline/roo-no-model                                1  Roo records no model ID; the settings have none, and the provider profile and mode are members of the first config entry
+  lossy    cline/roo-truncation                              1  a sliding-window marker: a compaction of API messages 1, 4, which the requests sent ahead of the messages from API message 5 kept, as Roo sends them (at api_conversation_history.json:4)
+  kept     cline/history-item                                1  the task's index entry is the header member cline:history_item
+  kept     cline/members                                     4  the message's members truncationParent are cline:message (at api_conversation_history.json:2, api_conversation_history.json:3, api_conversation_history.json:5, api_conversation_history.json:4)

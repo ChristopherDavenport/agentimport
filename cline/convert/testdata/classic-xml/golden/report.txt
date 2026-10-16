@@ -1,0 +1,13 @@
+cline: 8 elements and files: mapped 6 kept 0 dropped 2 malformed 0
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  gap      agentimport/usage-detail                          2  cache writes are folded into input_tokens; the request record's usage and cost are cline:usage (at claude_messages.json:2, claude_messages.json:4)
+  dropped  cline/request-text                                2  the request record's request text, the user message rendered as Markdown, is left out (at claude_messages.json:2, claude_messages.json:4)
+  dropped  cline/ui-restated                                 2  a say task UI message restates the API history, or is a prompt carrying nothing (at claude_messages.json:1, claude_messages.json:3)
+  lossy    cline/legacy-file-name                            1  the file has the name the earliest releases gave it; it is read as the UI messages
+  lossy    cline/missing-index                               1  the task has no entry in state/taskHistory.json, which older releases kept in VS Code's state database; the working directory is unknown and the deleted range is taken from the UI messages alone
+  lossy    cline/no-model                                    1  no message, index entry or metadata names the model; the settings have none
+  lossy    cline/no-response-id                              2  the message records no response ID; the response is resp_2 (at api_conversation_history.json:2, api_conversation_history.json:4)
+  lossy    cline/tool-era                                    1  the task's tool calls are XML in the assistant's text, told by shape: no version is recorded; XML calls stay the text the model wrote
+  lossy    cline/usage-by-order                              2  neither the request records nor the messages carry an index or a time; the record is matched to the next response in order (at claude_messages.json:2, claude_messages.json:4)
+  lossy    cline/usage-semantics                             2  nothing names the provider; the input count is read as Anthropic's, which leaves the cache out (at claude_messages.json:2, claude_messages.json:4)
+  lossy    cline/xml-tool-calls                              3  the response calls read_file as XML in its text, as the model wrote and saw it; no function_call is written, and the calls are cline:xml_tools (at api_conversation_history.json:2, api_conversation_history.json:3, api_conversation_history.json:4)

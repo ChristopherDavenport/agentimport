@@ -11,6 +11,9 @@ does not list.
 - [atif.md](atif.md): ATIF, Harbor's Agent Trajectory Interchange
   Format. Its report counts each document's root and steps rather than
   lines.
+- [cline.md](cline.md): classic Cline (before 4.0) and Roo Code task
+  directories, one format with a variant. Its report counts each
+  element of a task's JSON arrays and each other file.
 
 ## Codes every converter can report
 
