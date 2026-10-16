@@ -1,0 +1,1 @@
+{"kind":"LLMCompletionLogEvent","id":"0000000e-0001-4000-8000-000000000009","timestamp":"2026-05-01T10:00:09.000009","source":"environment","filename":"log-1.json","log_data":"{\"messages\": []}","model_name":"m","usage_id":"agent"}

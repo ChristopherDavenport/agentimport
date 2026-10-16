@@ -1,0 +1,1 @@
+{"kind":"MessageEvent","id":"00000009-0001-4000-8000-00000000000a","timestamp":"2026-05-01T10:00:10.000010","source":"user","llm_message":{"role":"user","content":[{"type":"text","text":"A fresh start.","cache_prompt":false}],"thinking_blocks":[]},"activated_skills":[],"extended_content":[],"parent_id":"__root__"}

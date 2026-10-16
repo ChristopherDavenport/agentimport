@@ -1,0 +1,1 @@
+{"kind":"MessageEvent","id":"0000000c-0001-4000-8000-000000000007","timestamp":"2026-05-01T10:00:07.000007","source":"agent","llm_message":{"role":"assistant","content":[{"type":"text","text":"Hotel A and Cafe B.","cache_prompt":false}],"thinking_blocks":[]},"llm_response_id":"chatcmpl-d3","activated_skills":[],"extended_content":[]}

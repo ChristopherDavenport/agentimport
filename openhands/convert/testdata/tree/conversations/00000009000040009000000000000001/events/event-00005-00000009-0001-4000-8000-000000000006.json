@@ -1,0 +1,1 @@
+{"kind":"ConversationStateUpdateEvent","id":"00000009-0001-4000-8000-000000000006","timestamp":"2026-05-01T10:00:06.000006","source":"environment","key":"execution_status","value":"idle","parent_id":"00000009-0001-4000-8000-000000000005"}

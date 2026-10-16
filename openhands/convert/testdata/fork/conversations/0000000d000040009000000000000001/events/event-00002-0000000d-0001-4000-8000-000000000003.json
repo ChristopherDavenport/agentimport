@@ -1,0 +1,1 @@
+{"kind":"MessageEvent","id":"0000000d-0001-4000-8000-000000000003","timestamp":"2026-05-01T10:00:03.000003","source":"agent","llm_message":{"role":"assistant","content":[{"type":"text","text":"How about Lantern?","cache_prompt":false}],"thinking_blocks":[]},"llm_response_id":"chatcmpl-f1","activated_skills":[],"extended_content":[]}

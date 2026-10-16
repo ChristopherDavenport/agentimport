@@ -1,0 +1,1 @@
+{"kind":"ConversationStateUpdateEvent","id":"0000000a-0001-4000-8000-000000000006","timestamp":"2026-05-01T10:00:06.000006","source":"environment","key":"stats","value":{"usage_to_metrics":{}},"parent_id":"0000000a-0001-4000-8000-000000000005"}

@@ -1,0 +1,1 @@
+{"kind":"MessageEvent","id":"00000006-0001-4000-8000-00000000000b","timestamp":"2026-05-01T10:00:11.000011","source":"user","llm_message":{"role":"user","content":[{"type":"text","text":"Try listing it instead.","cache_prompt":false}],"thinking_blocks":[]},"activated_skills":[],"extended_content":[]}
