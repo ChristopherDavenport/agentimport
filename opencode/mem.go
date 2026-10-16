@@ -43,7 +43,7 @@ func (m *Memory) Messages(s *Session) ([]*MessageRecord, []*Stray, error) {
 	var strays []*Stray
 	for _, r := range m.MessagesOf[s.ID] {
 		if r.Err != nil {
-			strays = append(strays, &Stray{Unit: r.Unit, Session: s.ID, Kind: "message", Why: r.Err.Error(), Malformed: true})
+			strays = append(strays, &Stray{Unit: r.Unit, ID: r.ID, Session: s.ID, Kind: "message", Why: r.Err.Error(), Err: r.Err, Malformed: true})
 			for _, p := range r.Parts {
 				strays = append(strays, &Stray{Unit: p.Unit, Session: s.ID, Kind: "part", Why: "its message cannot be read"})
 			}

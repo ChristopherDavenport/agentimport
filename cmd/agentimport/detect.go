@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/ChristopherDavenport/agentimport"
 	"github.com/ChristopherDavenport/agentimport/atif"
@@ -316,21 +317,56 @@ func detect(path string) (source, error) {
 
 // isOpenCode reports whether a store StoreOf names holds OpenCode's
 // sessions: a database of its tables, or a data directory holding one
-// or a storage/ tree of sessions.
+// or a storage/ tree of sessions. The answer is kept per store, since a
+// directory search detects every storage file of one.
 func isOpenCode(root string) bool {
+	openCodeStores.Lock()
+	defer openCodeStores.Unlock()
+	if ok, seen := openCodeStores.m[root]; seen {
+		return ok
+	}
+	ok := probeOpenCode(root)
+	openCodeStores.m[root] = ok
+	return ok
+}
+
+var openCodeStores = struct {
+	sync.Mutex
+	m map[string]bool
+}{m: map[string]bool{}}
+
+func probeOpenCode(root string) bool {
 	info, err := os.Stat(root)
 	if err != nil {
 		return false
 	}
 	if !info.IsDir() {
-		return sqlite.Probe(root)
+		return probeDatabase(root)
 	}
 	db := filepath.Join(root, opencode.DatabaseName)
-	if _, err := os.Stat(db); err == nil && sqlite.Probe(db) {
+	if _, err := os.Stat(db); err == nil && probeDatabase(db) {
 		return true
 	}
 	info, err = os.Stat(filepath.Join(root, opencode.DirStorage, opencode.DirSession))
 	return err == nil && info.IsDir()
+}
+
+// probeDatabase reads a database's schema from the checkpointed file;
+// a database whose schema is still in its write-ahead log, as one a
+// running OpenCode created may be, is read from a copy instead.
+func probeDatabase(path string) bool {
+	if sqlite.Probe(path) {
+		return true
+	}
+	if info, err := os.Stat(path + "-wal"); err != nil || info.Size() == 0 {
+		return false
+	}
+	db, err := sqlite.Open(path)
+	if err != nil {
+		return false
+	}
+	db.Close()
+	return true
 }
 
 // readProbe reads one line, giving nil for a line over probeLineSize.

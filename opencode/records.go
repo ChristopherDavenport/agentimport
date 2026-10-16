@@ -536,10 +536,15 @@ type Stray struct {
 	Unit string
 	// Session names the session it was read with, when it was.
 	Session string
-	// Kind says what the record is: "session", "message", "part", "row".
+	// ID is the record's ID, when it has one.
+	ID string
+	// Kind says what the record is: "session", "message", "part", "row";
+	// "directory" or "table" for what holds records and is not one.
 	Kind string
-	// Why says why it is a stray.
+	// Why says why it is a stray, and Err the error behind it, when one
+	// is.
 	Why string
+	Err error
 	// Malformed says the record could not be read at all.
 	Malformed bool
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -148,19 +149,19 @@ func (t *Tree) Sessions() ([]*Session, []*Stray, error) {
 	for _, p := range projects {
 		names, err := jsonFiles(filepath.Join(base, p))
 		if err != nil {
-			strays = append(strays, &Stray{Unit: t.unit(filepath.Join(base, p)), Kind: "directory", Why: "the directory cannot be read: " + err.Error()})
+			strays = append(strays, &Stray{Unit: t.unit(filepath.Join(base, p)), Kind: "directory", Why: "the directory cannot be read: " + errText(err)})
 			continue
 		}
 		for _, n := range names {
 			path := filepath.Join(base, p, n)
 			data, err := readFile(path)
 			if err != nil {
-				strays = append(strays, &Stray{Unit: t.unit(path), Kind: "session", Why: err.Error(), Malformed: true})
+				strays = append(strays, &Stray{Unit: t.unit(path), Kind: "session", Why: errText(err), Err: err, Malformed: true})
 				continue
 			}
 			s := DecodeSessionFile(t.unit(path), data)
 			if s.Err != nil {
-				strays = append(strays, &Stray{Unit: s.Unit, Kind: "session", Why: s.Err.Error(), Malformed: true})
+				strays = append(strays, &Stray{Unit: s.Unit, Kind: "session", Why: errText(s.Err), Err: s.Err, Malformed: true})
 				continue
 			}
 			out = append(out, s)
@@ -201,7 +202,7 @@ func (t *Tree) Messages(s *Session) ([]*MessageRecord, []*Stray, error) {
 		parts, more := t.parts(id)
 		strays = append(strays, more...)
 		if m.Err != nil {
-			strays = append(strays, &Stray{Unit: m.Unit, Session: s.ID, Kind: "message", Why: m.Err.Error(), Malformed: true})
+			strays = append(strays, &Stray{Unit: m.Unit, ID: m.ID, Session: s.ID, Kind: "message", Why: errText(m.Err), Err: m.Err, Malformed: true})
 			for _, p := range parts {
 				strays = append(strays, &Stray{Unit: p.Unit, Session: s.ID, Kind: "part", Why: "its message cannot be read"})
 			}
@@ -209,7 +210,7 @@ func (t *Tree) Messages(s *Session) ([]*MessageRecord, []*Stray, error) {
 		}
 		for _, p := range parts {
 			if p.Err != nil {
-				strays = append(strays, &Stray{Unit: p.Unit, Session: s.ID, Kind: "part", Why: p.Err.Error(), Malformed: true})
+				strays = append(strays, &Stray{Unit: p.Unit, ID: p.ID, Session: s.ID, Kind: "part", Why: errText(p.Err), Err: p.Err, Malformed: true})
 				continue
 			}
 			m.Parts = append(m.Parts, p)
@@ -229,7 +230,7 @@ func (t *Tree) parts(messageID string) ([]*PartRecord, []*Stray) {
 	t.read[dir] = true
 	names, err := jsonFiles(dir)
 	if err != nil {
-		return nil, []*Stray{{Unit: t.unit(dir), Kind: "directory", Why: "the directory cannot be read: " + err.Error()}}
+		return nil, []*Stray{{Unit: t.unit(dir), Kind: "directory", Why: "the directory cannot be read: " + errText(err)}}
 	}
 	var out []*PartRecord
 	for _, n := range names {
@@ -258,7 +259,7 @@ func (t *Tree) Orphans(sessions map[string]bool) ([]*Stray, error) {
 		base := filepath.Join(t.dir, sub)
 		dirs, err := subdirs(base)
 		if err != nil {
-			out = append(out, &Stray{Unit: t.unit(base), Kind: "directory", Why: "the directory cannot be read: " + err.Error()})
+			out = append(out, &Stray{Unit: t.unit(base), Kind: "directory", Why: "the directory cannot be read: " + errText(err)})
 			continue
 		}
 		for _, d := range dirs {
@@ -268,7 +269,7 @@ func (t *Tree) Orphans(sessions map[string]bool) ([]*Stray, error) {
 			}
 			names, err := jsonFiles(dir)
 			if err != nil {
-				out = append(out, &Stray{Unit: t.unit(dir), Kind: "directory", Why: "the directory cannot be read: " + err.Error()})
+				out = append(out, &Stray{Unit: t.unit(dir), Kind: "directory", Why: "the directory cannot be read: " + errText(err)})
 				continue
 			}
 			kind, why := "message", "its session has no session file"
@@ -306,6 +307,17 @@ func (t *Tree) Project(id string) (Project, bool) {
 
 // MigrationDone: the storage tree is not migrated.
 func (t *Tree) MigrationDone() bool { return false }
+
+// errText is an error's text without the path an *fs.PathError names:
+// a stray names its file by its unit, relative to the data directory,
+// and a report carries no path of the machine it was made on.
+func errText(err error) string {
+	var pe *fs.PathError
+	if errors.As(err, &pe) {
+		return pe.Op + ": " + pe.Err.Error()
+	}
+	return err.Error()
+}
 
 // legacyMessage reports a message of the shape OpenCode wrote before
 // MessageV2: its parts inline and its times under metadata.

@@ -638,7 +638,21 @@ INSERT INTO part VALUES ('prt_a', 'msg_a', 'ses_a', 1, 1, '{"type":"text","text"
 	if s, err := detect(filepath.Join(crush, "opencode.db")); err == nil {
 		t.Errorf("Crush's database is detected as %s", s.name)
 	}
-	ins, skip, err := collect([]string{root, db, data}, "auto")
+	// A database whose schema is still in its write-ahead log, as a
+	// running OpenCode's may be, is read from a copy to tell.
+	live := filepath.Join(root, "live", "opencode")
+	if err := os.MkdirAll(live, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	lw, err := sqlite.Fixture(filepath.Join(live, "opencode.db"), schema("project", "v1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lw.Close()
+	if s, err := detect(live); err != nil || s.name != "opencode" {
+		t.Errorf("a database with its schema in the log: %s, %v", s.name, err)
+	}
+	ins, skip, err := collect([]string{data, db, filepath.Join(root, "project")}, "auto")
 	if err != nil {
 		t.Fatal(err)
 	}

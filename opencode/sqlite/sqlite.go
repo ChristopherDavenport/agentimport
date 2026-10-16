@@ -31,6 +31,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/ChristopherDavenport/agentimport/opencode"
@@ -69,12 +70,47 @@ func Open(path string) (*DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	copies.add(tmp)
 	d := &DB{path: path, name: filepath.Base(path), tmp: tmp}
 	if err := d.open(); err != nil {
 		os.RemoveAll(tmp)
+		copies.remove(tmp)
 		return nil, err
 	}
 	return d, nil
+}
+
+// copies are the private directories of the copies open.
+var copies = &registry{dirs: map[string]bool{}}
+
+type registry struct {
+	mu   sync.Mutex
+	dirs map[string]bool
+}
+
+func (r *registry) add(dir string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.dirs[dir] = true
+}
+
+func (r *registry) remove(dir string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.dirs, dir)
+}
+
+// RemoveCopies removes the copy of every database open: what a program
+// interrupted while it reads one calls before it exits, as a deferred
+// Close does not run then. The copies are in os.TempDir, under
+// $TMPDIR when it is set.
+func RemoveCopies() {
+	copies.mu.Lock()
+	defer copies.mu.Unlock()
+	for dir := range copies.dirs {
+		os.RemoveAll(dir)
+		delete(copies.dirs, dir)
+	}
 }
 
 func (d *DB) open() error {
@@ -121,6 +157,7 @@ func (d *DB) Close() error {
 	if rerr := os.RemoveAll(d.tmp); err == nil {
 		err = rerr
 	}
+	copies.remove(d.tmp)
 	return err
 }
 
@@ -317,7 +354,9 @@ func (d *DB) Messages(s *opencode.Session) ([]*opencode.MessageRecord, []*openco
 	if err != nil {
 		return nil, nil, fmt.Errorf("read message: %w", err)
 	}
-	parts, err := d.query("SELECT id, message_id, session_id, time_created, time_updated, data FROM part WHERE session_id = ?", s.ID)
+	// OpenCode reads a message's parts by message, whatever session the
+	// part row names.
+	parts, err := d.query("SELECT id, message_id, session_id, time_created, time_updated, data FROM part WHERE message_id IN (SELECT id FROM message WHERE session_id = ?)", s.ID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("read part: %w", err)
 	}
@@ -330,7 +369,7 @@ func (d *DB) Messages(s *opencode.Session) ([]*opencode.MessageRecord, []*openco
 		created, _ := cols.Int("time_created")
 		m := opencode.DecodeMessage(d.unit("message", id), id, s.ID, created, []byte(cols.String("data")))
 		if m.Err != nil {
-			strays = append(strays, &opencode.Stray{Unit: m.Unit, Session: s.ID, Kind: "message", Why: m.Err.Error(), Malformed: true})
+			strays = append(strays, &opencode.Stray{Unit: m.Unit, ID: id, Session: s.ID, Kind: "message", Why: m.Err.Error(), Err: m.Err, Malformed: true})
 			bad[id] = true
 			continue
 		}
@@ -385,40 +424,63 @@ func (d *DB) Rows(s *opencode.Session) ([]*opencode.Row2, []*opencode.QueueRow, 
 	return out, queue, nil
 }
 
-// Orphans lists the message and part rows of no session of the V1
-// tables, and the session_message, session_pending and session_inbox
-// rows of no session of the V2 tables. sessions is not read: every row
-// of a session row is read with it, so a row is an orphan when its
-// session row does not exist.
+// Orphans lists the message rows of no session of the V1 tables, the
+// part rows of no message read with one, and the session_message,
+// session_pending and session_inbox rows of no session of the V2
+// tables. sessions is not read: every row of a session is read with
+// it, so a row is an orphan when its session row does not exist. A V1
+// database's own session_message, OpenCode 1's projection of its
+// messages, which no V1 request reads, is reported once, its rows not
+// records.
 func (d *DB) Orphans(map[string]bool) ([]*opencode.Stray, error) {
 	var out []*opencode.Stray
-	type check struct {
-		table, sessions, need, kind string
-	}
-	for _, c := range []check{
-		{"message", "session", "part", "message"},
-		{"part", "session", "message", "part"},
-		{"session_message", "session_v2", "", "row"},
-		{"session_pending", "session_v2", "session_message", "row"},
-		{"session_inbox", "session_v2", "session_message", "row"},
-	} {
-		if !d.tables[c.table] || c.need != "" && !d.tables[c.need] {
-			continue
-		}
-		q := "SELECT id FROM " + c.table + " WHERE session_id IS NULL OR session_id NOT IN (SELECT id FROM " + c.sessions + " WHERE id IS NOT NULL)"
-		if !d.tables[c.sessions] {
-			q = "SELECT id FROM " + c.table
-		}
+	add := func(table, kind, why, q string) error {
 		rows, err := d.query(q + " ORDER BY rowid")
 		if err != nil {
-			return nil, fmt.Errorf("read %s: %w", c.table, err)
+			return fmt.Errorf("read %s: %w", table, err)
 		}
 		for _, cols := range rows {
-			out = append(out, &opencode.Stray{Unit: d.unit(c.table, cols.String("id")), Kind: c.kind, Why: "its session has no row in " + c.sessions})
+			out = append(out, &opencode.Stray{Unit: d.unit(table, cols.String("id")), ID: cols.String("id"), Kind: kind, Why: why})
+		}
+		return nil
+	}
+	const sessions = "SELECT id FROM session WHERE id IS NOT NULL"
+	if d.v1() {
+		if err := add("message", "message", "its session has no row in session",
+			"SELECT id FROM message WHERE session_id IS NULL OR session_id NOT IN ("+sessions+")"); err != nil {
+			return nil, err
+		}
+		if err := add("part", "part", "its message is no message of a session",
+			"SELECT id FROM part WHERE message_id IS NULL OR message_id NOT IN (SELECT id FROM message WHERE id IS NOT NULL AND session_id IN ("+sessions+"))"); err != nil {
+			return nil, err
+		}
+	}
+	if d.v2() {
+		for _, t := range []string{"session_message", "session_pending", "session_inbox"} {
+			if !d.tables[t] {
+				continue
+			}
+			if err := add(t, "row", "its session has no row in session_v2",
+				"SELECT id FROM "+t+" WHERE session_id IS NULL OR session_id NOT IN (SELECT id FROM session_v2 WHERE id IS NOT NULL)"); err != nil {
+				return nil, err
+			}
+		}
+	} else if d.tables["session_message"] {
+		rows, err := d.query("SELECT count(*) AS n FROM session_message")
+		if err != nil {
+			return nil, fmt.Errorf("read session_message: %w", err)
+		}
+		if n, _ := rows[0].Int("n"); n > 0 {
+			out = append(out, &opencode.Stray{Unit: d.unit("session_message", ""), Kind: "table", Why: fmt.Sprintf("OpenCode 1's own session_message table, %d rows of its projection of the V1 messages, which no V1 request reads, is not read", n)})
 		}
 	}
 	return out, nil
 }
+
+// v1 reports whether the database holds the V1 tables, and v2 the V2
+// tables.
+func (d *DB) v1() bool { return d.tables["session"] && d.tables["message"] && d.tables["part"] }
+func (d *DB) v2() bool { return d.tables["session_v2"] && d.tables["session_message"] }
 
 // Project reads a project row.
 func (d *DB) Project(id string) (opencode.Project, bool) {
@@ -499,16 +561,13 @@ var recordTables = []string{"session", "message", "part", "session_v2", "session
 func (d *DB) Units() (int, error) {
 	n := 0
 	for _, t := range recordTables {
-		if !d.tables[t] {
-			continue
-		}
 		switch t {
 		case "session", "message", "part":
-			if !(d.tables["session"] && d.tables["message"] && d.tables["part"]) {
+			if !d.v1() {
 				continue
 			}
 		default:
-			if !(d.tables["session_v2"] && d.tables["session_message"]) {
+			if !d.v2() || !d.tables[t] {
 				continue
 			}
 		}

@@ -29,10 +29,23 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"runtime/debug"
+	"syscall"
+
+	"github.com/ChristopherDavenport/agentimport/opencode/sqlite"
 )
 
 func main() {
+	// An OpenCode database is read from a private copy, which an
+	// interrupted run removes before it exits.
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sig
+		sqlite.RemoveCopies()
+		os.Exit(130)
+	}()
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
 

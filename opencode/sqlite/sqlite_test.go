@@ -261,3 +261,53 @@ func withoutIDs(t *testing.T, raw []byte) []byte {
 	out, _ := json.Marshal(m)
 	return out
 }
+
+// TestV1Projection reads a V1 database that holds OpenCode 1's own
+// session_message table: its rows are no records and no orphans, and
+// the table is reported once.
+func TestV1Projection(t *testing.T) {
+	path := filepath.Join(t.TempDir(), opencode.DatabaseName)
+	w, err := Fixture(path, schema(t, "project", "v1")+rows+`
+CREATE TABLE session_message (id text PRIMARY KEY, session_id text NOT NULL, type text NOT NULL, seq integer NOT NULL, time_created integer NOT NULL, time_updated integer NOT NULL, data text NOT NULL);
+INSERT INTO session_message VALUES ('msg_p1', 'ses_a', 'user', 0, 1, 1, '{}');
+INSERT INTO session_message VALUES ('msg_p2', 'ses_a', 'assistant', 1, 1, 1, '{}');`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Close()
+	db, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	strays, err := db.Orphans(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(strays) != 1 || strays[0].Kind != "table" {
+		t.Errorf("strays %+v", strays)
+	}
+	if n, err := db.Units(); err != nil || n != 3 {
+		t.Errorf("units %d %v", n, err)
+	}
+}
+
+// TestRemoveCopies removes the copy of a database still open, as an
+// interrupted run does.
+func TestRemoveCopies(t *testing.T) {
+	path := filepath.Join(t.TempDir(), opencode.DatabaseName)
+	w, err := Fixture(path, schema(t, "project", "v1")+rows)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Close()
+	db, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	RemoveCopies()
+	if _, err := os.Stat(db.tmp); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the copy is still there: %v", err)
+	}
+	db.Close()
+}
