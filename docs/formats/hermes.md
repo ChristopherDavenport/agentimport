@@ -228,8 +228,17 @@ copy (`_carry_parent_timestamps`). The rows are a run of generations:
   compacted one;
 - an earlier one at its summary row, less the rows just before it that
   copy, in order, the first rows of the generation before;
-- a continuation's or a branch's first summary belongs to its first
-  generation, written by its parent's compaction.
+- a continuation's first summary belongs to its first generation,
+  written by its parent's compaction, when every row before it was
+  stamped before the continuation started (the handoff's head copies
+  keep their originals' times); a branch's first summary does when it
+  is among the rows the branch copied.
+
+A summary row is one flagged `_compressed_summary`, or one whose
+content is a summary, whole or merged into the first tail row after
+`[END OF PRIOR CONTEXT — COMPACTION SUMMARY BELOW]`
+(`_is_context_summary_message`): a row written before the column
+existed reads 0 in it.
 
 Each generation after the first starts with a `compaction` entry whose
 `first_kept` keeps nothing before it and whose `summary` is the
@@ -258,8 +267,9 @@ rows, the head and the tail copies among them.
 A `/branch` (`hermes_state_mutation_branch.py`) clones the parent's
 live rows into the child with their times. The child is a session of
 its own: `parent_session` and a `fork_of` link name the parent, the
-copied rows, told by matching the parent's live rows in order by
-content and time, are its own entries, and their assistant rows are
+copied rows, told by matching, in order by content and time, the
+parent's rows of any flags (the branch copied its live rows then, and
+the parent may have compacted or rewound since), are its own entries, and their assistant rows are
 response entries marked `hermes:copied`. A reset (`hermes_state_mutation_reset.py`) starts a new
 conversation on the same chat and copies nothing: it is a session with
 no `parent_session`, the row's `parent_session_id` kept with the

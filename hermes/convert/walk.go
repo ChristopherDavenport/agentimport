@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/ChristopherDavenport/agentimport"
@@ -94,16 +93,14 @@ func newWalk(sc *sconv, msgs []*hermes.Message) *walk {
 }
 
 // isSummary reports a compaction summary row: one flagged
-// _compressed_summary, or, in a database without the column, one whose
-// content opens as a summary does.
+// _compressed_summary, or one whose content is a summary, as
+// _is_context_summary_message tells it; a row written before the column
+// existed reads 0 in it.
 func isSummary(m *hermes.Message) bool {
 	if m.Role != hermes.RoleUser && m.Role != hermes.RoleAssistant {
 		return false
 	}
-	if m.HasSummary {
-		return m.Summary
-	}
-	return isSummaryText(strings.TrimLeftFunc(m.Content.String(), isPySpace))
+	return m.Summary || isSummaryText(m.Content.String())
 }
 
 // identity is what tells a row Hermes copied from the row it copied:
@@ -139,8 +136,8 @@ func (w *walk) generations() {
 		}
 	}
 	if lastFolded < 0 {
-		if w.sc.rec.rel == hermes.Continuation {
-			w.copies(main, 0, w.firstSummary(main, 0))
+		if s := w.firstSummary(main, 0); s >= 0 && w.sc.rec.rel == hermes.Continuation && w.inherited(main, s) {
+			w.copies(main, 0, s)
 		}
 		return
 	}
@@ -152,7 +149,6 @@ func (w *walk) generations() {
 		}
 	}
 	prev := 0
-	skipFirst := w.sc.rec.rel == hermes.Continuation || w.sc.rec.rel == hermes.Branch
 	end := len(main)
 	if final >= 0 {
 		end = final
@@ -164,7 +160,7 @@ func (w *walk) generations() {
 		}
 		if !firstSeen {
 			firstSeen = true
-			if skipFirst {
+			if w.inherited(main, k) {
 				if w.sc.rec.rel == hermes.Continuation {
 					w.copies(main, prev, k)
 				}
@@ -188,9 +184,33 @@ func (w *walk) generations() {
 			w.summary[main[final]] = main[s]
 		}
 		w.copies(main, final, s)
-	} else if !firstSeen && w.sc.rec.rel == hermes.Continuation {
-		w.copies(main, 0, w.firstSummary(main, 0))
+	} else if s := w.firstSummary(main, 0); !firstSeen && s >= 0 && w.sc.rec.rel == hermes.Continuation && w.inherited(main, s) {
+		w.copies(main, 0, s)
 	}
+}
+
+// inherited reports whether the summary at main[k], the session's
+// first, is one its parent's compaction wrote rather than its own: in
+// a branch, a row of the prefix it copied; in a continuation, a summary
+// of the handoff, which every row before it copies, each stamped
+// before the child started (_carry_parent_timestamps).
+func (w *walk) inherited(main []int, k int) bool {
+	switch w.sc.rec.rel {
+	case hermes.Branch:
+		return w.copied[main[k]]
+	case hermes.Continuation:
+		start := w.sc.rec.s.Started
+		if start.IsZero() {
+			return true
+		}
+		for _, i := range main[:k] {
+			if t := w.rows[i].Time; !t.IsZero() && t.After(start) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
 }
 
 // firstSummary is the position in main of the first summary row from
@@ -245,7 +265,7 @@ func (w *walk) copies(main []int, from, s int) {
 }
 
 // branchCopies marks the rows a branch copied from its parent: the
-// rows from its first that match, in order, the parent's live rows, by
+// rows from its first that match, in order, rows of the parent, by
 // identity and time, as _clone_message_rows copies them.
 func (w *walk) branchCopies() (int, error) {
 	sc := w.sc
@@ -256,17 +276,17 @@ func (w *walk) branchCopies() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	var plive []*hermes.Message
-	for _, m := range pmsgs {
-		if m.Err == nil && m.Active {
-			plive = append(plive, m)
-		}
-	}
+	// The rows the branch copied were the parent's live rows then, a
+	// subsequence of its rows in id order whatever their flags are now:
+	// the parent may have compacted or rewound since.
 	n := 0
-	for n < len(w.rows) && n < len(plive) {
-		a, b := w.rows[n], plive[n]
-		if identity(a) != identity(b) || !a.Time.Equal(b.Time) {
+	for _, b := range pmsgs {
+		if n >= len(w.rows) {
 			break
+		}
+		a := w.rows[n]
+		if b.Err != nil || identity(a) != identity(b) || !a.Time.Equal(b.Time) {
+			continue
 		}
 		w.copied[n] = true
 		n++
@@ -277,11 +297,11 @@ func (w *walk) branchCopies() (int, error) {
 // run walks the rows.
 func (w *walk) run() error {
 	sc := w.sc
-	w.generations()
 	nb, err := w.branchCopies()
 	if err != nil {
 		return err
 	}
+	w.generations()
 	if nb > 0 {
 		sc.addf(agentimport.Lossy, "hermes/branch-copy", "", "the branch starts with %d rows Hermes copied from %s; they are this session's own entries, their responses marked %s:copied, and parent_session and a fork_of link name the origin", nb, sc.rec.parent.s.ID, Source)
 	}

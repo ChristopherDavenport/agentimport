@@ -385,3 +385,107 @@ INSERT INTO messages (session_id, role, content, reasoning_details, codex_messag
 	}
 	sameLines(t, "messages", got, []string{"msg_1 commentary Looking.", "msg_2 final_answer Done."})
 }
+
+// compactions counts a session's compaction entries.
+func compactions(s *agentsession.Session) int {
+	n := 0
+	for _, e := range s.Entries() {
+		if _, ok := e.(*agentsession.CompactionEntry); ok {
+			n++
+		}
+	}
+	return n
+}
+
+// copiedResponses lists the response IDs marked hermes:copied.
+func copiedResponses(s *agentsession.Session) []string {
+	var out []string
+	for _, e := range s.Entries() {
+		if r, ok := e.(*agentsession.ResponseEntry); ok && member(r, "copied") != nil {
+			out = append(out, r.ResponseID)
+		}
+	}
+	return out
+}
+
+// TestBranchCompactsItself (F9): a branch whose parent never compacted
+// compacts in place itself; its first summary is its own, a generation
+// boundary, not one the copy brought.
+func TestBranchCompactsItself(t *testing.T) {
+	const sum = "[CONTEXT COMPACTION — REFERENCE ONLY] Earlier turns were compacted into the summary below. "
+	res := convertScript(t, `
+INSERT INTO sessions (id, source, model, started_at, end_reason, ended_at) VALUES ('P', 'tui', 'm', 1760000000.0, 'branched', 1760000050.0);
+INSERT INTO sessions (id, source, model, model_config, parent_session_id, started_at) VALUES ('B', 'tui', 'm', '{"_branched_from":"P"}', 'P', 1760000060.0);
+INSERT INTO messages (id, session_id, role, content, timestamp, active, compacted, _compressed_summary) VALUES
+  (1, 'P', 'user', 'u1', 1760000001.0, 1, 0, 0),
+  (2, 'P', 'assistant', 'a1', 1760000002.0, 1, 0, 0),
+  (3, 'B', 'user', 'u1', 1760000001.0, 0, 1, 0),
+  (4, 'B', 'assistant', 'a1', 1760000002.0, 0, 1, 0),
+  (5, 'B', 'user', 'u2', 1760000061.0, 0, 1, 0),
+  (6, 'B', 'assistant', 'a2', 1760000062.0, 0, 1, 0),
+  (7, 'B', 'user', '`+sum+`one', 1760000100.0, 0, 1, 1),
+  (8, 'B', 'user', 'u3', 1760000101.0, 0, 1, 0),
+  (9, 'B', 'assistant', 'a3', 1760000102.0, 0, 1, 0),
+  (10, 'B', 'assistant', '`+sum+`two', 1760000200.0, 1, 0, 1),
+  (11, 'B', 'user', 'u4', 1760000201.0, 1, 0, 0),
+  (12, 'B', 'assistant', 'a4', 1760000202.0, 1, 0, 0);
+`, Options{})
+	b := sessionOf(t, res, "B")
+	if n := compactions(b); n != 2 {
+		t.Errorf("%d compactions, want 2", n)
+	}
+	sameLines(t, "copied", copiedResponses(b), []string{"row-4"})
+}
+
+// TestBranchOfCompactedParent (F10): a branch's copy is told against
+// every row of its parent, not only those live now, as the parent may
+// compact after the branch.
+func TestBranchOfCompactedParent(t *testing.T) {
+	const sum = "[CONTEXT COMPACTION — REFERENCE ONLY] Earlier turns were compacted into the summary below. "
+	res := convertScript(t, `
+INSERT INTO sessions (id, source, model, started_at) VALUES ('P', 'tui', 'm', 1760000000.0);
+INSERT INTO sessions (id, source, model, model_config, parent_session_id, started_at) VALUES ('B', 'tui', 'm', '{"_branched_from":"P"}', 'P', 1760000060.0);
+INSERT INTO messages (id, session_id, role, content, timestamp, active, compacted, _compressed_summary) VALUES
+  (1, 'P', 'user', 'u1', 1760000001.0, 0, 1, 0),
+  (2, 'P', 'assistant', 'a1', 1760000002.0, 0, 1, 0),
+  (3, 'P', 'user', 'u2', 1760000003.0, 0, 1, 0),
+  (4, 'P', 'assistant', 'a2', 1760000004.0, 0, 1, 0),
+  (5, 'B', 'user', 'u1', 1760000001.0, 1, 0, 0),
+  (6, 'B', 'assistant', 'a1', 1760000002.0, 1, 0, 0),
+  (7, 'B', 'user', 'u2', 1760000003.0, 1, 0, 0),
+  (8, 'B', 'assistant', 'a2', 1760000004.0, 1, 0, 0),
+  (9, 'B', 'user', 'mine', 1760000061.0, 1, 0, 0),
+  (10, 'P', 'user', '`+sum+`s', 1760000100.0, 1, 0, 1),
+  (11, 'P', 'user', 'later', 1760000101.0, 1, 0, 0);
+`, Options{})
+	sameLines(t, "copied", copiedResponses(sessionOf(t, res, "B")), []string{"row-6", "row-8"})
+}
+
+// TestSummaryByText (F11): a summary row a database's flag does not
+// mark, written before the column, is told by its text, standalone or
+// merged into the first tail row, as _is_context_summary_message tells
+// it.
+func TestSummaryByText(t *testing.T) {
+	res := convertScript(t, `
+INSERT INTO sessions (id, source, model, started_at, ended_at, end_reason) VALUES ('P', 'cli', 'm', 1760000000.0, 1760000100.0, 'compression');
+INSERT INTO sessions (id, source, model, parent_session_id, started_at, ended_at, end_reason) VALUES ('C', 'cli', 'm', 'P', 1760000100.5, 1760000200.0, 'compression');
+INSERT INTO sessions (id, source, model, parent_session_id, started_at) VALUES ('D', 'cli', 'm', 'C', 1760000200.5);
+INSERT INTO messages (session_id, role, content, timestamp, _compressed_summary) VALUES
+  ('P', 'user', 'u1', 1760000001.0, 0),
+  ('P', 'assistant', 'a1', 1760000002.0, 0),
+  ('P', 'user', 'u2', 1760000003.0, 0),
+  ('P', 'assistant', 'a2', 1760000004.0, 0),
+  ('C', 'user', 'u1', 1760000001.0, 0),
+  ('C', 'assistant', 'a1', 1760000002.0, 0),
+  ('C', 'user', '[CONTEXT SUMMARY]: old', 1760000100.2, 0),
+  ('C', 'assistant', 'a2', 1760000004.0, 0),
+  ('C', 'user', 'u3', 1760000110.0, 0),
+  ('D', 'user', 'u1', 1760000001.0, 0),
+  ('D', 'assistant', '[PRIOR CONTEXT — for reference only; not a new message]' || char(10) || 'a1' || char(10) || char(10) || '[END OF PRIOR CONTEXT — COMPACTION SUMMARY BELOW]' || char(10) || char(10) || '[CONTEXT SUMMARY]: merged', 1760000200.2, 0),
+  ('D', 'user', 'u4', 1760000210.0, 0);
+`, Options{})
+	sameLines(t, "C copied", copiedResponses(sessionOf(t, res, "C")), []string{"row-6", "row-8"})
+	if n := codes(res.Report)["hermes/summary-row"]; n != 1 {
+		t.Errorf("%d summary rows", n)
+	}
+}

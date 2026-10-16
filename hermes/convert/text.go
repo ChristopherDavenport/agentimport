@@ -80,8 +80,18 @@ const (
 	legacySummaryPrefix = "[CONTEXT SUMMARY]:"
 )
 
-// isSummaryText reports content that opens as a compaction summary.
+// mergedDelimiter ends the tail content a summary merged into a tail
+// row keeps before it (_MERGED_SUMMARY_DELIMITER).
+const mergedDelimiter = "[END OF PRIOR CONTEXT — COMPACTION SUMMARY BELOW]"
+
+// isSummaryText reports content that is a compaction summary, whole or
+// merged into a tail row after its delimiter, as classify_summary_content
+// tells it.
 func isSummaryText(s string) bool {
+	s = strings.TrimLeftFunc(s, isPySpace)
+	if _, after, ok := strings.Cut(s, mergedDelimiter); ok {
+		s = strings.TrimLeftFunc(after, isPySpace)
+	}
 	return strings.HasPrefix(s, summaryPrefix) || strings.HasPrefix(s, legacySummaryPrefix)
 }
 
