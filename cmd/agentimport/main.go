@@ -1,8 +1,8 @@
 // Command agentimport converts other coding agents' session logs into
 // the Agent Session Format, and reports what each conversion changed.
 //
-//	agentimport convert -o <store> [-from auto|claudecode|pi|codex|atif|cline|openhands|opencode] [-strict] [-slim] [-force] [-report text|json] <file|dir>...
-//	agentimport report [-from auto|claudecode|pi|codex|atif|cline|openhands|opencode] [-strict] [-slim] [-json] <file|dir>...
+//	agentimport convert -o <store> [-from auto|claudecode|pi|codex|atif|cline|clinesdk|openhands|opencode] [-strict] [-slim] [-force] [-report text|json] <file|dir>...
+//	agentimport report [-from auto|claudecode|pi|codex|atif|cline|clinesdk|openhands|opencode] [-strict] [-slim] [-json] <file|dir>...
 //	agentimport version
 //
 // convert writes every session a conversion makes, the main session and
@@ -17,7 +17,9 @@
 // or Roo Code task by its files' names in a task directory, an OpenHands
 // conversation by its directory, its base_state.json or an event file,
 // an OpenCode store by its data directory, a file in it, or its
-// database, which is converted whole; a file that is not a session of
+// database, which is converted whole, a Cline SDK session by its
+// directory or a file in it, converted with its children; a file that
+// is not a session of
 // any source is skipped when it was found in a directory and an error
 // when named.
 //
@@ -33,17 +35,19 @@ import (
 	"runtime/debug"
 	"syscall"
 
+	sdksqlite "github.com/ChristopherDavenport/agentimport/clinesdk/sqlite"
 	"github.com/ChristopherDavenport/agentimport/opencode/sqlite"
 )
 
 func main() {
-	// An OpenCode database is read from a private copy, which an
-	// interrupted run removes before it exits.
+	// An OpenCode or Cline database is read from a private copy, which
+	// an interrupted run removes before it exits.
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-sig
 		sqlite.RemoveCopies()
+		sdksqlite.RemoveCopies()
 		os.Exit(130)
 	}()
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))

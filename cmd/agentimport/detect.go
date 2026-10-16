@@ -19,6 +19,9 @@ import (
 	ccconvert "github.com/ChristopherDavenport/agentimport/claudecode/convert"
 	"github.com/ChristopherDavenport/agentimport/cline"
 	clineconvert "github.com/ChristopherDavenport/agentimport/cline/convert"
+	"github.com/ChristopherDavenport/agentimport/clinesdk"
+	sdkconvert "github.com/ChristopherDavenport/agentimport/clinesdk/convert"
+	sdksqlite "github.com/ChristopherDavenport/agentimport/clinesdk/sqlite"
 	"github.com/ChristopherDavenport/agentimport/codex"
 	codexconvert "github.com/ChristopherDavenport/agentimport/codex/convert"
 	"github.com/ChristopherDavenport/agentimport/opencode"
@@ -72,6 +75,13 @@ var sources = []source{
 		find: cline.FindSessions,
 		convert: func(path string, r *runner) (*agentimport.Result, error) {
 			return clineconvert.ConvertFile(path, clineconvert.Options{Slim: r.slim, Converted: r.clineDone})
+		},
+	},
+	{
+		name: sdkconvert.Source,
+		find: clinesdk.FindSessions,
+		convert: func(path string, r *runner) (*agentimport.Result, error) {
+			return sdkconvert.ConvertFile(path, sdkconvert.Options{Slim: r.slim, OpenIndex: sdksqlite.OpenIndex})
 		},
 	},
 	{
@@ -141,6 +151,13 @@ func collect(args []string, from string) ([]input, []skipped, error) {
 			// files names it.
 			if root, ok := opencode.StoreOf(path); ok {
 				path = root
+			}
+		}
+		if s.name == sdkconvert.Source {
+			// A Cline SDK session is a directory, its children's
+			// histories in it, whichever of its files names it.
+			if main := clinesdk.MainFile(path); main != "" {
+				path = main
 			}
 		}
 		if s.name == ohconvert.Source {
@@ -235,6 +252,9 @@ const (
 //     steps or after them;
 //   - a classic Cline or Roo Code task by the name of its API history
 //     or UI messages in a task directory, tasks/<id>/;
+//   - a Cline SDK session by its directory, holding <name>.messages.json
+//     or a manifest naming it, or by one of its files, a child's
+//     history among them;
 //   - an OpenHands conversation by its directory, holding a
 //     base_state.json or an event file, or by one of those files;
 //   - an OpenCode store by its data directory, holding opencode.db or a
@@ -253,7 +273,15 @@ func detect(path string) (source, error) {
 			s, _ := sourceNamed(ohconvert.Source)
 			return s, nil
 		}
+		if clinesdk.MainFile(path) != "" {
+			s, _ := sourceNamed(sdkconvert.Source)
+			return s, nil
+		}
 		return source{}, errUnknown
+	}
+	if clinesdk.IsSessionFile(path) && clinesdk.MainFile(path) != "" {
+		s, _ := sourceNamed(sdkconvert.Source)
+		return s, nil
 	}
 	if openhands.IsConversationFile(path) {
 		if dir, err := openhands.ConversationDir(path); err == nil && openhands.IsConversationDir(dir) {

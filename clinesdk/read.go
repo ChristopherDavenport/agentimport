@@ -458,6 +458,17 @@ func FindSessions(root string) ([]string, error) {
 	return out, err
 }
 
+// MainFile returns the file the session directory path names, or the
+// directory of the file it names, is found by: its history, or its
+// manifest; "" when it is no session directory.
+func MainFile(path string) string {
+	dir, err := SessionDir(path)
+	if err != nil {
+		return ""
+	}
+	return mainFile(dir)
+}
+
 // mainFile returns the file a session directory is found by, or ""
 // when dir is not a session directory: its history, or its manifest.
 func mainFile(dir string) string {
