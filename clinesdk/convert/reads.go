@@ -1,3 +1,8 @@
+// Portions of this file are ported from cline/cline
+// (https://github.com/cline/cline) at c8f808b5, Copyright 2026 Cline Bot
+// Inc., licensed under the Apache License 2.0; they have been modified.
+// See THIRD_PARTY_NOTICES.md.
+
 package convert
 
 import (

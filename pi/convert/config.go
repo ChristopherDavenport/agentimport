@@ -1,3 +1,8 @@
+// Portions of this file are ported from earendil-works/pi
+// (https://github.com/earendil-works/pi) at v1.0.1, Copyright (c) 2025
+// Mario Zechner, licensed under the MIT License; they have been
+// modified. See THIRD_PARTY_NOTICES.md.
+
 package convert
 
 import (

@@ -1,3 +1,8 @@
+// Strings in this file are copied from cline/cline
+// (https://github.com/cline/cline) at c8f808b5, Copyright 2026 Cline Bot
+// Inc., licensed under the Apache License 2.0, so that the output
+// matches what Cline sends. See THIRD_PARTY_NOTICES.md.
+
 package convert
 
 import (

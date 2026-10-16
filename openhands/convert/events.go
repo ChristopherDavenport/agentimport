@@ -1,3 +1,9 @@
+// Strings in this file are copied from OpenHands/software-agent-sdk
+// (https://github.com/OpenHands/software-agent-sdk) at d5995133,
+// Copyright (c) 2026 OpenHands contributors, licensed under the MIT
+// License, so that the output matches what OpenHands sends. See
+// THIRD_PARTY_NOTICES.md.
+
 package convert
 
 import (

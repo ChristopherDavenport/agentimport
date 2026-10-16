@@ -1,3 +1,8 @@
+// Portions of this file are ported from RooCodeInc/Roo-Code
+// (https://github.com/RooCodeInc/Roo-Code) at b867ec91 and v3.40.0,
+// Copyright 2025 Roo Code, Inc., licensed under the Apache License 2.0;
+// they have been modified. See THIRD_PARTY_NOTICES.md.
+
 package convert
 
 import (
