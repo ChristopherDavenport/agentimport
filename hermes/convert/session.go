@@ -162,6 +162,7 @@ func (fam *family) convertInto(rec *record, tgt target, depth int, into *agentim
 	fam.done[rec.s.ID] = true
 	fam.active[rec.s.ID] = true
 	defer delete(fam.active, rec.s.ID)
+	defer fam.release(rec)
 	sc := newSconv(fam, rec, tgt, depth)
 	sc.into = into
 	if err := sc.run(); err != nil {
@@ -177,6 +178,9 @@ func (fam *family) convertInto(rec *record, tgt target, depth int, into *agentim
 		return nil
 	}
 	sc.out = read
+	// The session as built is let go: the one read back is returned,
+	// and the parent needs only its leaf, in rec.leaf.
+	sc.b = nil
 	rec.sid = tgt.id
 	sc.tally()
 	return sc

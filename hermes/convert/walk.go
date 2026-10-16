@@ -1,6 +1,7 @@
 package convert
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -53,6 +54,8 @@ type walk struct {
 	keepContent bool
 	// unitOf names the row each item entry came from.
 	unitOf map[string]string
+	// idents caches the rows' hashed identities.
+	idents map[int][32]byte
 	// callAliases and outAliases hold the aliases a call entry is named
 	// by and an output entry names its call by.
 	callAliases, outAliases map[string][]string
@@ -72,7 +75,7 @@ type pendingCompaction struct {
 }
 
 func newWalk(sc *sconv, msgs []*hermes.Message) *walk {
-	w := &walk{sc: sc, start: map[int]bool{}, summary: map[int]int{}, copied: map[int]bool{}, unitOf: map[string]string{}, callAliases: map[string][]string{}, outAliases: map[string][]string{}}
+	w := &walk{sc: sc, start: map[int]bool{}, summary: map[int]int{}, copied: map[int]bool{}, unitOf: map[string]string{}, idents: map[int][32]byte{}, callAliases: map[string][]string{}, outAliases: map[string][]string{}}
 	for _, m := range msgs {
 		if m.Err != nil {
 			sc.mark(m.Unit, agentimport.LineMalformed)
@@ -224,13 +227,18 @@ func (w *walk) firstSummary(main []int, from int) int {
 	return -1
 }
 
+// maxHead bounds the head a compaction protects: the system prompt and
+// protect_first_n rows, three by default, which decays to none after
+// the first compaction (_protect_head_size).
+const maxHead = 16
+
 // head counts the rows just before the summary at main[s] that copy,
 // in order, the rows the generation before starts with, at main[prev].
 func (w *walk) head(main []int, prev, s int) int {
-	for h := (s - prev) / 2; h > 0; h-- {
+	for h := min((s-prev)/2, maxHead); h > 0; h-- {
 		ok := true
 		for j := 0; j < h; j++ {
-			if identity(w.rows[main[s-h+j]]) != identity(w.rows[main[prev+j]]) {
+			if w.ident(main[s-h+j]) != w.ident(main[prev+j]) {
 				ok = false
 				break
 			}
@@ -240,6 +248,16 @@ func (w *walk) head(main []int, prev, s int) int {
 		}
 	}
 	return 0
+}
+
+// ident is a row's identity, hashed once.
+func (w *walk) ident(i int) [32]byte {
+	if h, ok := w.idents[i]; ok {
+		return h
+	}
+	h := sha256.Sum256([]byte(identity(w.rows[i])))
+	w.idents[i] = h
+	return h
 }
 
 // copies marks the rows of a generation that Hermes copied: those from
@@ -272,7 +290,7 @@ func (w *walk) branchCopies() (int, error) {
 	if sc.rec.rel != hermes.Branch || sc.rec.parent == nil {
 		return 0, nil
 	}
-	pmsgs, err := sc.fam.messages(sc.rec.parent)
+	pmsgs, err := sc.fam.peek(sc.rec.parent)
 	if err != nil {
 		return 0, err
 	}

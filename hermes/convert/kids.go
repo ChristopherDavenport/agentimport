@@ -221,18 +221,24 @@ func (dc *delegateCall) goalIndex(text string) int {
 	return -1
 }
 
-// firstUserText is the text of a session's first user row.
+// firstUserText is the text of a session's first user row, read once
+// and kept alone, not with the session's rows.
 func (sc *sconv) firstUserText(rec *record) string {
-	msgs, err := sc.fam.messages(rec)
+	if rec.hasFirst {
+		return rec.firstText
+	}
+	rec.hasFirst = true
+	msgs, err := sc.fam.peek(rec)
 	if err != nil {
 		return ""
 	}
 	for _, m := range msgs {
 		if m.Err == nil && m.Role == hermes.RoleUser {
-			return m.Content.String()
+			rec.firstText = m.Content.String()
+			break
 		}
 	}
-	return ""
+	return rec.firstText
 }
 
 // called records that the walk wrote a delegate_task call.
@@ -300,7 +306,7 @@ func (sc *sconv) linkBefore(callID string, out *hermes.Message) ([]agentsession.
 		if _, err := sc.append(link); err != nil {
 			return nil, err
 		}
-		refs = append(refs, agentsession.EntryRef{Session: tgt.id, Entry: ch.b.Resume()})
+		refs = append(refs, agentsession.EntryRef{Session: tgt.id, Entry: ch.rec.leaf})
 		how := "the call's only sub-agent; its session ID is derived from the call's"
 		if dc.h.background {
 			how = "a task its background run ran inline, before the call returned; it keeps its own session ID"

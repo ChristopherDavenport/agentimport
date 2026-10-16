@@ -136,6 +136,13 @@ context, and none read:
   its parent's end, since before schema 16 Hermes' own predicates take
   a sub-agent of a parent that later compressed for its continuation.
 
+- Memory: a session's rows are read when it converts and let go when
+  it ends; a sub-agent's or continuation's while it converts inside its
+  parent. Another session's rows that a conversion reads, a branch's
+  parent's or a sub-agent's first message, are read again rather than
+  held. The converted sessions are held in the result, which returns
+  them all.
+
 ### Units
 
 The tally counts each row of `sessions` and each row of `messages`. A

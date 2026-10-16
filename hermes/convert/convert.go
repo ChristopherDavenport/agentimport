@@ -129,6 +129,9 @@ func Convert(opts Options, st hermes.Store) (*agentimport.Result, error) {
 		}
 		out = append(out, fam.convertRoot(rec, why)...)
 	}
+	if testHookDone != nil {
+		testHookDone(fam)
+	}
 	strays, err := st.Orphans(fam.known())
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", st.Name(), err)
@@ -136,6 +139,10 @@ func Convert(opts Options, st hermes.Store) (*agentimport.Result, error) {
 	fam.strays(strays)
 	return &agentimport.Result{Report: r, Sessions: out}, nil
 }
+
+// testHookDone, when set, sees the family once every session has
+// converted; a test holds it to its memory bound with it.
+var testHookDone func(fam *family)
 
 // family is one conversion: the sessions of the store, by native ID.
 type family struct {
@@ -175,9 +182,13 @@ type record struct {
 	own target
 	// sid is the session ID the record converted to, once it has.
 	sid string
-	// msgs are the session's rows, once read.
+	// msgs are the session's rows while it converts.
 	msgs   []*hermes.Message
 	loaded bool
+	// firstText is the text of its first user row, once read, and
+	// hasFirst says it was.
+	firstText string
+	hasFirst  bool
 	// leaf is the entry its converted session resumes from.
 	leaf string
 }
@@ -422,7 +433,10 @@ func (rec *record) sidOrID() string {
 	return rec.own.id
 }
 
-// messages reads a session's rows once.
+// messages reads a session's rows for its own conversion, which holds
+// them until it ends and releases them (release): one session's rows at
+// a time are in memory, its sub-agents' and continuations' while they
+// convert inside it.
 func (fam *family) messages(rec *record) ([]*hermes.Message, error) {
 	if rec.loaded {
 		return rec.msgs, nil
@@ -433,4 +447,18 @@ func (fam *family) messages(rec *record) ([]*hermes.Message, error) {
 	}
 	rec.msgs, rec.loaded = msgs, true
 	return msgs, nil
+}
+
+// peek reads another session's rows without holding them: its
+// conversion's when it is converting, else read again.
+func (fam *family) peek(rec *record) ([]*hermes.Message, error) {
+	if rec.loaded {
+		return rec.msgs, nil
+	}
+	return fam.st.Messages(rec.s.ID)
+}
+
+// release lets a session's rows go once its conversion ends.
+func (fam *family) release(rec *record) {
+	rec.msgs, rec.loaded = nil, false
 }

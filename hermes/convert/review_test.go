@@ -572,3 +572,26 @@ func TestNestedFailure(t *testing.T) {
 	defer func() { testHookRun = nil }()
 	convertFixture(t, "subagents", Options{})
 }
+
+// TestRowsReleased (F15): no session's rows outlive its conversion,
+// and no conversion holds the session it built beside the one it read
+// back.
+func TestRowsReleased(t *testing.T) {
+	var held []string
+	testHookDone = func(fam *family) {
+		for id, rec := range fam.recs {
+			if rec.loaded || rec.msgs != nil {
+				held = append(held, id)
+			}
+		}
+	}
+	defer func() { testHookDone = nil }()
+	for _, name := range []string{"subagents", "branch", "split"} {
+		held = nil
+		res := convertFixture(t, name, Options{})
+		if len(held) > 0 {
+			t.Errorf("%s: rows of %v held after the conversion", name, held)
+		}
+		_ = res
+	}
+}
