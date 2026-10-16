@@ -361,3 +361,27 @@ INSERT INTO messages (session_id, role, content, reasoning_content, timestamp) V
 		t.Errorf("findings %v", got)
 	}
 }
+
+// TestCodexMessageItems (F8): every assistant message item of
+// codex_message_items is a message of its own, with its phase, and
+// keeps its ID unless the turn's Codex reasoning items carry encrypted
+// content, as _replay_message_items replays them.
+func TestCodexMessageItems(t *testing.T) {
+	res := convertScript(t, `
+INSERT INTO sessions (id, source, model, started_at) VALUES ('cm', 'cli', 'm', 1760000000.0);
+INSERT INTO messages (session_id, role, content, reasoning_details, codex_message_items, timestamp) VALUES
+  ('cm', 'user', 'go', NULL, NULL, 1760000001.0),
+  ('cm', 'assistant', 'Looking.Done.', '[{"type":"thinking","thinking":"t","signature":"s"}]',
+   '[{"type":"message","role":"assistant","id":"msg_1","phase":"commentary","content":[{"type":"output_text","text":"Looking."}]},{"type":"message","role":"assistant","id":"msg_2","phase":"final_answer","content":[{"type":"output_text","text":"Done."}]}]', 1760000002.0);
+`, Options{})
+	s := sessionOf(t, res, "cm")
+	var got []string
+	for _, e := range s.Entries() {
+		if ie, ok := e.(*agentsession.ItemEntry); ok {
+			if m, ok := ie.Item.(*openresponses.Message); ok && m.Role == openresponses.RoleAssistant {
+				got = append(got, m.ID+" "+string(m.Phase)+" "+m.Text())
+			}
+		}
+	}
+	sameLines(t, "messages", got, []string{"msg_1 commentary Looking.", "msg_2 final_answer Done."})
+}

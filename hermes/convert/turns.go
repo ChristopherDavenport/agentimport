@@ -92,11 +92,21 @@ func (w *walk) assistant(i int) error {
 			}
 		}
 	}
-	if msg != nil {
-		if id, phase := messagePhase(m, encrypted); phase != "" || id != "" {
-			msg.Phase, msg.ID = phase, id
-			used = append(used, "codex_message_items")
+	// The messages: the Codex route's items when the row holds them,
+	// else the text.
+	msgs := codexMessages(m)
+	if len(msgs) > 0 {
+		used = append(used, "codex_message_items")
+		var joined strings.Builder
+		for _, cm := range msgs {
+			joined.WriteString(cm.Text())
 		}
+		if msg == nil || joined.String() != msg.Text() {
+			w.keepContent = true
+			sc.addf(agentimport.Lossy, "hermes/codex-messages", m.Unit, "the turn is the %d message items of codex_message_items, as the Codex route replays them, not its content, which is kept in the row's columns", len(msgs))
+		}
+	} else if msg != nil {
+		msgs = []*openresponses.Message{msg}
 	}
 	if summaryRow {
 		used = append(used, "_compressed_summary")
@@ -133,8 +143,8 @@ func (w *walk) assistant(i int) error {
 	if encrypted {
 		sc.addf(agentimport.Gap, "agentimport/reasoning-provider", m.Unit, "the reasoning's encrypted content is opaque and names no provider; the item entry carries %s:provider", Source)
 	}
-	if msg != nil {
-		if _, _, err := w.item(msg, m, respID, visible(m), nil); err != nil {
+	for _, cm := range msgs {
+		if _, _, err := w.item(cm, m, respID, visible(m), nil); err != nil {
 			return err
 		}
 	}
@@ -212,7 +222,7 @@ func (w *walk) assistant(i int) error {
 	if _, err := sc.append(resp); err != nil {
 		return err
 	}
-	return w.thinkingOnly(m, msg, reasoningEntries)
+	return w.thinkingOnly(m, msgs, reasoningEntries)
 }
 
 // emptyPlaceholder is the text Hermes sends for an empty turn that is
@@ -226,10 +236,15 @@ const emptyPlaceholder = "[interrupt: no assistant output for this turn]"
 // no tool calls, no text, and reasoning text or reasoning_details. A
 // turn of Codex reasoning items alone is dropped only off the Codex
 // route, which the row does not record; it is reported and kept.
-func (w *walk) thinkingOnly(m *hermes.Message, msg *openresponses.Message, entries []string) error {
+func (w *walk) thinkingOnly(m *hermes.Message, msgs []*openresponses.Message, entries []string) error {
 	sc := w.sc
-	if len(m.ToolCalls) > 0 || msg != nil && strings.TrimSpace(msg.Text()) != "" || len(entries) == 0 {
+	if len(m.ToolCalls) > 0 || len(entries) == 0 {
 		return nil
+	}
+	for _, msg := range msgs {
+		if strings.TrimSpace(msg.Text()) != "" {
+			return nil
+		}
 	}
 	rc := m.ReasoningContent != nil && strings.TrimSpace(*m.ReasoningContent) != ""
 	if !rc && m.Reasoning == "" && len(splitArray(m.ReasoningDetails)) == 0 {

@@ -311,31 +311,57 @@ func isObject(raw json.RawMessage) bool {
 	return len(t) > 0 && t[0] == '{'
 }
 
-// messagePhase reads the phase, and the ID when Hermes replays one, of
-// the first assistant message item of codex_message_items: Hermes drops
-// the item's ID whenever its turn carried encrypted reasoning
-// (_replay_message_items), since the provider refuses one without it.
-func messagePhase(m *hermes.Message, linked bool) (id string, phase openresponses.Phase) {
+// codexMessages are the assistant messages of codex_message_items,
+// each replayed as its own message with its output text and phase
+// (agent/codex_responses_adapter.py _replay_message_items); its ID is
+// dropped when the turn's Codex reasoning items carry encrypted
+// content, which the provider refuses the ID without. Nil when the
+// column holds none.
+func codexMessages(m *hermes.Message) []*openresponses.Message {
+	linked := false
+	for _, raw := range splitArray(m.CodexReasoningItems) {
+		var ri struct {
+			EncryptedContent string `json:"encrypted_content"`
+		}
+		if json.Unmarshal(raw, &ri) == nil && ri.EncryptedContent != "" {
+			linked = true
+		}
+	}
+	var out []*openresponses.Message
 	for _, raw := range splitArray(m.CodexMessageItems) {
 		var it struct {
-			Type  string `json:"type"`
-			Role  string `json:"role"`
-			ID    string `json:"id"`
-			Phase string `json:"phase"`
+			Type    string            `json:"type"`
+			Role    string            `json:"role"`
+			ID      string            `json:"id"`
+			Phase   string            `json:"phase"`
+			Content []json.RawMessage `json:"content"`
 		}
 		if json.Unmarshal(raw, &it) != nil || it.Type != "message" || it.Role != "assistant" {
 			continue
 		}
+		msg := &openresponses.Message{Role: openresponses.RoleAssistant}
+		for _, c := range it.Content {
+			var part struct {
+				Type string  `json:"type"`
+				Text *string `json:"text"`
+			}
+			if json.Unmarshal(c, &part) == nil && part.Text != nil && (part.Type == "output_text" || part.Type == "text") {
+				msg.Content = append(msg.Content, &openresponses.OutputText{Text: *part.Text})
+			}
+		}
+		if len(msg.Content) == 0 {
+			continue
+		}
 		switch it.Phase {
 		case string(openresponses.PhaseCommentary), string(openresponses.PhaseFinalAnswer):
-			phase = openresponses.Phase(it.Phase)
+			msg.Phase = openresponses.Phase(it.Phase)
 		}
 		if !linked {
-			id = it.ID
+			msg.ID = it.ID
 		}
-		return id, phase
+		out = append(out, msg)
 	}
-	return "", ""
+	return out
 }
 
 // thoughtSignature reads the Gemini thought signature an

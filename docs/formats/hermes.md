@@ -304,7 +304,7 @@ Every column of `messages` at schema version 31:
 | `token_count` | `hermes:columns`; no usage (Usage below) |
 | `finish_reason` | the response's status, and `hermes:finish_reason` |
 | `reasoning`, `reasoning_content`, `reasoning_details`, `codex_reasoning_items` | reasoning items from the first carrier that yields one (Payload below); the others, and one with entries no item holds, in `hermes:columns` |
-| `codex_message_items` | the message's phase and ID when it holds one; else `hermes:columns` |
+| `codex_message_items` | the turn's messages, each with its phase and ID, when it holds assistant message items; else `hermes:columns` |
 | `platform_message_id` | `hermes:columns`: the platform's ID of a gateway message |
 | `observed` | `hermes:columns`: a group message Hermes saw and was not addressed by (`hermes/observed`) |
 | `_compressed_summary` | tells a compaction's summary row |
@@ -346,9 +346,12 @@ Every column of `messages` at schema version 31:
   (`extra_content.google.thought_signature`): a reasoning item holding
   only `encrypted_content` before the call, as `providers/gemini` reads
   one.
-- **Text phase**: `codex_message_items`' phase on the message, and its
-  ID unless the turn carried encrypted reasoning, which Hermes drops it
-  for (`_replay_message_items`).
+- **Codex messages**: a row holding `codex_message_items` is one
+  message per assistant message item, with its output text and phase,
+  as the Codex route replays them (`_replay_message_items`); an item
+  keeps its ID unless the turn's `codex_reasoning_items` carry
+  encrypted content. When their text is not the row's content, the
+  content is kept in the row's columns (`hermes/codex-messages`).
 - **Content parts**: `text` to input or output text, `image_url` to an
   input image, Responses parts as themselves, other chat parts to
   `openai.<type>` extension parts, a part of no type to `hermes.part`.
@@ -428,6 +431,7 @@ finding:
 | `hermes/call-id` | repaired | A call ID empty, malformed or used before in the session was renamed; the native ID is in `hermes:call_id`. |
 | `hermes/call-malformed` | repaired | Entries of `tool_calls` that are not objects; they are kept in the row's columns. |
 | `hermes/child-alone` | lossy | A child session converted on its own, by `Alone`, the bound on nesting or its parent's failure; no link names it. |
+| `hermes/codex-messages` | lossy | The turn is the message items of `codex_message_items`, as the Codex route replays them, not its content, which is kept in `hermes:columns`. |
 | `hermes/compaction` | lossy | An in-place compaction, a `compaction` entry whose summary is its generation's first item. |
 | `hermes/compaction-empty` | lossy | A generation of in-place compaction holds no item; no compaction is written and the rows before stay in context. |
 | `hermes/content-part` | kept | Content parts Open Responses does not define, carried as extension parts. |
