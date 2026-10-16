@@ -238,7 +238,7 @@ func TestForkOfLegacy(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := res.Sessions[0]
-	src := agentsession.SubsessionID("1759341600000", Source)
+	src := agentsession.SubsessionID("1759341700000", Source)
 	if h := s.Header(); h.ID != "1759345300000_frk02" || h.ParentSession != src {
 		t.Errorf("header id %s, parent %s; want the fork's own ID and parent %s", h.ID, h.ParentSession, src)
 	}
