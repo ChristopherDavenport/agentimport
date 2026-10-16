@@ -154,6 +154,11 @@ func (fam *family) run(f *atif.File, path string) (*agentimport.Result, error) {
 	if f == nil || f.Doc == nil {
 		return nil, atif.ErrNotDocument
 	}
+	if path == "" && fam.root != "" {
+		// Convert of a file read from disk: a reference to it is to
+		// itself.
+		path = f.Path
+	}
 	if path != "" {
 		real := realPath(path)
 		fam.files[real] = f
@@ -313,6 +318,11 @@ func readFile(path string) (*atif.File, error) {
 	defer fd.Close()
 	f, err := atif.Read(fd)
 	if err != nil {
+		var pe *fs.PathError
+		if errors.As(err, &pe) {
+			// A read error names the path, a directory's among them.
+			return nil, errors.New("the file cannot be read")
+		}
 		return nil, err
 	}
 	f.Path = path
