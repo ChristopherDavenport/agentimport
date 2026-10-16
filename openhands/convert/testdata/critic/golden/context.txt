@@ -7,3 +7,4 @@ session 0 00000011-0000-4000-9000-000000000001
   assistant: 
   user: Please respond with a message or call a tool.
   assistant: Fixed.
+  user: Your previous response was blocked by the model's 

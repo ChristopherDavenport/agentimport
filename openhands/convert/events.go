@@ -11,6 +11,10 @@ import (
 	"github.com/ChristopherDavenport/openresponses"
 )
 
+// contentFilterNudge is the user message OpenHands writes when the
+// model's content filter blocked a response (agent/agent.py).
+const contentFilterNudge = "Your previous response was blocked by the model's content filter. Please continue, rephrasing to avoid the flagged content."
+
 // Part IDs of the instructions a system prompt event composes.
 const (
 	partSystem  = "system"
@@ -224,11 +228,17 @@ func (c *conv) message(i int) error {
 			parts = openresponses.Contents{}
 		}
 		e := c.itemEntry(i, openresponses.UserMessage(parts...), "")
-		if src != openhands.SourceUser {
+		switch {
+		case src != openhands.SourceUser:
 			if err := c.b.Member(e, "source", src); err != nil {
 				return err
 			}
 			c.at(agentimport.Kept, "openhands/harness-user-message", i, "a user message the %s wrote, such as a nudge after an empty response or a hook's feedback; it carries %s:source", src, Source)
+		case textOf(lm.Content) == contentFilterNudge:
+			if err := c.b.Member(e, "source", "harness"); err != nil {
+				return err
+			}
+			c.at(agentimport.Kept, "openhands/harness-user-message", i, "the nudge OpenHands writes as the user after the model's content filter blocked a response; it carries %s:source", Source)
 		}
 		if err := c.messageMembers(i, e, lm, pm, members, false); err != nil {
 			return err

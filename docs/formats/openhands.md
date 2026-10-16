@@ -200,7 +200,7 @@ observation is kept beside the output in `openhands:observation`.
 | --- | --- | --- |
 | conversation directory | session `id` the state's `id` (the directory name dashed when there is none; a derived one when a store would refuse it) | `created_at` the first timestamp; `cwd` `workspace.working_dir`; `harness` `openhands`, no version; header members `openhands:state` (the state but its metrics), `openhands:stats` (the metrics' totals and costs), `openhands:meta`, and `agentimport:source` |
 | `SystemPromptEvent` | the first `config` on a path: `instructions_parts` `system` and `dynamic_context`, `tools_added`, `model` and `reasoning.effort` from the state's LLM | a later one is a delta; tool definitions (1.7+) carry no parameter schema, kept in `openhands:event` |
-| `MessageEvent` from the user | `item`, user `message`: `input_text`, `input_image` per URL, then `extended_content` as `input_text` | `activated_skills`, `sender` and other members in `openhands:event`; from the environment or a hook, `openhands:source` |
+| `MessageEvent` from the user | `item`, user `message`: `input_text`, `input_image` per URL, then `extended_content` as `input_text` | `activated_skills`, `sender` and other members in `openhands:event`; from the environment or a hook, `openhands:source`; OpenHands' content-filter nudge, which it writes as the user, `openhands:source` `harness`. The error OpenHands writes as the user when the model's function call does not validate is the error's own text and cannot be told from a person's message |
 | `MessageEvent` from the agent with `llm_response_id` | reasoning items, an assistant `message`, a `response` | without one, an assistant message with no response (`openhands/assistant-input`) |
 | `ActionEvent`s of one `llm_response_id` | from the first: reasoning items and the `thought` message; then one `function_call` per action (`call_id` the tool call's id through `agentimport.CallIDs`, `arguments` as stored, `id` the Responses `fc_` id); a `response` | the action, `security_risk`, `summary` and the tool call's `origin` in `openhands:event` |
 | `ObservationEvent` | `function_call_output`, rendered as above | `is_error` as `openhands:is_error` (gap `agentimport/tool-error`) |
@@ -396,7 +396,7 @@ every converter can report are in [README.md](README.md).
 | `openhands/duplicate-output` | kept | A second answer to a call is a custom entry. |
 | `openhands/extension-item` | kept | A redacted thinking block is the `anthropic.redacted_thinking` item. |
 | `openhands/fork-usage` | kept | A response a fork copied keeps its usage in `openhands:copied_usage`. |
-| `openhands/harness-user-message` | kept | A user message the environment or a hook wrote carries `openhands:source`. |
+| `openhands/harness-user-message` | kept | A user message the environment, a hook or OpenHands wrote carries `openhands:source`. |
 | `openhands/orphan-output` | kept | An answer to a call no action on its path made is a custom entry. |
 | `openhands/reasoning-content` | kept | A `reasoning_content` that differs from the reasoning items is `openhands:reasoning_content`. |
 | `openhands/undecodable-event` | kept | An event whose members do not fit its kind is a custom entry. |
