@@ -6,8 +6,10 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 // fixtureSessions lists every session directory of the converter's
@@ -208,7 +210,7 @@ func TestSourcePrefixHash(t *testing.T) {
 			t.Errorf("%d messages: got %s, %v; want %s", n, got, err, want)
 		}
 	}
-	if _, err := SourcePrefixHash(source, 6); !errors.Is(err, errLone) {
+	if _, err := SourcePrefixHash(source, 6); !errors.Is(err, ErrLoneSurrogate) {
 		t.Errorf("a lone surrogate in user text: %v", err)
 	}
 	if key, err := BoundaryKey(source[3]); err != nil || key != "id:d" {
@@ -263,5 +265,70 @@ func TestFileIndex(t *testing.T) {
 	rows, _ := ix.Family("r")
 	if len(rows) != 2 || rows[1].ParentAgentID != "lead" || rows[1].Prompt != "Do" {
 		t.Errorf("rows %+v", rows)
+	}
+}
+
+// heapAfter is the live heap after f, its result kept alive.
+func heapAfter(f func() any) (uint64, any) {
+	runtime.GC()
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	v := f()
+	runtime.GC()
+	runtime.ReadMemStats(&after)
+	if after.HeapAlloc < before.HeapAlloc {
+		return 0, v
+	}
+	return after.HeapAlloc - before.HeapAlloc, v
+}
+
+// TestTinyElements reads a 9 MB array of a million tiny elements: the
+// messages it holds cost memory in proportion to the file, not a few
+// hundred bytes each.
+func TestTinyElements(t *testing.T) {
+	data := []byte("[" + strings.Repeat(`"element",`, 999_999) + `"element"]`)
+	for _, wrap := range []bool{false, true} {
+		in := data
+		if wrap {
+			in = []byte(`{"version":1,"messages":` + string(data) + `}`)
+		}
+		heap, v := heapAfter(func() any { return ParseMessagesFile("x.messages.json", in) })
+		f := v.(*MessagesFile)
+		if len(f.Messages) != 1_000_000 {
+			t.Fatalf("%d messages", len(f.Messages))
+		}
+		if limit := uint64(8 * len(in)); heap > limit {
+			t.Errorf("a %d-byte file of tiny elements holds %d bytes of heap, over %d", len(in), heap, limit)
+		}
+		runtime.KeepAlive(f)
+	}
+	// Past MaxMessages the rest is a fault, as a file cut short is.
+	f := ParseMessagesFile("x.messages.json", []byte("["+strings.Repeat("0,", MaxMessages)+"0]"))
+	if len(f.Messages) != MaxMessages || f.Err == nil {
+		t.Errorf("%d messages, err %v", len(f.Messages), f.Err)
+	}
+}
+
+// TestManyNotices strips many mode notices in time linear in the text.
+func TestManyNotices(t *testing.T) {
+	text := func(n int) string {
+		return strings.Repeat("word <mode_notice>switched</mode_notice> ", n)
+	}
+	best := func(s string) time.Duration {
+		var d time.Duration
+		for i := 0; i < 3; i++ {
+			start := time.Now()
+			if got := StripModeNotices(s); strings.Contains(got, "mode_notice") {
+				t.Fatal("a notice is left")
+			}
+			if e := time.Since(start); i == 0 || e < d {
+				d = e
+			}
+		}
+		return d
+	}
+	a, b := best(text(5_000)), best(text(20_000))
+	if b > 8*a {
+		t.Errorf("%v for 5000 notices, %v for 20000: not linear", a, b)
 	}
 }

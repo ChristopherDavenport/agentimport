@@ -23,6 +23,11 @@ func FuzzRead(f *testing.F) {
 	f.Add([]byte(`{"version":1,"updated_at":"2026-10-01T10:00:00Z","source_message_count":2,"source_prefix_hash":"sha256:0","messages":[{"role":"user","content":[{"type":"text"}]}]}`))
 	f.Add([]byte(`[{"role":"user","content":"<user_command slash=\"team\">x</user_command>","metadata":{"displayOnly":true}}]`))
 	f.Fuzz(func(t *testing.T, data []byte) {
+		// The memory a file costs is bounded by TestTinyElements; past
+		// a megabyte the fuzzer only finds what that test does.
+		if len(data) > 1<<20 {
+			return
+		}
 		mf := ParseMessagesFile("s.messages.json", data)
 		for _, m := range mf.Messages {
 			out, err := json.Marshal(m)

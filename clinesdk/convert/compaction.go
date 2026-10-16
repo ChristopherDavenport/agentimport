@@ -2,6 +2,7 @@ package convert
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -47,7 +48,7 @@ func (sc *sconv) planCompaction(c *clinesdk.Compaction) *compPlan {
 	switch {
 	case pr.Applies:
 		plan.apply, plan.how = true, pr.By
-	case pr.Unhashed != nil:
+	case errors.Is(pr.Unhashed, clinesdk.ErrLoneSurrogate):
 		plan.how = "structure"
 	default:
 		plan.why = pr.Why
@@ -74,22 +75,15 @@ func (sc *sconv) planCompaction(c *clinesdk.Compaction) *compPlan {
 	}
 	sm := c.Messages
 	plan.pinned = sm[1:]
-	for j := 1; j < len(sm); j++ {
-		n := len(sm) - j
-		if n > plan.count {
-			continue
-		}
-		same := true
-		for i := 0; i < n; i++ {
-			if !sameMessage(sm[j+i], msgs[source[plan.count-n+i]]) {
-				same = false
-				break
-			}
-		}
-		if same {
-			plan.tail, plan.tailN, plan.pinned = source[plan.count-n], n, sm[1:j]
-			break
-		}
+	// The kept messages are the longest run of the sidecar's after its
+	// summary that copies the history's last before the source ends.
+	n := 0
+	for n < len(sm)-1 && n < plan.count && sameMessage(sm[len(sm)-1-n], msgs[source[plan.count-1-n]]) {
+		n++
+	}
+	if n > 0 {
+		j := len(sm) - n
+		plan.tail, plan.tailN, plan.pinned = source[plan.count-n], n, sm[1:j]
 	}
 	if plan.how == "structure" {
 		if plan.tailN == 0 {
@@ -216,17 +210,8 @@ func (sc *sconv) writeCompaction() error {
 	if id := c.ConversationID; id != "" && id != sc.fam.rootID() && (sc.h.row == nil || sc.h.row.ConversationID != id) {
 		sc.addf(agentimport.Lossy, "clinesdk/compaction-conversation", c.Name, 0, "the sidecar names conversation %s, not the session; Cline applies it when that is the agent's conversation, which the files do not record; it is applied", id)
 	}
-	if plan.tail >= 0 {
-		k := plan.tail
-		for _, m := range sm[1+len(plan.pinned):] {
-			for k < plan.at && sc.h.f.Messages[k].Err == nil && sc.h.f.Messages[k].DisplayOnly() {
-				k++
-			}
-			if k < plan.at {
-				sc.rd.copySent(sc.h.f.Messages[k], m)
-			}
-			k++
-		}
+	if len(sc.rd.committed) > 0 || len(sc.rd.pending) > 0 || len(sc.rd.dirty) > 0 {
+		sc.addf(agentimport.Lossy, "clinesdk/outdated-read", c.Name, 0, "the compaction keeps Cline's batched rewrites of outdated reads, as an automatic compaction does; a manual one (/compact) clears them, and the files do not say which this was")
 	}
 	sc.project(c.Messages)
 	return nil

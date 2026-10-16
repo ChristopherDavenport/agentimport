@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"errors"
 	"math"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode/utf16"
@@ -182,6 +183,44 @@ func equal(a, b String) bool {
 	return true
 }
 
+// unitKey is a key's code units as a map key.
+func unitKey(k String) string {
+	b := make([]byte, 2*len(k))
+	for i, c := range k {
+		b[2*i], b[2*i+1] = byte(c>>8), byte(c)
+	}
+	return string(b)
+}
+
+// orderIndexes moves an object's array-index keys first, in ascending
+// order, as JavaScript orders them; the other keys keep their order.
+func (v *Value) orderIndexes() {
+	type member struct {
+		n   uint64
+		k   String
+		val *Value
+	}
+	var idx []member
+	var keys []String
+	var vals []*Value
+	for i, k := range v.Keys {
+		if n, ok := arrayIndex(k); ok {
+			idx = append(idx, member{n, k, v.Vals[i]})
+			continue
+		}
+		keys = append(keys, k)
+		vals = append(vals, v.Vals[i])
+	}
+	sort.Slice(idx, func(i, j int) bool { return idx[i].n < idx[j].n })
+	v.Keys, v.Vals = v.Keys[:0], v.Vals[:0]
+	for _, m := range idx {
+		v.Keys = append(v.Keys, m.k)
+		v.Vals = append(v.Vals, m.val)
+	}
+	v.Keys = append(v.Keys, keys...)
+	v.Vals = append(v.Vals, vals...)
+}
+
 // arrayIndex reports whether k is an array index, a canonical decimal
 // integer below 2^32 - 1, which JavaScript orders before other keys.
 func arrayIndex(k String) (uint64, bool) {
@@ -255,6 +294,10 @@ func (p *parser) value(depth int) (*Value, error) {
 			p.i++
 			return v, nil
 		}
+		// The members as written, a repeated one at its first place;
+		// the array-index keys are moved first when the object ends.
+		at := map[string]int{}
+		indexed := false
 		for {
 			p.space()
 			if p.i >= len(p.data) || p.data[p.i] != '"' {
@@ -274,7 +317,16 @@ func (p *parser) value(depth int) (*Value, error) {
 			if err != nil {
 				return nil, err
 			}
-			v.set(k, val)
+			if i, ok := at[unitKey(k)]; ok {
+				v.Vals[i] = val
+			} else {
+				at[unitKey(k)] = len(v.Keys)
+				v.Keys = append(v.Keys, k)
+				v.Vals = append(v.Vals, val)
+				if _, ok := arrayIndex(k); ok {
+					indexed = true
+				}
+			}
 			p.space()
 			if p.i >= len(p.data) {
 				return nil, errSyntax
@@ -285,6 +337,9 @@ func (p *parser) value(depth int) (*Value, error) {
 			}
 			if p.data[p.i] == '}' {
 				p.i++
+				if indexed {
+					v.orderIndexes()
+				}
 				return v, nil
 			}
 			return nil, errSyntax

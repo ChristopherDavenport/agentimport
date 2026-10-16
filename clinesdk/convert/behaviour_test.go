@@ -258,3 +258,19 @@ func TestForkOfLegacy(t *testing.T) {
 		t.Errorf("%d responses carry usage; the fork's own one alone should", counted)
 	}
 }
+
+// TestUnhashableHistory leaves a sidecar stale over a history Cline
+// cannot hash itself, a user part that is no object, even when the
+// sidecar's messages copy the history's: Cline throws on it.
+func TestUnhashableHistory(t *testing.T) {
+	files := map[string][]byte{
+		"r.messages.json": msgs(`{"role":"user","content":["not a part"],"ts":1000}`, reply("a", 2000), userMsg("b", 3000), reply("c", 4000)),
+		"r.compaction.json": []byte(`{"version":1,"updated_at":"2026-10-01T10:00:00Z","source_message_count":3,"source_prefix_hash":"sha256:0",` +
+			`"messages":[{"role":"user","content":"Context summary:\n\ns","metadata":{"kind":"compaction_summary"}},` + userMsg("b", 3000) + `]}`),
+	}
+	res := convertFiles(t, files, Options{})
+	codes := strings.Join(res.Report.Codes(), " ")
+	if !strings.Contains(codes, "clinesdk/stale-compaction") || strings.Contains(codes, "clinesdk/compaction-unverified") {
+		t.Errorf("codes %s", codes)
+	}
+}

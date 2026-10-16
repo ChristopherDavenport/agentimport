@@ -33,6 +33,9 @@ func FuzzConvert(f *testing.F) {
 		[]byte(`{"version":1,"agent":"subagent","messages":[{"role":"user","content":"t"},{"role":"assistant","content":[{"type":"tool_use","id":"b","name":"spawn_agent","input":{"task":"t"}}]}]}`),
 		[]byte(`{"version":1,"session_id":"s","metadata":{"fork":{"forkedFromSessionId":"s","forkedAt":"x"}}}`))
 	f.Fuzz(func(t *testing.T, msgs, comp, child, man []byte) {
+		if len(msgs)+len(comp)+len(child)+len(man) > 1<<20 {
+			return
+		}
 		files := map[string][]byte{}
 		if len(msgs) > 0 {
 			files["s"+clinesdk.SuffixMessages] = msgs

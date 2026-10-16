@@ -92,6 +92,14 @@ would have added.
   encoded again is the same JSON value. Content blocks decode one by
   one; a repeated `messages` member is read as JSON.parse reads it, the
   last standing.
+- **Memory.** A decoded message or block costs a few hundred bytes
+  whatever its size, so identical elements of up to 64 bytes share one
+  decoding, an array is read up to `MaxMessages` (2^20) elements and a
+  content array up to `MaxBlocks` (2^16) blocks, the rest a fault as a
+  file cut short is. A file of distinct tiny elements still costs tens
+  of times its size; a file of repeated ones a pointer per element.
+  The converter keeps no parsed tool result beyond the request that
+  reads it.
 - **Timestamps** are ms epoch numbers on messages and ISO times on the
   manifest and the sidecar; a value outside the years 1970 to 9999, or
   a string, is none.

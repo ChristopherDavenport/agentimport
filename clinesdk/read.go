@@ -19,6 +19,45 @@ import (
 // rather than read into memory, and reported as malformed.
 const MaxSize = 1 << 30
 
+// MaxMessages bounds the elements of one messages array the reader
+// reads: a decoded message costs a few hundred bytes whatever its size,
+// so a file of a million tiny elements would cost a hundred times its
+// size. The elements after it are reported as a fault, as a file cut
+// short is. Real histories hold thousands.
+const MaxMessages = 1 << 20
+
+// sharedSize is how long an element may be and share the decoding of
+// an identical one: a file of repeated tiny elements costs a pointer
+// for each.
+const sharedSize = 64
+
+// elementDecoder decodes the elements of one file, sharing the
+// decoding of identical small ones.
+type elementDecoder struct {
+	shared map[string]*Message
+}
+
+func (d *elementDecoder) message(raw json.RawMessage) *Message {
+	if len(raw) <= sharedSize {
+		if m, ok := d.shared[string(raw)]; ok {
+			return m
+		}
+	}
+	m := &Message{}
+	m.decode(raw)
+	if len(raw) <= sharedSize {
+		if d.shared == nil {
+			d.shared = map[string]*Message{}
+		}
+		d.shared[string(raw)] = m
+	}
+	return m
+}
+
+// errTooMany is the fault of an array of more than MaxMessages
+// elements.
+var errTooMany = fmt.Errorf("the array holds more than %d elements; the rest are not read", MaxMessages)
+
 // File name suffixes in a session directory: <id>.json is the
 // manifest, <id>.messages.json the history, <id>.compaction.json the
 // sidecar; any other <stem>.messages.json is a sub-agent's or a team
@@ -298,14 +337,16 @@ func envelope(data []byte) (env map[string]json.RawMessage, msgs []*Message, has
 			if _, err := dec.Token(); err != nil {
 				return env, msgs, has, cut
 			}
+			var d elementDecoder
 			for dec.More() {
+				if len(msgs) == MaxMessages {
+					return env, msgs, has, errTooMany
+				}
 				var raw json.RawMessage
 				if err := dec.Decode(&raw); err != nil {
 					return env, msgs, has, errors.New("the messages array is cut short or broken after its last whole element")
 				}
-				m := &Message{}
-				_ = m.UnmarshalJSON(raw)
-				msgs = append(msgs, m)
+				msgs = append(msgs, d.message(raw))
 			}
 			if _, err := dec.Token(); err != nil {
 				return env, msgs, has, cut
@@ -351,14 +392,16 @@ func elements(data []byte) ([]*Message, error) {
 		return nil, errors.New("the file is not JSON")
 	}
 	var out []*Message
+	var d elementDecoder
 	for dec.More() {
+		if len(out) == MaxMessages {
+			return out, errTooMany
+		}
 		var raw json.RawMessage
 		if err := dec.Decode(&raw); err != nil {
 			return out, errors.New("the array is cut short or broken after its last whole element")
 		}
-		m := &Message{}
-		_ = m.UnmarshalJSON(raw)
-		out = append(out, m)
+		out = append(out, d.message(raw))
 	}
 	if _, err := dec.Token(); err != nil {
 		return out, errors.New("the array is cut short or broken after its last whole element")

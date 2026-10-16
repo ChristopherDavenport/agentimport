@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"strconv"
 	"strings"
@@ -195,6 +196,9 @@ type Message struct {
 	// Err is why the element did not decode: it is not an object, or
 	// its members do not fit; nothing else is then set.
 	Err error `json:"-"`
+
+	// text is the block Blocks makes of string content, made once.
+	text []*Block
 }
 
 type plainMessage Message
@@ -203,17 +207,22 @@ type plainMessage Message
 // members of another JSON type; an element that is not an object is
 // kept with Err set.
 func (m *Message) UnmarshalJSON(data []byte) error {
-	raw := bytes.Clone(data)
-	if !isObject(data) {
+	m.decode(bytes.Clone(data))
+	return nil
+}
+
+// decode decodes a message from bytes it keeps as Elem, which the
+// caller hands over.
+func (m *Message) decode(raw json.RawMessage) {
+	if !isObject(raw) {
 		*m = Message{Elem: raw, Err: errNotObject}
-		return nil
+		return
 	}
-	if err := jsonline.DecodeLenient(data, (*plainMessage)(m), &m.Members); err != nil {
+	if err := jsonline.DecodeLenient(raw, (*plainMessage)(m), &m.Members); err != nil {
 		*m = Message{Elem: raw, Err: err}
-		return nil
+		return
 	}
 	m.Elem = raw
-	return nil
 }
 
 // MarshalJSON writes the message back as it was read.
@@ -247,7 +256,10 @@ func (m *Message) IsCompactionSummary() bool {
 // text block for string content. Content that is neither gives none.
 func (m *Message) Blocks() []*Block {
 	if m.Content.IsText {
-		return []*Block{{Type: BlockText, Text: m.Content.Text}}
+		if m.text == nil {
+			m.text = []*Block{{Type: BlockText, Text: m.Content.Text}}
+		}
+		return m.text
 	}
 	return m.Content.Blocks
 }
@@ -304,6 +316,10 @@ func (x Metrics) MarshalJSON() ([]byte, error) {
 	return jsonline.Encode(plainMetrics(x), &x.Members)
 }
 
+// MaxBlocks bounds the blocks of one message's content; content of more
+// is read as content that is neither text nor blocks.
+const MaxBlocks = 1 << 16
+
 // Content is a message's content: a string, or a list of blocks, each
 // decoded on its own.
 type Content struct {
@@ -334,11 +350,30 @@ func (c *Content) UnmarshalJSON(data []byte) error {
 			*c = Content{Raw: bytes.Clone(data), Err: err}
 			return nil
 		}
+		if len(raws) > MaxBlocks {
+			*c = Content{Raw: bytes.Clone(data), Err: fmt.Errorf("content of more than %d blocks", MaxBlocks)}
+			return nil
+		}
+		// A block costs a few hundred bytes decoded: identical small
+		// ones share one.
+		var shared map[string]*Block
 		c.Blocks = make([]*Block, len(raws))
 		for i, raw := range raws {
+			if len(raw) <= sharedSize {
+				if b, ok := shared[string(raw)]; ok {
+					c.Blocks[i] = b
+					continue
+				}
+			}
 			b := &Block{}
 			_ = b.UnmarshalJSON(raw)
 			c.Blocks[i] = b
+			if len(raw) <= sharedSize {
+				if shared == nil {
+					shared = map[string]*Block{}
+				}
+				shared[string(raw)] = b
+			}
 		}
 		return nil
 	}

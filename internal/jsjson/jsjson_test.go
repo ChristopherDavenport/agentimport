@@ -1,9 +1,11 @@
 package jsjson
 
 import (
+	"fmt"
 	"math"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The wants were printed by node 25's JSON.stringify(JSON.parse(in)).
@@ -101,4 +103,43 @@ func FuzzParse(f *testing.F) {
 			t.Fatalf("not stable: %s then %s", out, again)
 		}
 	})
+}
+
+// TestManyKeys reads an object of many members in time linear in it:
+// a repeated member is found without scanning the others. The best of
+// three runs of four times the keys against once.
+func TestManyKeys(t *testing.T) {
+	object := func(n int) []byte {
+		var b strings.Builder
+		b.WriteString("{")
+		for i := 0; i < n; i++ {
+			if i > 0 {
+				b.WriteString(",")
+			}
+			fmt.Fprintf(&b, `"k%d":%d`, i, i)
+		}
+		b.WriteString(`,"5":0,"k0":1}`)
+		return []byte(b.String())
+	}
+	best := func(data []byte) time.Duration {
+		var d time.Duration
+		for i := 0; i < 3; i++ {
+			start := time.Now()
+			v, err := Parse(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if e := time.Since(start); i == 0 || e < d {
+				d = e
+			}
+			if k, _ := v.Keys[0], 0; k.String() != "5" || v.Get("k0").Num != 1 {
+				t.Fatalf("keys start %s, k0 %v", v.Keys[0].String(), v.Get("k0").Num)
+			}
+		}
+		return d
+	}
+	a, b := best(object(20_000)), best(object(80_000))
+	if b > 8*a {
+		t.Errorf("%v for 20000 keys, %v for 80000: not linear", a, b)
+	}
 }

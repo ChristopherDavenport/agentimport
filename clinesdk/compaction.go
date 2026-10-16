@@ -31,9 +31,10 @@ const hashVersion = "cline-session-compaction-source-v2\n"
 // it wrote projects over it.
 var ErrUnhashable = errors.New("a message Cline cannot hash")
 
-// errLone is returned for user text holding a lone surrogate, which
-// the user-input rules, written for Go strings here, cannot carry.
-var errLone = errors.New("user text holding a lone surrogate, which the hash here cannot reproduce")
+// ErrLoneSurrogate is returned for user text holding a lone surrogate,
+// which Cline hashes and the user-input rules, written for Go strings
+// here, cannot carry.
+var ErrLoneSurrogate = errors.New("user text holding a lone surrogate, which the hash here cannot reproduce")
 
 // CanonicalSource is the history a sidecar counts and hashes: every
 // message but the display-only ones.
@@ -125,7 +126,7 @@ func display(v *jsjson.Value) (*jsjson.Value, error) {
 		return nil, ErrUnhashable
 	}
 	if v.Str.Lone() {
-		return nil, errLone
+		return nil, ErrLoneSurrogate
 	}
 	return jsjson.NewString(FormatDisplayUserInput(v.Str.String())), nil
 }

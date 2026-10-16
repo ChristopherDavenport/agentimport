@@ -66,21 +66,24 @@ func StripModeNotices(input string) string {
 		return ""
 	}
 	const open, close = "<mode_notice>", "</mode_notice>"
-	result := input
-	start := strings.Index(result, open)
-	for start != -1 {
-		end := strings.Index(result[start+len(open):], close)
+	// One pass: JavaScript searches the string it has cut from where
+	// the cut was, which is where the rest of the input starts.
+	var b strings.Builder
+	rest := input
+	for {
+		start := strings.Index(rest, open)
+		if start == -1 {
+			break
+		}
+		end := strings.Index(rest[start+len(open):], close)
 		if end == -1 {
 			break
 		}
-		end += start + len(open)
-		result = result[:start] + result[end+len(close):]
-		next := strings.Index(result[start:], open)
-		if next == -1 {
-			break
-		}
-		start += next
+		b.WriteString(rest[:start])
+		rest = rest[start+len(open)+end+len(close):]
 	}
+	b.WriteString(rest)
+	result := b.String()
 	return Trim(result)
 }
 
