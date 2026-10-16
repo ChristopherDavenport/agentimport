@@ -1,0 +1,6 @@
+session 0 0000000d-0000-4000-9000-000000000002
+  instructions: You are a careful coding agent.
+  user: Pick a name for the project.
+  assistant: How about Lantern?
+  user: Something with water.
+  assistant: Brook.

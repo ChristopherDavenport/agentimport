@@ -1,0 +1,21 @@
+openhands: 12 files: mapped 4 kept 2 dropped 4 malformed 2
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  dropped  openhands/bad-file-name                           1  a file of the events directory whose name is not an event file's; OpenHands ignores it
+  dropped  openhands/file-unread                             1  a file of the conversation directory the converter does not read
+  dropped  openhands/index-gap                               1  an event file after a missing index; OpenHands stops reading at the gap, and so does the converter
+  dropped  openhands/observations-dir                        1  the directory where tools saved the full output of results they cut is not read; the outputs are as the model saw them
+  lossy    openhands/model-from-state                        1  the model is the one base_state names, as last saved; a later switch of model is not recorded per event (at events:1)
+  lossy    openhands/no-version                              1  OpenHands records no version of itself or of its format; the harness names none, and shapes are told apart by structure
+  lossy    openhands/timestamp-zone                          1  OpenHands writes local time with no zone; the timestamps are read in UTC
+  lossy    openhands/tools-unrecorded                        1  2 tools are recorded without the parameter schema the model was sent, as OpenHands records them from 1.7; the config carries their names and descriptions, and the definitions are kept in openhands:event (at events:1)
+  lossy    openhands/version-guess                           1  the view is built as SDK 1.17 and later built it: base_state has invoked_skills, which SDK 1.18 and later write; base_state names the release that last saved it, and events an earlier release wrote are read the same way
+  kept     openhands/cost-unplaced                           1  per-call costs name no response, so they cannot be placed on one; they are in the header member openhands:stats with the metrics' totals
+  kept     openhands/event-members                           2  members tools are kept in openhands:event (at events:1, events:4)
+  kept     openhands/record                                  1  the PauseEvent, which never enters the context, is a custom entry (at events:7)
+  kept     openhands/state                                   1  the conversation's state but its metrics, as OpenHands stored it: the agent's configuration, policies, skills, tags and secret registry
+  kept     openhands/unknown-kind                            1  an event of kind "FutureEvent", which this converter does not know, is a custom entry (at events:3)
+  kept     openhands/usage-member                            1  the context window and the per-turn tokens OpenHands records with the usage are in openhands:usage (at events:4)
+  repaired openhands/bad-timestamp                           1  the timestamp "bad time" does not read; the entries take the time before them (at events:7)
+  repaired openhands/duplicate-index                         1  another file has index 6; the one whose name sorts last is read
+  repaired openhands/malformed-event                         2  the file is empty; the event is skipped, as OpenHands skips an empty one (at events:5, events:6)
+  repaired openhands/mistyped-member                         1  members activated_skills are not of the JSON type OpenHands writes; they are kept as written and not mapped (at events:4)

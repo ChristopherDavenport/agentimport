@@ -1,0 +1,10 @@
+session 0 00000013-0000-4000-9000-000000000001
+  instructions: You are a careful coding agent.
+  user: Find the entry point with a helper.
+  call call_one task
+  output call_one Task ID: task_00000001 …
+  assistant: It is cmd/app/main.go.
+session 1 99f38720-6e58-5598-8025-50d00face20b
+  instructions: You are a careful coding agent.
+  user: Where is main?
+  assistant: cmd/app/main.go

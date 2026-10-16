@@ -1,0 +1,1 @@
+{"kind":"MessageEvent","id":"0000000b-0002-4000-8000-000000000002","timestamp":"2026-05-01T10:00:04.000004","source":"user","llm_message":{"role":"user","content":[{"type":"text","text":"List the packages.","cache_prompt":false}],"thinking_blocks":[]},"activated_skills":[],"extended_content":[],"sender":"main"}

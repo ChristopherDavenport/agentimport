@@ -1,0 +1,1 @@
+{"kind":"UserRejectObservation","id":"00000006-0001-4000-8000-000000000004","timestamp":"2026-05-01T10:00:04.000004","source":"user","tool_name":"terminal","tool_call_id":"call_rm","rejection_reason":"Not that directory.","rejection_source":"user","action_id":"00000006-0001-4000-8000-000000000003"}

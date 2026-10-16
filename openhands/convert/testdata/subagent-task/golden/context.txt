@@ -1,0 +1,14 @@
+session 0 0000000b-0000-4000-9000-000000000001
+  instructions: You are a careful coding agent.
+  user: Survey the repository with a helper.
+  call call_t1 task
+  output call_t1 Task ID: task_00000001 …
+  call call_t2 task
+  output call_t2 Task ID: task_00000001 …
+  assistant: Three packages and 42 tests.
+session 1 0000000b-0000-4000-9000-000000000002
+  instructions: You are a careful coding agent.
+  user: List the packages.
+  assistant: cmd, internal, pkg
+  user: Count the tests.
+  assistant: 42 tests

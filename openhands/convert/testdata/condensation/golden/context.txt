@@ -1,0 +1,8 @@
+session 0 00000007-0000-4000-9000-000000000001
+  instructions: You are a careful coding agent.
+  user: Parser refactored in four steps; tests requested.
+  user: Refactor the parser.
+  user: Now add tests.
+  call call_4 terminal
+  output call_4 step 4 done …
+  assistant: Done: the parser is refactored and tested.

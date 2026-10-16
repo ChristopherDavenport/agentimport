@@ -1,0 +1,10 @@
+session 0 00000005-0000-4000-9000-000000000001
+  request of chatcmpl-x:
+    user: Format the code.
+  request of chatcmpl-z:
+    user: Format the code.
+    assistant: Formatting.
+    call call_x gofmt
+    call call_y terminal
+    output call_x Tool 'gofmt' not found. Available: terminal, file_
+    output call_y main.go …

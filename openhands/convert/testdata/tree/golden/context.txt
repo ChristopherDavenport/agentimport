@@ -1,0 +1,6 @@
+session 0 00000009-0000-4000-9000-000000000001
+  instructions: You are a careful coding agent.
+  user: Write a haiku.
+  assistant: Code flows like water.
+  user: Make it about Go.
+  assistant: Goroutines whisper.

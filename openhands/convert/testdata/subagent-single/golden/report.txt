@@ -1,0 +1,13 @@
+openhands: 10 files: mapped 10 kept 0 dropped 0 malformed 0
+  gap      agentimport/provenance                            2  the import is recorded in the header member agentimport:source
+  lossy    openhands/model-from-state                        2  the model is the one base_state names, as last saved; a later switch of model is not recorded per event (at events:1, subagents/00000013000040009000000000000002/events:1)
+  lossy    openhands/no-version                              2  OpenHands records no version of itself or of its format; the harness names none, and shapes are told apart by structure
+  lossy    openhands/subagent-match                          1  sub-agent 00000013000040009000000000000002 is matched to call call_one by its prompt and time, as OpenHands records no link; it is a subsession (at events:4)
+  lossy    openhands/timestamp-zone                          2  OpenHands writes local time with no zone; the timestamps are read in UTC
+  lossy    openhands/tools-unrecorded                        2  2 tools are recorded without the parameter schema the model was sent, as OpenHands records them from 1.7; the config carries their names and descriptions, and the definitions are kept in openhands:event (at events:1, subagents/00000013000040009000000000000002/events:1)
+  lossy    openhands/version-guess                           2  the view is built as SDK 1.17 and later built it: base_state has invoked_skills, which SDK 1.18 and later write; base_state names the release that last saved it, and events an earlier release wrote are read the same way
+  kept     openhands/cost-unplaced                           2  per-call costs name no response, so they cannot be placed on one; they are in the header member openhands:stats with the metrics' totals
+  kept     openhands/event-members                           5  members tools are kept in openhands:event (at events:1, events:3, subagents/00000013000040009000000000000002/events:1, subagents/00000013000040009000000000000002/events:2, events:4)
+  kept     openhands/observation                             1  the structured TaskObservation is kept in openhands:observation beside the output rendered from it (at events:4)
+  kept     openhands/state                                   2  the conversation's state but its metrics, as OpenHands stored it: the agent's configuration, policies, skills, tags and secret registry
+  kept     openhands/usage-member                            3  the context window and the per-turn tokens OpenHands records with the usage are in openhands:usage (at events:3, subagents/00000013000040009000000000000002/events:3, events:5)

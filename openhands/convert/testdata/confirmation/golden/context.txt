@@ -1,0 +1,12 @@
+session 0 00000006-0000-4000-9000-000000000001
+  instructions: You are a careful coding agent.
+  user: Clean up the build directory.
+  assistant: Removing it.
+  call call_rm terminal
+  output call_rm Action rejected: Not that directory.
+  call call_rm2 terminal
+  output call_rm2 Action rejected: rm is not allowed
+  call call_ls terminal
+  output call_ls Tool call interrupted before completion. The conve
+  user: Try listing it instead.
+  call call_ls2 terminal

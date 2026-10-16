@@ -7,6 +7,33 @@ versions may break the API.
 
 ## Unreleased
 
+- Added: OpenHands, the software agent SDK's conversation directories
+  (SDK 1.0 to 1.55: the OpenHands CLI, the agent server, Agent
+  Canvas). `openhands` reads a conversation as OpenHands does, events
+  in index order up to the first gap, keeping every member it does not
+  declare. `openhands/convert` rebuilds the context OpenHands built at
+  each request, as the release it takes the conversation for built it
+  (told by the members the files hold, and reported): the path to the
+  leaf through the event tree (1.31 and later), condensations, and the
+  view's properties, at every request before 1.17 and from 1.17 only
+  at the reloads the files show, the difference written as `omit`
+  config entries; a
+  condensation with a summary is a compaction pinning the head
+  OpenHands kept ahead of the summary (the gap `agentimport/fold-head`,
+  now naming OpenHands). Tool results are rendered as each observation
+  class's `to_llm_content` renders them, ported from the SDK, with the
+  cuts the tools and OpenHands make. Usage, model and latency are joined
+  from `base_state.json` by response ID, the sub-agents' copies left
+  out; rejections and refused calls are reject decisions, an
+  interrupted call an answer, a critic's result an eval outcome.
+  Sub-agents under `subagents/` are matched to their task or delegate
+  calls by prompt and time: a task sub-agent one call waited for is a
+  subsession, one that a later call resumed, or a delegate sub-agent,
+  outlives its calls and is a peer of each. A fork
+  names its source in `parent_session`. The command detects a
+  conversation by its directory or files, `-from openhands` names it,
+  and a sub-agent's directory given beside its parent is skipped when
+  the parent's conversion holds it.
 - Added: classic Cline (the VS Code extension before 4.0) and Roo Code
   task directories, one format with a variant told by the storage
   directory or, failing that, by shape. `cline` reads a task's JSON

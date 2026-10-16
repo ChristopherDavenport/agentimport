@@ -1,0 +1,8 @@
+session 0 00000001-0000-4000-9000-000000000001
+  instructions: You are a careful coding agent.
+  user: List the files in the project.
+  assistant: I'll look at the directory.
+  call toolu_01 terminal
+  output toolu_01 go.mod …
+  assistant: There are two files: go.mod and main.go.
+  user: Thanks.

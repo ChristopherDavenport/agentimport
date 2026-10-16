@@ -1,0 +1,1 @@
+{"kind":"MessageEvent","id":"00000008-0001-4000-8000-00000000000b","timestamp":"2026-05-01T10:00:11.000011","source":"agent","llm_message":{"role":"assistant","content":[{"type":"text","text":"The test times out on slow machines.","cache_prompt":false}],"thinking_blocks":[]},"llm_response_id":"msg_l4","activated_skills":[],"extended_content":[]}

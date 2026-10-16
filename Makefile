@@ -48,11 +48,11 @@ check: fmt tidy-check vet deps lint vuln test
 # accounts for every line. Real sessions are private, so this reads them
 # where they are and is not part of check:
 #   make corpus CLAUDECODE=~/.claude/projects PI=~/.pi/agent/sessions CODEX=~/.codex/sessions ATIF=~/harbor/jobs \
-#     CLINE=~/.config/Code/User/globalStorage/saoudrizwan.claude-dev
+#     CLINE=~/.config/Code/User/globalStorage/saoudrizwan.claude-dev OPENHANDS=~/.openhands
 corpus:
 	AGENTIMPORT_CORPUS_CLAUDECODE=$(CLAUDECODE) AGENTIMPORT_CORPUS_PI=$(PI) \
 	  AGENTIMPORT_CORPUS_CODEX=$(CODEX) AGENTIMPORT_CORPUS_ATIF=$(ATIF) \
-	  AGENTIMPORT_CORPUS_CLINE=$(CLINE) \
+	  AGENTIMPORT_CORPUS_CLINE=$(CLINE) AGENTIMPORT_CORPUS_OPENHANDS=$(OPENHANDS) \
 	  $(GO) test -count=1 -run TestCorpus ./...
 
 MODULE := $(shell $(GO) list -m)

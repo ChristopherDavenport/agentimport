@@ -1,0 +1,1 @@
+{"kind":"MessageEvent","id":"0000000c-0001-4000-8000-000000000002","timestamp":"2026-05-01T10:00:02.000002","source":"user","llm_message":{"role":"user","content":[{"type":"text","text":"Plan a trip with two helpers.","cache_prompt":false}],"thinking_blocks":[]},"activated_skills":[],"extended_content":[]}

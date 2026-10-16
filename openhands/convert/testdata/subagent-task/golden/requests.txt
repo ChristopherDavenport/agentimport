@@ -1,0 +1,20 @@
+session 0 0000000b-0000-4000-9000-000000000001
+  request of chatcmpl-p1:
+    user: Survey the repository with a helper.
+  request of chatcmpl-p2:
+    user: Survey the repository with a helper.
+    call call_t1 task
+    output call_t1 Task ID: task_00000001 …
+  request of chatcmpl-p3:
+    user: Survey the repository with a helper.
+    call call_t1 task
+    output call_t1 Task ID: task_00000001 …
+    call call_t2 task
+    output call_t2 Task ID: task_00000001 …
+session 1 0000000b-0000-4000-9000-000000000002
+  request of chatcmpl-c1:
+    user: List the packages.
+  request of chatcmpl-c2:
+    user: List the packages.
+    assistant: cmd, internal, pkg
+    user: Count the tests.

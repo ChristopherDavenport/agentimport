@@ -1,0 +1,1 @@
+{"kind":"AgentErrorEvent","id":"00000006-0001-4000-8000-00000000000a","timestamp":"2026-05-01T10:00:10.000010","source":"agent","tool_name":"terminal","tool_call_id":"call_ls","error":"Tool call interrupted before completion. The conversation was paused."}

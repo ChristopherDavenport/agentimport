@@ -1,0 +1,1 @@
+{"kind":"AgentErrorEvent","id":"00000005-0001-4000-8000-000000000004","timestamp":"2026-05-01T10:00:04.000004","source":"agent","tool_name":"gofmt","tool_call_id":"call_x","error":"Tool 'gofmt' not found. Available: terminal, file_editor","classification":{"kind":"agent_action","retryable":true}}

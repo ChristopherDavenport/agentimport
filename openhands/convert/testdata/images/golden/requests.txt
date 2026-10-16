@@ -1,0 +1,21 @@
+session 0 00000010-0000-4000-9000-000000000001
+  request of chatcmpl-i1:
+    user: What is in these? | <input_image> | <input_image>
+  request of chatcmpl-i2:
+    user: What is in these? | <input_image> | <input_image>
+    call call_b browser_navigate
+    output call_b Page loaded: DashboardScreenshot saved to: /tmp/oh
+  request of chatcmpl-i3:
+    user: What is in these? | <input_image> | <input_image>
+    call call_b browser_navigate
+    output call_b Page loaded: DashboardScreenshot saved to: /tmp/oh
+    call call_tom consult_tom
+    output call_tom Tom agent's guidance: …
+  request of chatcmpl-i4:
+    user: What is in these? | <input_image> | <input_image>
+    call call_b browser_navigate
+    output call_b Page loaded: DashboardScreenshot saved to: /tmp/oh
+    call call_tom consult_tom
+    output call_tom Tom agent's guidance: …
+    call call_big terminal
+    output call_big line 0 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx

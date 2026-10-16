@@ -1,0 +1,20 @@
+session 0 0000000c-0000-4000-9000-000000000001
+  instructions: You are a careful coding agent.
+  user: Plan a trip with two helpers.
+  call call_s delegate
+  output call_s Successfully spawned 2 sub-agents: lodging, food
+  call call_d delegate
+  output call_d lodging: Hotel A …
+  assistant: Hotel A and Cafe B.
+session 1 0000000c-0000-4000-9000-000000000002
+  instructions: You are a careful coding agent.
+  user: Find a hotel.
+  assistant: Hotel A
+session 2 0000000c-0000-4000-9000-000000000003
+  instructions: You are a careful coding agent.
+  user: Find a restaurant.
+  assistant: Cafe B
+session 3 0000000c-0000-4000-9000-000000000004
+  instructions: You are a careful coding agent.
+  user: Unrelated work.
+  assistant: done

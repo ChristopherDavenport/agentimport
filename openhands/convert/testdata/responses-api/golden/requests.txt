@@ -1,0 +1,8 @@
+session 0 00000004-0000-4000-9000-000000000001
+  request of resp_0001:
+    user: What does main.go print?
+  request of resp_0002:
+    user: What does main.go print?
+    reasoning
+    call call_r1 file_editor
+    output call_r1 package main …
