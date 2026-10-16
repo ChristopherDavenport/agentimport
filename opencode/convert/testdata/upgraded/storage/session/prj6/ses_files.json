@@ -1,0 +1,12 @@
+{
+  "id": "ses_files",
+  "slug": "slug",
+  "version": "1.1.65",
+  "projectID": "prj6",
+  "directory": "/work/u",
+  "title": "Files only",
+  "time": {
+    "created": 1760000995000,
+    "updated": 1760000996000
+  }
+}

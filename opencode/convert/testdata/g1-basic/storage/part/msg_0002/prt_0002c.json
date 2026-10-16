@@ -1,0 +1,25 @@
+{
+  "id": "prt_0002c",
+  "sessionID": "ses_g1demo",
+  "messageID": "msg_0002",
+  "type": "tool",
+  "callID": "toolu_01",
+  "tool": "edit",
+  "state": {
+    "status": "completed",
+    "input": {
+      "filePath": "a.go",
+      "oldString": "foo",
+      "newString": "bar"
+    },
+    "output": "Edit applied.",
+    "title": "a.go",
+    "metadata": {
+      "diff": "-foo\n+bar"
+    },
+    "time": {
+      "start": 1760000003000,
+      "end": 1760000004000
+    }
+  }
+}

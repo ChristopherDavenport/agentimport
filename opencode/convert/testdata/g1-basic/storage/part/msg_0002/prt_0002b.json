@@ -1,0 +1,16 @@
+{
+  "id": "prt_0002b",
+  "sessionID": "ses_g1demo",
+  "messageID": "msg_0002",
+  "type": "reasoning",
+  "text": "Find the definition.",
+  "metadata": {
+    "anthropic": {
+      "signature": "sig-AAAA"
+    }
+  },
+  "time": {
+    "start": 1760000002100,
+    "end": 1760000002500
+  }
+}
