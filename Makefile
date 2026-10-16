@@ -9,14 +9,11 @@ build:
 	$(GO) build ./...
 
 # The module must build from agentsession, openresponses and the
-# standard library alone; the format packages from the standard library
-# alone, which TestImportBoundary checks.
+# standard library alone, but for opencode/sqlite, which alone imports
+# modernc.org/sqlite to read OpenCode's database; the format packages
+# from the standard library alone, which TestImportBoundary checks.
 deps:
-	@deps=$$($(GO) list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./... \
-	  | grep -v '^github.com/ChristopherDavenport/agentimport' \
-	  | grep -v '^github.com/ChristopherDavenport/agentsession' \
-	  | grep -v '^github.com/ChristopherDavenport/openresponses' || true); \
-	  test -z "$$deps" || { echo "module depends on: $$deps"; exit 1; }
+	@GO="$(GO)" scripts/check-deps.sh
 
 test:
 	$(GO) test -race ./...
@@ -48,11 +45,13 @@ check: fmt tidy-check vet deps lint vuln test
 # accounts for every line. Real sessions are private, so this reads them
 # where they are and is not part of check:
 #   make corpus CLAUDECODE=~/.claude/projects PI=~/.pi/agent/sessions CODEX=~/.codex/sessions ATIF=~/harbor/jobs \
-#     CLINE=~/.config/Code/User/globalStorage/saoudrizwan.claude-dev OPENHANDS=~/.openhands
+#     CLINE=~/.config/Code/User/globalStorage/saoudrizwan.claude-dev OPENHANDS=~/.openhands \
+#     OPENCODE=~/.local/share/opencode
 corpus:
 	AGENTIMPORT_CORPUS_CLAUDECODE=$(CLAUDECODE) AGENTIMPORT_CORPUS_PI=$(PI) \
 	  AGENTIMPORT_CORPUS_CODEX=$(CODEX) AGENTIMPORT_CORPUS_ATIF=$(ATIF) \
 	  AGENTIMPORT_CORPUS_CLINE=$(CLINE) AGENTIMPORT_CORPUS_OPENHANDS=$(OPENHANDS) \
+	  AGENTIMPORT_CORPUS_OPENCODE=$(OPENCODE) \
 	  $(GO) test -count=1 -run TestCorpus ./...
 
 MODULE := $(shell $(GO) list -m)
