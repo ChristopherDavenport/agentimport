@@ -198,7 +198,7 @@ practical; an importer would carry little beyond that text.
 
 ### Not seen
 
-opencode, aider, goose, Cursor, Amp and Continue chat sessions were not
+aider, goose, Cursor, Amp and Continue chat sessions were not
 installed where the first sources were surveyed; Copilot CLI kept
 configuration only. Each is a candidate once someone has its files and
 its source.

@@ -5,7 +5,9 @@
 //
 // The converters are in the source packages' convert subpackages,
 // claudecode/convert, pi/convert, codex/convert, atif/convert,
-// cline/convert and openhands/convert; the native formats are in
-// claudecode, pi, codex, atif, cline and openhands, which import the
-// standard library alone. docs/plans/agentimport.md is the design.
+// cline/convert, openhands/convert and opencode/convert; the native
+// formats are in claudecode, pi, codex, atif, cline, openhands and
+// opencode, which import the standard library alone, and OpenCode's
+// database is read by opencode/sqlite. docs/plans/agentimport.md is the
+// design.
 package agentimport
