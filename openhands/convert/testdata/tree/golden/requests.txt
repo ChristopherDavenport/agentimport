@@ -1,0 +1,11 @@
+session 0 00000009-0000-4000-9000-000000000001
+  request of chatcmpl-t1:
+    user: Write a haiku.
+  request of chatcmpl-t2:
+    user: Write a haiku.
+    assistant: Code flows like water.
+    user: Make it about Go.
+  request of chatcmpl-t3:
+    user: Write a haiku.
+    assistant: Code flows like water.
+    user: Make it about Rust instead.

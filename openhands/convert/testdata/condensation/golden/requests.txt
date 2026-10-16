@@ -1,0 +1,29 @@
+session 0 00000007-0000-4000-9000-000000000001
+  request of chatcmpl-1:
+    user: Refactor the parser.
+  request of chatcmpl-2:
+    user: Refactor the parser.
+    assistant: Step 1.
+    call call_1 terminal
+    output call_1 step 1 done …
+  request of chatcmpl-3:
+    user: Refactor the parser.
+    assistant: Step 1.
+    call call_1 terminal
+    output call_1 step 1 done …
+    assistant: Step 2.
+    call call_2 terminal
+    output call_2 step 2 done …
+  request of chatcmpl-4:
+    user: The user asked for a parser refactor; steps 1 and 
+    user: Refactor the parser.
+    assistant: Step 3.
+    call call_3 terminal
+    output call_3 step 3 done …
+    user: Now add tests.
+  request of chatcmpl-5:
+    user: Parser refactored in four steps; tests requested.
+    user: Refactor the parser.
+    user: Now add tests.
+    call call_4 terminal
+    output call_4 step 4 done …

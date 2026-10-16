@@ -1,0 +1,3 @@
+session 0 00000012-0000-4000-9000-000000000001
+  request of a1b2c3d4-0000-4000-8000-000000000001:
+    user: Fix the failing test.

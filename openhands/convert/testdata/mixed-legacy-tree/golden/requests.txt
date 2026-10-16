@@ -1,0 +1,7 @@
+session 0 0000000a-0000-4000-9000-000000000001
+  request of chatcmpl-m1:
+    user: Hello.
+  request of chatcmpl-m2:
+    user: Hello.
+    assistant: Hi.
+    user: Again.

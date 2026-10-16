@@ -1,0 +1,13 @@
+session 0 00000003-0000-4000-9000-000000000001
+  instructions: You are a careful coding agent. …
+  user: Check the build, the tests and the linter.
+  reasoning
+  anthropic.redacted_thinking
+  assistant: Running all three.
+  call toolu_a terminal
+  call toolu_b terminal
+  call toolu_c file_editor
+  output toolu_b [previous command] …
+  output toolu_c [An error occurred during execution.] …
+  output toolu_a  …
+  assistant: The build passes; one test fails and there is no l

@@ -1,0 +1,4 @@
+session 0 0000000e-0000-4000-9000-000000000001
+  instructions: You are a careful coding agent. …
+  user: Ping.
+  assistant: Pong.

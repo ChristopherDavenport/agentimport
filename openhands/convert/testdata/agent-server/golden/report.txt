@@ -1,0 +1,14 @@
+openhands: 12 files: mapped 4 kept 8 dropped 0 malformed 0
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  lossy    openhands/instructions-join                       1  OpenHands sends the system prompt and the dynamic context as two blocks of one system message, joined with a newline for the Responses API; the config carries them as two parts, which the session joins with a blank line (at events:2)
+  lossy    openhands/model-from-state                        1  the model is the one base_state names, as last saved; a later switch of model is not recorded per event (at events:2)
+  lossy    openhands/no-system-prompt                        1  the path starts with no system prompt event; a config of the model the state names starts it (at events:1)
+  lossy    openhands/no-version                              1  OpenHands records no version of itself or of its format; the harness names none, and shapes are told apart by structure
+  lossy    openhands/timestamp-zone                          1  OpenHands writes local time with no zone; the timestamps are read in UTC
+  lossy    openhands/tools-unrecorded                        1  2 tools are recorded without the parameter schema the model was sent, as OpenHands records them from 1.7; the config carries their names and descriptions, and the definitions are kept in openhands:event (at events:2)
+  kept     openhands/cost-unplaced                           1  per-call costs name no response, so they cannot be placed on one; they are in the header member openhands:stats with the metrics' totals
+  kept     openhands/event-members                           3  members tools are kept in openhands:event (at events:2, events:4, events:5)
+  kept     openhands/meta                                    1  the agent server's record of the conversation: title, metrics snapshot, fork origin and launch profile
+  kept     openhands/record                                  7  the ConversationStateUpdateEvent, which never enters the context, is a custom entry (at events:1, events:3, events:6, events:7, events:8)
+  kept     openhands/state                                   1  the conversation's state beyond its working directory, leaf and metrics: the agent's configuration, policies, skills, tags and secrets as OpenHands stored them
+  kept     openhands/usage-member                            1  the context window and the per-turn tokens OpenHands records with the usage are in openhands:usage (at events:5)

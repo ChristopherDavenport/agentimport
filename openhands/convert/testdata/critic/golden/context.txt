@@ -1,0 +1,9 @@
+session 0 00000011-0000-4000-9000-000000000001
+  instructions: You are a careful coding agent.
+  user: Fix the typo. | <skill>style guide</skill>
+  call call_e file_editor
+  output call_e 1 issue fixedRule: keep lines short.
+  reasoning
+  assistant: 
+  user: Please respond with a message or call a tool.
+  assistant: Fixed.

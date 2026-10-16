@@ -1,0 +1,13 @@
+session 0 00000008-0000-4000-9000-000000000001
+  request of msg_l1:
+    user: Investigate the flaky test.
+  request of msg_l2:
+    user: Investigate the flaky test.
+    reasoning
+    call call_l1 terminal
+    output call_l1 timeout after 5s …
+  request of msg_l3:
+    user: Investigate the flaky test.
+  request of msg_l4:
+    user: Investigate the flaky test.
+    user: Stop that and summarise.

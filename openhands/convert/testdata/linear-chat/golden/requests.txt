@@ -1,0 +1,8 @@
+session 0 00000001-0000-4000-9000-000000000001
+  request of chatcmpl-1:
+    user: List the files in the project.
+  request of chatcmpl-2:
+    user: List the files in the project.
+    assistant: I'll look at the directory.
+    call toolu_01 terminal
+    output toolu_01 go.mod …

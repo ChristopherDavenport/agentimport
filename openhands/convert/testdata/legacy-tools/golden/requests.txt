@@ -1,0 +1,12 @@
+session 0 00000002-0000-4000-9000-000000000001
+  request of chatcmpl-a:
+    user: Run the tests.
+  request of chatcmpl-b:
+    user: Run the tests.
+    assistant: Running tests.
+    call call_1 execute_bash
+    output call_1 ok	pkg	0.1s …
+  request of chatcmpl-c:
+    user: Run the tests.
+    call call_2 execute_bash
+    output call_2  …

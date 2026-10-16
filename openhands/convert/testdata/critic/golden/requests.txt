@@ -1,0 +1,14 @@
+session 0 00000011-0000-4000-9000-000000000001
+  request of chatcmpl-q1:
+    user: Fix the typo. | <skill>style guide</skill>
+  request of chatcmpl-q2:
+    user: Fix the typo. | <skill>style guide</skill>
+    call call_e file_editor
+    output call_e 1 issue fixedRule: keep lines short.
+  request of chatcmpl-q3:
+    user: Fix the typo. | <skill>style guide</skill>
+    call call_e file_editor
+    output call_e 1 issue fixedRule: keep lines short.
+    reasoning
+    assistant: 
+    user: Please respond with a message or call a tool.

@@ -1,0 +1,13 @@
+openhands: 7 files: mapped 6 kept 1 dropped 0 malformed 0
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  lossy    openhands/fork-copied                             1  the conversation is a fork of 0000000d-0000-4000-9000-000000000001, named in parent_session; its first 3 events are copies of the source's, converted as this session's own
+  lossy    openhands/model-from-state                        1  the model is the one base_state names, as last saved; a later switch of model is not recorded per event (at events:1)
+  lossy    openhands/no-version                              1  OpenHands records no version of itself or of its format; the harness names none, and shapes are told apart by structure
+  lossy    openhands/timestamp-zone                          1  OpenHands writes local time with no zone; the timestamps are read in UTC
+  lossy    openhands/tools-unrecorded                        1  2 tools are recorded without the parameter schema the model was sent, as OpenHands records them from 1.7; the config carries their names and descriptions, and the definitions are kept in openhands:event (at events:1)
+  kept     openhands/cost-unplaced                           1  per-call costs name no response, so they cannot be placed on one; they are in the header member openhands:stats with the metrics' totals
+  kept     openhands/event-members                           5  members tools are kept in openhands:event (at events:1, events:2, events:3, events:4, events:5)
+  kept     openhands/fork-usage                              1  the response is a copy a fork made, and its usage, which the fork's metrics hold again, is kept in openhands:copied_usage (at events:3)
+  kept     openhands/meta                                    1  the agent server's record of the conversation: title, metrics snapshot, fork origin and launch profile
+  kept     openhands/state                                   1  the conversation's state beyond its working directory, leaf and metrics: the agent's configuration, policies, skills, tags and secrets as OpenHands stored them
+  kept     openhands/usage-member                            1  the context window and the per-turn tokens OpenHands records with the usage are in openhands:usage (at events:5)

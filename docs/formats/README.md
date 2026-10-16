@@ -14,6 +14,9 @@ does not list.
 - [cline.md](cline.md): classic Cline (before 4.0) and Roo Code task
   directories, one format with a variant. Its report counts each
   element of a task's JSON arrays and each other file.
+- [openhands.md](openhands.md): the OpenHands software agent SDK's
+  conversation directories (CLI, agent server, Agent Canvas). Its
+  report counts each file of a conversation directory.
 
 ## Codes every converter can report
 

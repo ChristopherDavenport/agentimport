@@ -1,0 +1,8 @@
+session 0 00000004-0000-4000-9000-000000000001
+  instructions: You are a careful coding agent.
+  user: What does main.go print?
+  reasoning
+  call call_r1 file_editor
+  output call_r1 package main …
+  reasoning
+  assistant: It prints hi.

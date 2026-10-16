@@ -1,0 +1,6 @@
+session 0 00000002-0000-4000-9000-000000000001
+  instructions: You are a careful coding agent.
+  user: Run the tests.
+  call call_2 execute_bash
+  output call_2  …
+  assistant: Tests and vet pass.

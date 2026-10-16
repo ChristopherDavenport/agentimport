@@ -1,0 +1,7 @@
+session 0 0000000d-0000-4000-9000-000000000002
+  request of chatcmpl-f1:
+    user: Pick a name for the project.
+  request of chatcmpl-f3:
+    user: Pick a name for the project.
+    assistant: How about Lantern?
+    user: Something with water.

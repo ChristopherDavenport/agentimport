@@ -1,0 +1,22 @@
+session 0 0000000c-0000-4000-9000-000000000001
+  request of chatcmpl-d1:
+    user: Plan a trip with two helpers.
+  request of chatcmpl-d2:
+    user: Plan a trip with two helpers.
+    call call_s delegate
+    output call_s Successfully spawned 2 sub-agents: lodging, food
+  request of chatcmpl-d3:
+    user: Plan a trip with two helpers.
+    call call_s delegate
+    output call_s Successfully spawned 2 sub-agents: lodging, food
+    call call_d delegate
+    output call_d lodging: Hotel A …
+session 1 5fdfb9af-a0f7-552d-985e-a327d1189c36
+  request of chatcmpl-k0:
+    user: Find a hotel.
+session 2 a2302224-58f7-5261-81c0-17b203bcff9d
+  request of chatcmpl-k1:
+    user: Find a restaurant.
+session 3 0000000c-0000-4000-9000-000000000004
+  request of chatcmpl-k2:
+    user: Unrelated work.

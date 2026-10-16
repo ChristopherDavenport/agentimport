@@ -1,0 +1,14 @@
+openhands: 16 files: mapped 15 kept 1 dropped 0 malformed 0
+  gap      agentimport/fold-head                             2  OpenHands puts the summary after the 1 items it keeps at the head of the context; a compaction puts its summary first, so the head is pinned after it (at events:10, events:14)
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  lossy    openhands/condensation                            2  a condensation with a summary forgets 4 events: a compaction whose summary is the condensation's, 1 items pinned from the events kept ahead of it, and 0 items left out by omit among those kept after it (at events:10, events:14)
+  lossy    openhands/model-from-state                        1  the model is the one base_state names, as last saved; a later switch of model is not recorded per event (at events:1)
+  lossy    openhands/no-version                              1  OpenHands records no version of itself or of its format; the harness names none, and shapes are told apart by structure
+  lossy    openhands/timestamp-zone                          1  OpenHands writes local time with no zone; the timestamps are read in UTC
+  lossy    openhands/tools-unrecorded                        1  2 tools are recorded without the parameter schema the model was sent, as OpenHands records them from 1.7; the config carries their names and descriptions, and the definitions are kept in openhands:event (at events:1)
+  kept     openhands/cost-unplaced                           1  per-call costs name no response, so they cannot be placed on one; they are in the header member openhands:stats with the metrics' totals
+  kept     openhands/event-members                          14  members tools are kept in openhands:event (at events:1, events:2, events:3, events:4, events:5)
+  kept     openhands/observation                             4  the structured TerminalObservation is kept in openhands:observation beside the output rendered from it (at events:4, events:6, events:8, events:13)
+  kept     openhands/record                                  1  the CondensationRequest, which never enters the context, is a custom entry (at events:9)
+  kept     openhands/state                                   1  the conversation's state beyond its working directory, leaf and metrics: the agent's configuration, policies, skills, tags and secrets as OpenHands stored them
+  kept     openhands/usage-member                            5  the context window and the per-turn tokens OpenHands records with the usage are in openhands:usage (at events:3, events:5, events:7, events:12, events:15)

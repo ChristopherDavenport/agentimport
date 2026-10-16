@@ -1,0 +1,10 @@
+session 0 00000010-0000-4000-9000-000000000001
+  instructions: You are a careful coding agent.
+  user: What is in these? | <input_image> | <input_image>
+  call call_b browser_navigate
+  output call_b Page loaded: DashboardScreenshot saved to: /tmp/oh
+  call call_tom consult_tom
+  output call_tom Tom agent's guidance: …
+  call call_big terminal
+  output call_big line 0 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  assistant: A dashboard; the log is long.
