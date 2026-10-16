@@ -162,10 +162,15 @@ history:
   closing pass strips it. The content Hermes shows, when it differs, is
   kept in the row's columns.
 - **Harness turns.** A background-review harness prompt an older build
-  wrote into the session, and the curator's reply after it, are custom
-  entries: a resume strips both (`_strip_background_review_harness`).
-  An assistant tool-call turn whose content is a bare `[marker]` has no
-  text (`_strip_stale_tool_call_markers`).
+  wrote into the session, and the assistant reply right after it, are
+  custom entries, as a resume strips both
+  (`_strip_background_review_harness`): the prompt is told on the
+  content as Hermes loads it (a user row's through
+  `sanitize_context(...).strip()`), a prompt right after another arms
+  no second drop, any message but an assistant's disarms it, and a
+  branch of rows out of context starts clean. An assistant tool-call
+  turn whose content is a bare `[marker]` has no text
+  (`_strip_stale_tool_call_markers`).
 - **Repair.** A tool row's result pairs with a call of the assistant
   turn just before it, named by any of the call's aliases (`call_id`,
   `id`, `response_item_id`, each part of `a|b`, trimmed:

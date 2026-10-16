@@ -248,3 +248,44 @@ INSERT INTO messages (session_id, role, content, tool_calls, tool_call_id, times
 		t.Errorf("%d unlinked sub-agents", n)
 	}
 }
+
+// TestReviewHarness (F5): a harness prompt drops the message right
+// after it only when that is an assistant, a prompt right after another
+// arms nothing, the test reads the content as Hermes loads it, and a
+// rewound branch starts clean, as _strip_background_review_harness
+// runs over the loaded live rows.
+func TestReviewHarness(t *testing.T) {
+	const h = "Review the conversation above and consider saving to memory"
+	res := convertScript(t, `
+INSERT INTO sessions (id, source, model, started_at) VALUES ('rh', 'cli', 'm', 1760000000.0);
+INSERT INTO messages (session_id, role, content, tool_call_id, timestamp, active) VALUES
+  ('rh', 'user', 'hi', NULL, 1760000001.0, 1),
+  ('rh', 'user', '`+h+` one.', NULL, 1760000002.0, 1),
+  ('rh', 'user', '`+h+` two.', NULL, 1760000003.0, 1),
+  ('rh', 'assistant', 'A', NULL, 1760000004.0, 1),
+  ('rh', 'system', '`+h+` three.', NULL, 1760000005.0, 1),
+  ('rh', 'tool', 'out', 'x', 1760000006.0, 1),
+  ('rh', 'assistant', 'B', NULL, 1760000007.0, 1),
+  ('rh', 'user', '<memory-context>m</memory-context>`+h+` four.', NULL, 1760000008.0, 1),
+  ('rh', 'assistant', 'curated', NULL, 1760000009.0, 1),
+  ('rh', 'user', '`+h+` five.', NULL, 1760000010.0, 1),
+  ('rh', 'assistant', 'rewound', NULL, 1760000011.0, 0),
+  ('rh', 'assistant', 'C', NULL, 1760000012.0, 1);
+`, Options{})
+	s := sessionOf(t, res, "rh")
+	// C is the live row right after the fifth prompt, which a resume
+	// strips with it; the rewound assistant between them is on its own
+	// branch and stays an item there.
+	sameLines(t, "leaf", leaf(t, s), []string{"user: hi", "assistant: A", "assistant: B"})
+	found := false
+	for _, e := range s.Entries() {
+		if ie, ok := e.(*agentsession.ItemEntry); ok {
+			if m, ok := ie.Item.(*openresponses.Message); ok && m.Text() == "rewound" {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Error("the rewound assistant is no item")
+	}
+}

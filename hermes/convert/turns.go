@@ -22,10 +22,6 @@ func responseID(m *hermes.Message) string { return fmt.Sprintf("row-%d", m.ID) }
 func (w *walk) assistant(i int) error {
 	sc := w.sc
 	m := w.rows[i]
-	if w.skipReply {
-		w.skipReply = false
-		return sc.custom(m.Time, m.Unit, "hermes/review-harness", "the curator's reply to a background-review harness prompt (a resume strips it with the prompt)", rowData(m))
-	}
 	sc.pairing.turn()
 	summaryRow := isSummary(m)
 	copied := w.copied[i]

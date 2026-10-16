@@ -42,9 +42,9 @@ type walk struct {
 	mainAt string
 	// pending is a compaction waiting for its summary, the next item.
 	pending *pendingCompaction
-	// skipReply says the next assistant row is the curator's reply to a
-	// background-review harness prompt.
-	skipReply bool
+	// harness is the state of the background-review harness strip on
+	// the line being walked.
+	harness harnessState
 	// used lists the columns the row being converted maps beyond the
 	// base ones, and rowKept says its members are written.
 	used    []string
@@ -286,11 +286,13 @@ func (w *walk) run() error {
 	inRun := false
 	var runAt string
 	var saved *pairing
+	var savedHarness harnessState
 	runs := 0
 	for i, m := range w.rows {
 		if w.class[i] == inactive {
 			if !inRun {
 				inRun, runAt, saved = true, w.mainAt, sc.pairing.clone()
+				savedHarness, w.harness = w.harness, harnessState{}
 				runs++
 			}
 			sc.at = runAt
@@ -303,6 +305,7 @@ func (w *walk) run() error {
 		if inRun {
 			inRun = false
 			sc.pairing = saved
+			w.harness = savedHarness
 		}
 		sc.at = w.mainAt
 		if w.start[i] {
@@ -337,6 +340,14 @@ func (w *walk) row(i int) error {
 	w.used, w.rowKept = nil, false
 	for _, p := range m.Problems {
 		sc.addf(agentimport.Repaired, "hermes/mistyped", m.Unit, "column %s does not hold what Hermes writes; it is kept as written and read as Hermes reads it", p)
+	}
+	if m.Role != hermes.RoleSessionMeta {
+		switch w.harness.next(m) {
+		case harnessPrompt:
+			return sc.custom(m.Time, m.Unit, "hermes/review-harness", "a background-review harness prompt an older Hermes wrote into the session (a resume strips it)", rowData(m))
+		case harnessReply:
+			return sc.custom(m.Time, m.Unit, "hermes/review-harness", "the curator's reply to a background-review harness prompt (a resume strips it with the prompt)", rowData(m))
+		}
 	}
 	switch m.Role {
 	case hermes.RoleUser:
@@ -517,11 +528,6 @@ func visible(m *hermes.Message) *bool {
 func (w *walk) user(i int) error {
 	sc := w.sc
 	m := w.rows[i]
-	if !m.Content.Structured && isReviewHarness(m.Role, m.Content.Text) {
-		w.skipReply = true
-		return sc.custom(m.Time, m.Unit, "hermes/review-harness", "a background-review harness prompt an older Hermes wrote into the session (a resume strips it)", rowData(m))
-	}
-	w.skipReply = false
 	sc.pairing.turn()
 	used := []string{}
 	var msg *openresponses.Message
@@ -574,10 +580,6 @@ func delegationID(m *hermes.Message) string {
 func (w *walk) system(i int) error {
 	sc := w.sc
 	m := w.rows[i]
-	if !m.Content.Structured && isReviewHarness(m.Role, m.Content.Text) {
-		w.skipReply = true
-		return sc.custom(m.Time, m.Unit, "hermes/review-harness", "a background-review harness prompt an older Hermes wrote into the session (a resume strips it)", rowData(m))
-	}
 	text, _ := sentText(m)
 	if m.Content.Structured {
 		text = strip(m.Content.String())
@@ -589,4 +591,44 @@ func (w *walk) system(i int) error {
 	sc.mark(m.Unit, agentimport.LineMapped)
 	sc.addf(agentimport.Lossy, "hermes/system-row", m.Unit, "a system row is in context where it stands, as a resume of the CLI sends it; the gateway's replay leaves it out")
 	return nil
+}
+
+// harnessState is _strip_background_review_harness's state over the
+// rows of one line.
+type harnessState struct {
+	skip, prev bool
+}
+
+const (
+	harnessNone = iota
+	harnessPrompt
+	harnessReply
+)
+
+// next takes a row: a harness prompt, the reply right after one, or
+// neither. A prompt arms the drop of the next message when that is an
+// assistant's, unless it follows another prompt, which holds the slot
+// already; any other message disarms it.
+func (h *harnessState) next(m *hermes.Message) int {
+	if m.Role == hermes.RoleUser || m.Role == hermes.RoleSystem {
+		text := m.Content.Text
+		if m.Role == hermes.RoleUser {
+			// As Hermes loads it: _loaded_view_content.
+			text = strip(sanitizeContext(text))
+		}
+		if !m.Content.Structured && isReviewHarness(m.Role, text) {
+			h.skip = !h.prev
+			h.prev = true
+			return harnessPrompt
+		}
+	}
+	if h.skip {
+		h.skip = false
+		if m.Role == hermes.RoleAssistant {
+			h.prev = false
+			return harnessReply
+		}
+	}
+	h.prev = false
+	return harnessNone
 }
