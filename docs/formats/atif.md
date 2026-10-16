@@ -156,7 +156,7 @@ previous step's: a document is a line, never a tree.
 | `step_id` | member `atif:step_id` on every entry made from the step | |
 | step `extra` | `atif:extra` on an agent step's response entry, or on the step's last entry when it has none | |
 | undeclared step members; agent members on another step | `atif:step` on the same entry as the extra | |
-| `continued_trajectory_ref` | the next document converted as its own session, with `parent_session`; this one ends with a `continued_in` link | |
+| `continued_trajectory_ref` | the next document converted as its own session, with `parent_session`, its first config the settings in force at this one's leaf, as `agentsession.Continue` starts a successor; this one ends with a `continued_in` link | the next document's agent and leading system steps apply on top |
 | `subagent_trajectory_ref` | see *Sub-agents* | |
 
 ATIF records no response status: every response has none.

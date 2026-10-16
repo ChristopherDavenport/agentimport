@@ -199,3 +199,37 @@ func TestStepExtraOnResponse(t *testing.T) {
 		t.Error("no response entry holds the step's extra")
 	}
 }
+
+// TestContinuationSettings checks that a continuation starts with the
+// settings in force where the session it continues ended: the
+// instructions and a model a step switched to.
+func TestContinuationSettings(t *testing.T) {
+	dir := t.TempDir()
+	for name, doc := range map[string]string{
+		"trajectory.json": `{"schema_version":"ATIF-v1.7","session_id":"first","agent":{"name":"x","version":"1","model_name":"m-1"},"continued_trajectory_ref":"cont.json","steps":[` +
+			`{"source":"system","timestamp":"2026-10-01T00:00:00Z","message":"Be careful."},` +
+			`{"source":"user","timestamp":"2026-10-01T00:00:01Z","message":"go"},` +
+			`{"source":"agent","timestamp":"2026-10-01T00:00:02Z","model_name":"m-2","message":"on it"}]}`,
+		"cont.json": `{"schema_version":"ATIF-v1.7","session_id":"second","agent":{"name":"x","version":"1"},"steps":[` +
+			`{"source":"user","timestamp":"2026-10-01T00:00:03Z","message":"more"},` +
+			`{"source":"agent","timestamp":"2026-10-01T00:00:04Z","message":"done"}]}`,
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(doc), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	res, err := ConvertFile(filepath.Join(dir, "trajectory.json"), Options{CreatedAt: fixed})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Sessions) != 2 {
+		t.Fatalf("%d sessions", len(res.Sessions))
+	}
+	ctx, err := reread(t, res.Sessions[1]).Context()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ctx.Settings.Model != "m-2" || ctx.Settings.Instructions != "Be careful." {
+		t.Errorf("successor's model %q, instructions %q", ctx.Settings.Model, ctx.Settings.Instructions)
+	}
+}

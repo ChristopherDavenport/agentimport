@@ -600,7 +600,13 @@ func (c *docConv) continuation() error {
 	}
 	c.fam.take(real)
 	name := c.fam.display(real)
-	t := target{parent: c.tgt.id, native: f.Doc.SessionID, created: c.last}
+	seed := c.settings
+	if c.tail != "" {
+		if ctx, err := c.b.S.ContextAt(c.tail); err == nil {
+			seed = ctx.Settings
+		}
+	}
+	t := target{parent: c.tgt.id, native: f.Doc.SessionID, created: c.last, seed: &seed}
 	t.id, t.derived = c.fam.claim(f.Doc.SessionID, c.tgt.id, "continuation/"+name)
 	sessions, _, err := c.fam.child(docInput{t: f.Doc, file: f, name: name, dir: filepath.Dir(real), real: real}, t, c.report, c.in.name)
 	if err != nil {

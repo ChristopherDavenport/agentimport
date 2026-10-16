@@ -51,6 +51,9 @@ type target struct {
 	// created is the time the parent named the document at, the
 	// fallback for a document with no timestamp.
 	created time.Time
+	// seed, for a continuation, is the settings in force at the leaf of
+	// the session it continues.
+	seed *agentsession.Settings
 }
 
 // one converts one document into one session, its findings in report,
@@ -521,6 +524,9 @@ func (c *docConv) indexEmbedded() {
 // firstConfig writes the settings the first step ran under: the agent's
 // model and tools, and the leading system steps as the instructions.
 func (c *docConv) firstConfig() error {
+	if err := c.seedConfig(); err != nil {
+		return err
+	}
 	cfg := &agentsession.ConfigEntry{}
 	if a := c.t.Agent; a != nil && a.Err == nil {
 		cfg.Model = a.ModelName
@@ -591,6 +597,10 @@ func (c *docConv) firstConfig() error {
 			return err
 		}
 	}
+	if cfg.Model == c.settings.Model {
+		// A continuation's seed has it in force already.
+		cfg.Model = ""
+	}
 	if cfg.Model == "" && cfg.Instructions == nil && len(cfg.ToolsAdded) == 0 && len(cfg.Unknown) == 0 {
 		return nil
 	}
@@ -601,6 +611,28 @@ func (c *docConv) firstConfig() error {
 	}
 	c.settings = c.settings.Apply(cfg)
 	_, err := c.appendEntry(cfg)
+	return err
+}
+
+// seedConfig starts a continuation with a full config of the settings
+// in force where the session it continues ended, as agentsession's
+// Continue starts a successor; the document's own agent and leading
+// system steps then apply on top.
+func (c *docConv) seedConfig() error {
+	seed := c.tgt.seed
+	if seed == nil || seed.Model == "" && seed.Instructions == "" && len(seed.Tools) == 0 && seed.Reasoning.IsZero() {
+		return nil
+	}
+	req, err := seed.Request(nil)
+	if err != nil {
+		return err
+	}
+	cfg, err := agentsession.ConfigFromRequestParts(req, seed.InstructionsParts...)
+	if err != nil {
+		return err
+	}
+	c.settings = c.settings.Apply(cfg)
+	_, err = c.appendEntry(cfg)
 	return err
 }
 
