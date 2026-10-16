@@ -3,4 +3,4 @@ atif: 4 roots and steps: mapped 3 kept 0 dropped 0 malformed 1
   lossy    atif/response-status                              1  ATIF records no response status, so no response has one (responses: 1) (at 2)
   lossy    atif/synthetic-tool-calls                         1  Terminus 2 parses its tool calls from the model's text and rewrites the message as analysis and plan; the model emitted no function calls
   repaired atif/step-malformed                               1  the step the document is cut inside is skipped (at 3)
-  repaired atif/truncated                                    1  the document does not parse past byte 382, as a file rewritten in place when its writer stopped does not; the members and steps before it are converted; cut: steps
+  repaired atif/truncated                                    1  the document does not parse past byte 381, as a file rewritten in place when its writer stopped does not; the members and steps before it are converted; cut: steps
