@@ -56,7 +56,10 @@ type conv struct {
 	// holding each.
 	byFileID map[string]int
 
-	calls   map[string]*call
+	// calls holds the calls written, by native ID, on every branch;
+	// callAt the call each action wrote.
+	calls   map[string][]*call
+	callAt  map[int]*call
 	respIDs map[string]bool
 	usage   *usageIndex
 
@@ -96,7 +99,41 @@ type call struct {
 	// hasAction is false for a call OpenHands could not run: an unknown
 	// tool or invalid arguments.
 	hasAction bool
-	answered  bool
+	// answers are the events that answered the call, on any branch.
+	answers []int
+}
+
+// ancestor reports whether event a is event b or one before it on b's
+// path.
+func (c *conv) ancestor(a, b int) bool {
+	for j := b; j >= a; j = c.parent[j] {
+		if j == a {
+			return true
+		}
+	}
+	return false
+}
+
+// callFor returns the call native names that an output at event i
+// answers: the latest so named on i's path.
+func (c *conv) callFor(native string, i int) *call {
+	list := c.calls[native]
+	for k := len(list) - 1; k >= 0; k-- {
+		if c.ancestor(list[k].event, i) {
+			return list[k]
+		}
+	}
+	return nil
+}
+
+// answeredOn reports whether an event on i's path answered cl.
+func (c *conv) answeredOn(cl *call, i int) bool {
+	for _, a := range cl.answers {
+		if c.ancestor(a, i) {
+			return true
+		}
+	}
+	return false
 }
 
 func newConv(fam *family, c *openhands.Conversation, tgt target, prefix string, depth int, report *agentimport.Report) *conv {
@@ -112,7 +149,8 @@ func newConv(fam *family, c *openhands.Conversation, tgt target, prefix string, 
 		done:     make([]bool, n),
 		eventOf:  map[string]int{},
 		leaf:     -1,
-		calls:    map[string]*call{},
+		calls:    map[string][]*call{},
+		callAt:   map[int]*call{},
 		respIDs:  map[string]bool{},
 		vsKey:    -1,
 		vs:       newViewState(),

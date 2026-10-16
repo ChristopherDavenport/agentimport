@@ -4,7 +4,7 @@ openhands: 13 files: mapped 11 kept 2 dropped 0 malformed 0
   lossy    openhands/interrupted                             1  the call was cut by a pause or a crash: an answer decision by policy before the output OpenHands wrote for it (at events:10)
   lossy    openhands/model-from-state                        1  the model is the one base_state names, as last saved; a later switch of model is not recorded per event (at events:1)
   lossy    openhands/no-version                              1  OpenHands records no version of itself or of its format; the harness names none, and shapes are told apart by structure
-  lossy    openhands/pending-call                            1  no event answers call call_ls2: OpenHands sends no call without its answer, and runs or rejects a pending one when the conversation resumes; the session reads it as pending (at events:12)
+  lossy    openhands/pending-call                            1  no event on a path from it answers call call_ls2: OpenHands sends no call without its answer, and runs or rejects a pending one when the conversation resumes; the session reads it as pending (at events:12)
   lossy    openhands/rejected                                2  rejected by the user: a reject decision by human before the output OpenHands sent (at events:4, events:7)
   lossy    openhands/timestamp-zone                          1  OpenHands writes local time with no zone; the timestamps are read in UTC
   lossy    openhands/tools-unrecorded                        1  2 tools are recorded without the parameter schema the model was sent, as OpenHands records them from 1.7; the config carries their names and descriptions, and the definitions are kept in openhands:event (at events:1)

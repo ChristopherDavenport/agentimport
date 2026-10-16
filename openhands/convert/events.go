@@ -644,14 +644,15 @@ func (c *conv) recordCall(j int, a *openhands.ActionEvent, fc *openresponses.Fun
 	cl := &call{id: fc.CallID, name: fc.Name, entry: entry, event: j, hasAction: c.info[j].hasAction}
 	if a.ToolCall != nil && a.ToolCall.ID != "" {
 		cl.native = a.ToolCall.ID
-		c.calls[a.ToolCall.ID] = cl
+		c.calls[a.ToolCall.ID] = append(c.calls[a.ToolCall.ID], cl)
 	}
-	if a.ToolCallID != "" {
+	if a.ToolCallID != "" && a.ToolCallID != cl.native {
 		if cl.native == "" {
 			cl.native = a.ToolCallID
 		}
-		c.calls[a.ToolCallID] = cl
+		c.calls[a.ToolCallID] = append(c.calls[a.ToolCallID], cl)
 	}
+	c.callAt[j] = cl
 	if !cl.hasAction {
 		c.at(agentimport.Lossy, "openhands/invalid-call", j, "OpenHands could not run this call: its tool is unknown or its arguments did not validate, and the stored arguments are as OpenHands repaired or replaced them")
 	}
@@ -664,7 +665,7 @@ func (c *conv) recordCall(j int, a *openhands.ActionEvent, fc *openresponses.Fun
 func (c *conv) output(i int) error {
 	ev := c.c.Events[i]
 	native := c.info[i].toolCallID
-	cl := c.calls[native]
+	cl := c.callFor(native, i)
 	at, err := c.attach(i)
 	if err != nil {
 		return err
@@ -673,7 +674,7 @@ func (c *conv) output(i int) error {
 	case cl == nil:
 		c.at(agentimport.Kept, "openhands/orphan-output", i, "the %s answers call %q, which no action before it on its path made; OpenHands leaves it out of the context, and it is a custom entry", ev.Kind, native)
 		return c.customEvent(i, at, "")
-	case cl.answered:
+	case c.answeredOn(cl, i):
 		c.at(agentimport.Kept, "openhands/duplicate-output", i, "a second answer to call %s; OpenHands sends the first alone, and this one is a custom entry", cl.id)
 		return c.customEvent(i, at, cl.id)
 	}
@@ -782,7 +783,7 @@ func (c *conv) output(i int) error {
 		return err
 	}
 	at = id
-	cl.answered = true
+	cl.answers = append(cl.answers, i)
 	c.items[i] = []string{id}
 	if at, err = c.peerChildren(i, at, cl); err != nil {
 		return err
@@ -885,8 +886,8 @@ func (c *conv) record(i int) error {
 			ActionID string `json:"action_id"`
 		}
 		if json.Unmarshal(ev.Raw, &h) == nil && h.ActionID != "" {
-			for _, cl := range c.calls {
-				if c.c.Events[cl.event].ID == h.ActionID {
+			for j := i - 1; j >= 0; j = c.parent[j] {
+				if cl := c.callAt[j]; cl != nil && c.c.Events[j].ID == h.ActionID {
 					callID = cl.id
 					break
 				}

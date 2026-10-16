@@ -226,17 +226,34 @@ func (c *conv) statsMember(s *openhands.State) (json.RawMessage, error) {
 // of the leaf's path, as paid calls with no response, and makes the
 // leaf the entry OpenHands resumes from.
 func (c *conv) finish() error {
-	seen := map[*call]bool{}
+	// A call is pending on a path that runs from it to a leaf with no
+	// answer: walk up from each leaf, noting the calls answered on the
+	// way.
+	hasChild := make([]bool, len(c.c.Events))
 	for i := range c.c.Events {
-		if c.info[i].kind != openhands.KindAction {
+		if p := c.parent[i]; p >= 0 && !c.treeArtifact(i) {
+			hasChild[p] = true
+		}
+	}
+	reported := map[*call]bool{}
+	for leaf := range c.c.Events {
+		if hasChild[leaf] || c.treeArtifact(leaf) {
 			continue
 		}
-		cl := c.calls[c.info[i].toolCallID]
-		if cl == nil || cl.event != i || cl.answered || seen[cl] {
-			continue
+		answered := map[*call]bool{}
+		for j := leaf; j >= 0; j = c.parent[j] {
+			if openhands.IsObservationLike(c.info[j].kind) {
+				if cl := c.callFor(c.info[j].toolCallID, j); cl != nil {
+					answered[cl] = true
+				}
+			}
+			cl := c.callAt[j]
+			if cl == nil || answered[cl] || reported[cl] {
+				continue
+			}
+			reported[cl] = true
+			c.at(agentimport.Lossy, "openhands/pending-call", j, "no event on a path from it answers call %s: OpenHands sends no call without its answer, and runs or rejects a pending one when the conversation resumes; the session reads it as pending", cl.id)
 		}
-		seen[cl] = true
-		c.at(agentimport.Lossy, "openhands/pending-call", i, "no event answers call %s: OpenHands sends no call without its answer, and runs or rejects a pending one when the conversation resumes; the session reads it as pending", cl.id)
 	}
 	leaf := c.b.Last()
 	if c.leaf >= 0 && c.tail[c.leaf] != "" {

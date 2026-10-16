@@ -164,7 +164,8 @@ func ev(kind, id, parent string, members string) string {
 }
 
 func userEv(id, parent, text string) string {
-	return ev("MessageEvent", id, parent, `"llm_message":{"role":"user","content":[{"type":"text","text":"`+text+`"}]}`)
+	e := ev("MessageEvent", id, parent, `"llm_message":{"role":"user","content":[{"type":"text","text":"`+text+`"}]}`)
+	return strings.Replace(e, `"source":"agent"`, `"source":"user"`, 1)
 }
 
 func actionEv(id, parent, call, resp string, extra string) string {
@@ -204,5 +205,42 @@ func TestBatchPastRecords(t *testing.T) {
 	)
 	if got := responses(res.Sessions[0]); len(got) != 1 || got[0] != "r1" {
 		t.Errorf("responses %v, want r1 alone", got)
+	}
+}
+
+// codes is the set of codes a report holds.
+func codes(r *agentimport.Report) map[string]bool {
+	out := map[string]bool{}
+	for _, c := range r.Codes() {
+		out[c] = true
+	}
+	return out
+}
+
+// TestAnswerPerBranch answers a call again on a second branch, as
+// OpenHands does when a conversation navigated back to the action is
+// resumed: each branch has its own output, and a branch where the call
+// has none reports it pending.
+func TestAnswerPerBranch(t *testing.T) {
+	res := convertEvents(t, "",
+		userEv("e0000000", "", "go"),
+		actionEv("e1000000", "e0000000", "c1", "r1", ""),
+		obsEv("e2000000", "e1000000", "c1", "first"),
+		userEv("e3000000", "e2000000", "next"),
+		obsEv("e4000000", "e1000000", "c1", "again"),
+		userEv("e5000000", "e1000000", "never mind"),
+	)
+	outputs := 0
+	for _, e := range res.Sessions[0].Entries() {
+		if it, ok := e.(*agentsession.ItemEntry); ok && it.Item.ItemType() == "function_call_output" {
+			outputs++
+		}
+	}
+	got := codes(res.Report)
+	if outputs != 2 || got["openhands/duplicate-output"] {
+		t.Errorf("%d outputs, codes %v: want one per branch", outputs, res.Report.Codes())
+	}
+	if !got["openhands/pending-call"] {
+		t.Error("the branch where the call has no answer does not report it pending")
 	}
 }
