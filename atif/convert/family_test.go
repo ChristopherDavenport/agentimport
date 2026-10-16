@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/ChristopherDavenport/agentimport/atif"
+	"github.com/ChristopherDavenport/agentsession"
 )
 
 // TestFailedChildDropsItsFiles checks that a sub-agent document that
@@ -176,5 +177,25 @@ func TestSlimFindings(t *testing.T) {
 		if !slices.Contains(lines["atif/mistyped-member"], 6) {
 			t.Errorf("slim %v: the dispatch step's metrics are not reported: %v", slim, lines["atif/mistyped-member"])
 		}
+	}
+}
+
+// TestStepExtraOnResponse checks that an agent step's extra, which
+// describes the response, is on the response entry, not on the output
+// after it.
+func TestStepExtraOnResponse(t *testing.T) {
+	res := convertFixture(t, fixtures(t)["claude-code"], Options{})
+	found := false
+	for _, e := range reread(t, res.Sessions[0]).Entries() {
+		raw := e.Base().Unknown["atif:extra"]
+		has := strings.Contains(string(raw), "req_1")
+		if _, ok := e.(*agentsession.ResponseEntry); ok && has {
+			found = true
+		} else if has {
+			t.Errorf("the step's extra is on a %T", e)
+		}
+	}
+	if !found {
+		t.Error("no response entry holds the step's extra")
 	}
 }

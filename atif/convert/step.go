@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -96,9 +97,30 @@ func (c *docConv) commit(i int, s *atif.Step, entries []agentsession.Entry, rest
 	return c.commitEntries(i, s, entries, rest, true)
 }
 
+// commitOn is commit with the step's extra and other members on owner,
+// one of the entries, rather than the last.
+func (c *docConv) commitOn(i int, s *atif.Step, entries []agentsession.Entry, rest map[string]json.RawMessage, owner agentsession.Entry) ([]string, error) {
+	at := slices.Index(entries, owner)
+	if at < 0 {
+		at = len(entries) - 1
+	}
+	return c.commitAt(i, s, entries, rest, at)
+}
+
 // commitEntries is commit; with final false the entries are the first
 // of the step's, and carry neither its extra nor its other members.
 func (c *docConv) commitEntries(i int, s *atif.Step, entries []agentsession.Entry, rest map[string]json.RawMessage, final bool) ([]string, error) {
+	at := -1
+	if final {
+		at = len(entries) - 1
+	}
+	return c.commitAt(i, s, entries, rest, at)
+}
+
+// commitAt is commit with the step's extra and other members on the
+// entry at index at, or on none when at is negative.
+func (c *docConv) commitAt(i int, s *atif.Step, entries []agentsession.Entry, rest map[string]json.RawMessage, at int) ([]string, error) {
+	final := at >= 0
 	if len(entries) == 0 {
 		c.mark(i, agentimport.LineDropped)
 		c.addf(agentimport.Dropped, "atif/empty-step", i+1, "the step holds nothing to convert: no message, no calls, no results")
@@ -120,7 +142,7 @@ func (c *docConv) commitEntries(i int, s *atif.Step, entries []agentsession.Entr
 				return nil, err
 			}
 		}
-		if !final || j < len(entries)-1 {
+		if j != at {
 			continue
 		}
 		if err := c.keepExtra(e, i, s.Ext); err != nil {
@@ -636,18 +658,24 @@ func (c *docConv) agentStep(i int, s *atif.Step) error {
 				return err
 			}
 		}
-	} else {
+	}
+	// The step's extra and other members describe the response (Claude
+	// Code's stop_reason and requestId), so they go on it, not on the
+	// last output.
+	var owner agentsession.Entry
+	if !dispatch {
 		resp, err := c.response(i, s, respID, calls)
 		if err != nil {
 			return err
 		}
 		entries = append(entries, resp)
+		owner = resp
 	}
 	more, err := c.results(i, s, local, order)
 	if err != nil {
 		return err
 	}
-	if _, err := c.commit(i, s, append(entries, more...), rest); err != nil {
+	if _, err := c.commitOn(i, s, append(entries, more...), rest, owner); err != nil {
 		return err
 	}
 	c.mark(i, agentimport.LineMapped)

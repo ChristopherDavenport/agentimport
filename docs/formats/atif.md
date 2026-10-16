@@ -154,8 +154,8 @@ previous step's: a document is a line, never a tree.
 | `is_copied_context: true` | the session's own entries, marked `atif:copied`; the response's usage in `atif:usage` | see *Copied history* |
 | `timestamp` | `ts` of every entry made from the step | naive times are UTC; none, or one that does not parse, takes the entry before's |
 | `step_id` | member `atif:step_id` on every entry made from the step | |
-| step `extra` | `atif:extra` on the step's last entry | |
-| undeclared step members; agent members on another step | `atif:step` on the step's last entry | |
+| step `extra` | `atif:extra` on an agent step's response entry, or on the step's last entry when it has none | |
+| undeclared step members; agent members on another step | `atif:step` on the same entry as the extra | |
 | `continued_trajectory_ref` | the next document converted as its own session, with `parent_session`; this one ends with a `continued_in` link | |
 | `subagent_trajectory_ref` | see *Sub-agents* | |
 
