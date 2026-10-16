@@ -75,6 +75,9 @@ func Open(path, prefix string) (*Copy, error) {
 	return c, nil
 }
 
+// Dir is the private directory the copy is in.
+func (c *Copy) Dir() string { return c.tmp }
+
 func (c *Copy) remove() error {
 	err := os.RemoveAll(c.tmp)
 	copies.remove(c.tmp)
@@ -93,10 +96,11 @@ func (c *Copy) Close() error {
 	return err
 }
 
-// Tables lists the database's tables.
-func (c *Copy) Tables() (map[string]bool, error) { return tables(c.DB) }
+// Tables lists the copy's tables.
+func (c *Copy) Tables() (map[string]bool, error) { return Tables(c.DB) }
 
-func tables(db *sql.DB) (map[string]bool, error) {
+// Tables lists the tables of an open database.
+func Tables(db *sql.DB) (map[string]bool, error) {
 	rows, err := db.QueryContext(context.Background(), "SELECT name FROM sqlite_master WHERE type = 'table'")
 	if err != nil {
 		return nil, err

@@ -43,3 +43,18 @@ func TestCopy(t *testing.T) {
 		t.Error("a missing file is a database")
 	}
 }
+
+// TestBusy refuses a copy taken while the database keeps changing.
+func TestBusy(t *testing.T) {
+	a := state{size: 1}
+	b := state{size: 2}
+	if a.same(b) {
+		t.Error("states of two sizes are the same")
+	}
+	if !a.same(state{size: 1}) {
+		t.Error("a state is not itself")
+	}
+	if a.same(state{size: 1, wal: true, walHead: []byte{1}}) {
+		t.Error("a log appearing is no change")
+	}
+}

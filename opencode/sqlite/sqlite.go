@@ -6,22 +6,14 @@
 // written in Go, so the opencode package stays on the standard library
 // alone.
 //
-// The database is never opened in place. SQLite creates a -wal and a
-// -shm file beside a database in WAL mode even for a read-only
-// connection, and a connection that closes last may checkpoint, so
-// [Open] copies the database and its write-ahead log into a private
-// temporary directory and reads the copy, which SQLite recovers as a
-// crashed writer's: every frame the log holds up to its last commit is
-// read, checkpointed or not. While OpenCode runs it keeps writing, so
-// the copy is checked: the database file and the log's header must be
-// the same after the copy as before it, else the copy is retried a few
-// times and then refused with [ErrBusy]. Frames appended to the log
-// while it was copied are ones SQLite's recovery reads up to the last
-// commit it finds whole.
+// The database is never opened in place: [Open] reads a private copy of
+// it and its write-ahead log, which internal/sqlite makes and checks
+// against OpenCode writing to it while it copies, as clinesdk/sqlite
+// does Cline's. Frames appended to the log while it was copied are ones
+// SQLite's recovery reads up to the last commit it finds whole.
 package sqlite
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -31,9 +23,8 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"sync"
-	"time"
 
+	isqlite "github.com/ChristopherDavenport/agentimport/internal/sqlite"
 	"github.com/ChristopherDavenport/agentimport/opencode"
 	_ "modernc.org/sqlite"
 )
@@ -47,18 +38,11 @@ var ErrBusy = errors.New("the database kept changing while it was copied; OpenCo
 // whose tables are sessions and messages.
 var ErrNotOpenCode = errors.New("the database holds none of OpenCode's session tables (session, message and part, or session_v2 and session_message); Crush's opencode.db is another program's")
 
-// attempts and pause bound the copy's retries.
-const (
-	attempts = 5
-	pause    = 200 * time.Millisecond
-)
-
 // DB is a copy of an OpenCode database, open for reading. It implements
 // [opencode.Store]. A DB is not safe for concurrent use.
 type DB struct {
-	path   string
 	name   string
-	tmp    string
+	c      *isqlite.Copy
 	db     *sql.DB
 	tables map[string]bool
 }
@@ -66,77 +50,32 @@ type DB struct {
 // Open copies the database at path and opens the copy. Close removes
 // it.
 func Open(path string) (*DB, error) {
-	tmp, err := os.MkdirTemp("", "agentimport-opencode-*")
+	c, err := isqlite.Open(path, "agentimport-opencode-")
+	if errors.Is(err, isqlite.ErrBusy) {
+		return nil, ErrBusy
+	}
 	if err != nil {
 		return nil, err
 	}
-	copies.add(tmp)
-	d := &DB{path: path, name: filepath.Base(path), tmp: tmp}
-	if err := d.open(); err != nil {
-		os.RemoveAll(tmp)
-		copies.remove(tmp)
-		return nil, err
+	d := &DB{name: filepath.Base(path), c: c, db: c.DB}
+	tables, err := c.Tables()
+	if err != nil {
+		c.Close()
+		return nil, fmt.Errorf("read the schema: %w", err)
+	}
+	d.tables = tables
+	if !d.IsOpenCode() {
+		c.Close()
+		return nil, ErrNotOpenCode
 	}
 	return d, nil
-}
-
-// copies are the private directories of the copies open.
-var copies = &registry{dirs: map[string]bool{}}
-
-type registry struct {
-	mu   sync.Mutex
-	dirs map[string]bool
-}
-
-func (r *registry) add(dir string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.dirs[dir] = true
-}
-
-func (r *registry) remove(dir string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	delete(r.dirs, dir)
 }
 
 // RemoveCopies removes the copy of every database open: what a program
 // interrupted while it reads one calls before it exits, as a deferred
 // Close does not run then. The copies are in os.TempDir, under
 // $TMPDIR when it is set.
-func RemoveCopies() {
-	copies.mu.Lock()
-	defer copies.mu.Unlock()
-	for dir := range copies.dirs {
-		os.RemoveAll(dir)
-		delete(copies.dirs, dir)
-	}
-}
-
-func (d *DB) open() error {
-	copyPath := filepath.Join(d.tmp, "opencode.db")
-	if err := snapshot(d.path, copyPath); err != nil {
-		return err
-	}
-	dsn := (&url.URL{Scheme: "file", Path: copyPath, RawQuery: "_pragma=busy_timeout(5000)"}).String()
-	db, err := sql.Open("sqlite", dsn)
-	if err != nil {
-		return err
-	}
-	db.SetMaxOpenConns(1)
-	d.db = db
-	tables, err := d.listTables()
-	if err != nil {
-		db.Close()
-		return fmt.Errorf("read the schema: %w", err)
-	}
-	d.tables = tables
-	if !d.IsOpenCode() {
-		db.Close()
-		return ErrNotOpenCode
-	}
-	return nil
-}
+func RemoveCopies() { isqlite.RemoveCopies() }
 
 // OpenStore is [Open] as the opencode/convert package takes it, in its
 // Options.OpenDatabase.
@@ -149,17 +88,7 @@ func OpenStore(path string) (opencode.Database, error) {
 }
 
 // Close closes the copy and removes it.
-func (d *DB) Close() error {
-	var err error
-	if d.db != nil {
-		err = d.db.Close()
-	}
-	if rerr := os.RemoveAll(d.tmp); err == nil {
-		err = rerr
-	}
-	copies.remove(d.tmp)
-	return err
-}
+func (d *DB) Close() error { return d.c.Close() }
 
 // Has reports whether the database holds a table.
 func (d *DB) Has(table string) bool { return d.tables[table] }
@@ -173,105 +102,6 @@ func (d *DB) IsOpenCode() bool {
 
 // Name names the database in findings: its file name.
 func (d *DB) Name() string { return d.name }
-
-// snapshot copies the database at src, and its -wal when it has one, to
-// dst, retrying while either changes under the copy.
-func snapshot(src, dst string) error {
-	for try := 0; try < attempts; try++ {
-		if try > 0 {
-			time.Sleep(pause)
-		}
-		before, err := mark(src)
-		if err != nil {
-			return err
-		}
-		if err := copyFile(src, dst); err != nil {
-			return err
-		}
-		os.Remove(dst + "-wal")
-		if before.wal {
-			if err := copyFile(src+"-wal", dst+"-wal"); err != nil && !errors.Is(err, os.ErrNotExist) {
-				return err
-			}
-		}
-		after, err := mark(src)
-		if err != nil {
-			return err
-		}
-		if before.same(after) {
-			return nil
-		}
-	}
-	return ErrBusy
-}
-
-// state is what tells a database file and its log unchanged: the
-// file's size and modification time, and the log's header, which a
-// checkpoint that restarts the log rewrites.
-type state struct {
-	size    int64
-	mod     time.Time
-	wal     bool
-	walHead []byte
-}
-
-func (s state) same(o state) bool {
-	return s.size == o.size && s.mod.Equal(o.mod) && s.wal == o.wal && bytes.Equal(s.walHead, o.walHead)
-}
-
-func mark(path string) (state, error) {
-	info, err := os.Stat(path)
-	if err != nil {
-		return state{}, err
-	}
-	if !info.Mode().IsRegular() {
-		return state{}, fmt.Errorf("%s is not a file", path)
-	}
-	s := state{size: info.Size(), mod: info.ModTime()}
-	f, err := os.Open(path + "-wal")
-	if err == nil {
-		head := make([]byte, 32)
-		n, _ := io.ReadFull(f, head)
-		f.Close()
-		s.wal = true
-		s.walHead = head[:n]
-	}
-	return s, nil
-}
-
-func copyFile(src, dst string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
-	if err != nil {
-		return err
-	}
-	if _, err := io.Copy(out, in); err != nil {
-		out.Close()
-		return err
-	}
-	return out.Close()
-}
-
-func (d *DB) listTables() (map[string]bool, error) {
-	rows, err := d.db.QueryContext(context.Background(), "SELECT name FROM sqlite_master WHERE type = 'table'")
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := map[string]bool{}
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			return nil, err
-		}
-		out[name] = true
-	}
-	return out, rows.Err()
-}
 
 // query runs a query and returns each row's columns.
 func (d *DB) query(q string, args ...any) ([]opencode.Columns, error) {
@@ -541,7 +371,7 @@ func Probe(path string) bool {
 	}
 	defer db.Close()
 	d := &DB{db: db}
-	tables, err := d.listTables()
+	tables, err := isqlite.Tables(db)
 	if err != nil {
 		return false
 	}
