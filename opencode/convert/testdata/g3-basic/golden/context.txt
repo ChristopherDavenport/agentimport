@@ -1,0 +1,13 @@
+session 0 ses_v2main
+  model: gpt-x
+  user: <conversation-checkpoint> …
+  user: after compaction
+  assistant: fine
+session 1 b72a7864-47de-526c-941c-768d96e4954a
+  model: claude-x
+  user: You are a subagent spawned by another session. …
+  assistant: done
+session 2 ses_v2bg
+  model: claude-x
+  user: You are a subagent spawned by another session. …
+  assistant: bg done

@@ -1,0 +1,11 @@
+opencode: 42 records: mapped 30 kept 0 dropped 12 malformed 0
+  gap      agentimport/provenance                            4  the import is recorded in the header's agentimport:source member
+  gap      agentimport/reasoning-provider                    3  the reasoning's signature or encrypted content is anthropic's, which encrypted_content does not say; the item entry carries opencode:provider
+  dropped  opencode/duplicate-store                          2  OpenCode 2's migration copied the session's first 2 messages into its own tables, a rendering that keeps one assistant message per V1 message and drops step boundaries, retries and snapshots; they are converted from the V1 tables, and the copy is left out
+  dropped  opencode/system-prompt                            4  OpenCode builds the system prompt and the tool list for each request and does not store them; the settings carry the model alone
+  lossy    opencode/duplicate-diverged                       1  the session is converted from the V1 tables, which OpenCode read after it; this copy, in the storage files, is left out, and it holds 1 messages the converted copy does not, such as msg_up9
+  lossy    opencode/generation-join                          1  OpenCode 2 carried on the session after migrating it: the session is its V1 record, then the 2 rows OpenCode 2 wrote; the requests after the migration sent OpenCode 2's rendering of the earlier history, one assistant message per V1 message, which the path does not rebuild
+  lossy    opencode/migration-notice                         1  OpenCode 2's migration told the model which tools were renamed in a system message, which every later request sent
+  kept     opencode/members                                 14  kept in opencode:message
+  kept     opencode/session-record                           4  the session record's members the header has no place for are in the header's opencode:session member
+  kept     opencode/usage-member                             5  the cost and the total OpenCode records with the usage are in opencode:usage

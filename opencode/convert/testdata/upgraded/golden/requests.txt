@@ -1,0 +1,26 @@
+session 0 ses_files
+session 1 ses_up
+  request of msg_up2:1:
+    user: first ask
+  request of msg_up2:2:
+    user: first ask
+    reasoning plan [encrypted]
+    call toolu_up bash
+    output toolu_up a.go
+  request of msg_up_n2:
+    user: first ask
+    reasoning plan [encrypted]
+    call toolu_up bash
+    output toolu_up a.go
+    assistant: listed
+    system: The available tools have changed. …
+    user: after the migration
+session 2 ses_done
+  request of msg_done2:1:
+    user: first ask
+  request of msg_done2:2:
+    user: first ask
+    reasoning plan [encrypted]
+    call toolu_done bash
+    output toolu_done a.go
+session 3 ses_new

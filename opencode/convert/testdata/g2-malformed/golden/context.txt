@@ -1,0 +1,13 @@
+session 0 ses_bad
+  model: claude-x
+  user: ababababababababababababababababababababababababab
+  call dup read
+  call dup_1 read
+  output dup a
+  output dup_1 b
+  assistant: second step
+  user: again
+session 1 ses_cyc1
+  model: claude-x
+  user: in a cycle
+session 2 ses_cyc2

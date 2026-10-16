@@ -1,0 +1,3 @@
+session 0 ses_wal
+  request of msg_w2:1:
+    user: only in the log

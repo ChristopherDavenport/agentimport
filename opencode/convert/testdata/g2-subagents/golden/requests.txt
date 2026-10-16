@@ -1,0 +1,79 @@
+session 0 ses_par
+  request of msg_e02:1:
+    user: delegate the work
+  request of msg_e02:2:
+    user: delegate the work
+    call call_t1 task
+    call call_t2 task
+    output call_t1 <task id="ses_kid1" state="completed"> …
+    output call_t2 <task id="ses_kid2" state="completed"> …
+  request of msg_e02:3:
+    user: delegate the work
+    call call_t1 task
+    call call_t2 task
+    output call_t1 <task id="ses_kid1" state="completed"> …
+    output call_t2 <task id="ses_kid2" state="completed"> …
+    call call_t3 task
+    call call_t4 task
+    call call_t5 task
+    output call_t3 <task id="ses_kid2" state="completed"> …
+    output call_t4 <task id="ses_kid3" state="running"> …
+    output call_t5 <task id="ses_missing" state="completed"> …
+  request of msg_e04:1:
+    user: delegate the work
+    call call_t1 task
+    call call_t2 task
+    output call_t1 <task id="ses_kid1" state="completed"> …
+    output call_t2 <task id="ses_kid2" state="completed"> …
+    call call_t3 task
+    call call_t4 task
+    call call_t5 task
+    output call_t3 <task id="ses_kid2" state="completed"> …
+    output call_t4 <task id="ses_kid3" state="running"> …
+    output call_t5 <task id="ses_missing" state="completed"> …
+    assistant: waiting for the scan
+    user: <task id="ses_kid3" state="completed"> …
+  request of msg_e08:1:
+    user: delegate the work
+    call call_t1 task
+    call call_t2 task
+    output call_t1 <task id="ses_kid1" state="completed"> …
+    output call_t2 <task id="ses_kid2" state="completed"> …
+    call call_t3 task
+    call call_t4 task
+    call call_t5 task
+    output call_t3 <task id="ses_kid2" state="completed"> …
+    output call_t4 <task id="ses_kid3" state="running"> …
+    output call_t5 <task id="ses_missing" state="completed"> …
+    assistant: waiting for the scan
+    user: <task id="ses_kid3" state="completed"> …
+    assistant: all done
+    user: The following tool was executed by the user
+    call call_t6 task
+    output call_t6 <task id="ses_kid4" state="completed"> …
+    user: Summarize the task tool output above and continue 
+session 1 1886b09f-7997-50b8-b54d-c6adb8cb09f9
+  request of msg_kid1v0:1:
+    user: do one
+session 2 ses_grand
+  request of msg_grandv0:1:
+    user: nested
+session 3 ses_kid2
+  request of msg_kid2v0:1:
+    user: do two
+  request of msg_kid2v1:1:
+    user: do two
+    assistant: two
+    user: more
+session 4 ses_kid3
+  request of msg_kid3v0:1:
+    user: scan
+session 5 d6448aea-c8bb-54de-b9f9-bf28e7f01441
+  request of msg_kid4v0:1:
+    user: run lint
+session 6 ses_kid5
+  request of msg_kid5v0:1:
+    user: orphan run
+session 7 ses_fork
+  request of msg_fk2:1:
+    user: delegate the work

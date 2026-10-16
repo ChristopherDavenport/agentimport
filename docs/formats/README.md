@@ -17,6 +17,9 @@ does not list.
 - [openhands.md](openhands.md): the OpenHands software agent SDK's
   conversation directories (CLI, agent server, Agent Canvas). Its
   report counts each file of a conversation directory.
+- [opencode.md](opencode.md): OpenCode's data directory, its storage
+  files and its database's V1 and V2 tables. Its report counts records:
+  each storage file and each row of the session tables.
 
 ## Codes every converter can report
 

@@ -1,0 +1,100 @@
+session 0 ses_cmpold
+  request of msg_c02:1:
+    user: step one
+  request of msg_c04:1:
+    user: step one
+    assistant: did one
+    user: step two
+  request of msg_c06:1:
+    user: step one
+    assistant: did one
+    user: step two
+    call toolu_c1 read
+    output toolu_c1 x body
+    user: What did we do so far?
+  request of msg_c08:1:
+    user: What did we do so far?
+    assistant: Summary: did one and two.
+    user: Continue if you have next steps, or stop and ask f
+  request of msg_c10:1:
+    user: What did we do so far?
+    assistant: Summary: did one and two.
+    user: Continue if you have next steps, or stop and ask f
+    assistant: continuing
+    user: What did we do so far?
+  request of msg_c12:1:
+    user: What did we do so far?
+    assistant: Summary: did one and two.
+    user: Continue if you have next steps, or stop and ask f
+    assistant: continuing
+    user: What did we do so far?
+    user: and now
+session 1 ses_cmptail
+  request of msg_tail02:1:
+    user: first ask
+  request of msg_tail04:1:
+    user: first ask
+    assistant: first answer
+    user: keep me
+  request of msg_tail06:1:
+    user: first ask
+    assistant: first answer
+    user: keep me
+    call toolu_tail read
+    assistant: kept answer
+    output toolu_tail y body
+    user: What did we do so far?
+  request of msg_tail08:1:
+    user: keep me
+    call toolu_tail read
+    assistant: kept answer
+    output toolu_tail y body
+    user: What did we do so far?
+    assistant: Summary: asked and answered.
+    user: next ask
+session 2 ses_cmpreorder
+  request of msg_rder02:1:
+    user: first ask
+  request of msg_rder04:1:
+    user: first ask
+    assistant: first answer
+    user: keep me
+  request of msg_rder06:1:
+    user: first ask
+    assistant: first answer
+    user: keep me
+    call toolu_rder read
+    assistant: kept answer
+    output toolu_rder y body
+    user: What did we do so far?
+  request of msg_rder08:1:
+    user: What did we do so far?
+    assistant: Summary: asked and answered.
+    user: keep me
+    call toolu_rder read
+    assistant: kept answer
+    output toolu_rder y body
+    user: next ask
+session 3 ses_cmpresumed
+  request of msg_umed02:1:
+    user: first ask
+  request of msg_umed04:1:
+    user: first ask
+    assistant: first answer
+    user: keep me
+  request of msg_umed06:1:
+    user: first ask
+    assistant: first answer
+    user: keep me
+    call toolu_umed read
+    assistant: kept answer
+    output toolu_umed y body
+    user: What did we do so far?
+  request of msg_umed08:1:
+    user: What did we do so far?
+    assistant: Summary: asked and answered.
+    user: keep me
+    call toolu_umed read
+    assistant: kept answer
+    output toolu_umed y body
+    user: next ask

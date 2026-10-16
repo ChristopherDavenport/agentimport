@@ -1,0 +1,23 @@
+opencode: 39 records: mapped 31 kept 7 dropped 1 malformed 0
+  gap      agentimport/provenance                            1  the import is recorded in the header's agentimport:source member
+  gap      agentimport/reasoning-provider                    1  the reasoning's signature or encrypted content is anthropic's, which encrypted_content does not say; the item entry carries opencode:provider
+  gap      agentimport/tool-error                            3  a function_call_output has no error flag; the item entry carries opencode:is_error
+  gap      agentimport/usage-detail                          1  cache writes have no place in Responses usage; they are folded into input tokens, and the count, with the cost, is in opencode:usage
+  dropped  opencode/empty-text                               1  an empty text part, which OpenCode does not send, is left out
+  dropped  opencode/system-prompt                            1  OpenCode builds the system prompt and the tool list for each request and does not store them; the settings carry the model alone
+  lossy    opencode/call-interrupted                         1  the call was cleaned up after an abort, and OpenCode sends the output it had as the call's output
+  lossy    opencode/call-unfinished                          2  the call was pending when the message ended; OpenCode sends "[Tool execution was interrupted]" as its output, which follows a decision, reject by policy
+  lossy    opencode/error-turn                               1  the message ended in APIError; OpenCode leaves it out of every later request, so its 1 items are left out by omit
+  lossy    opencode/file-url                                 1  a file part's URL is not a data URL; the AI SDK sends it by reference for the provider to fetch, and the session carries the reference
+  lossy    opencode/permission-text                          2  the call's error is the text OpenCode gives a refused permission; it is a reject decision by human, told by the text alone
+  lossy    opencode/text-space                               1  an empty text beside signed reasoning, which OpenCode sends as a single space so the reasoning keeps its place, is written as that space
+  lossy    opencode/user-system                              1  a user message carries system text OpenCode added to the system prompt of its requests, which the session does not hold; it is kept in the message's opencode:message member
+  kept     opencode/custom                                   1  a user message with nothing sent, which is not context, is a custom entry
+  kept     opencode/file-expanded                            1  a text/plain file part, which OpenCode expands into synthetic text when the prompt is made and does not send itself; it is kept in opencode:unsent
+  kept     opencode/ignored-text                             2  an ignored text part, which OpenCode does not send; it is kept in opencode:unsent
+  kept     opencode/members                                 22  kept in opencode:message
+  kept     opencode/message-empty                            1  a user message with no part OpenCode sends is not in context
+  kept     opencode/session-record                           1  the session record's members the header has no place for are in the header's opencode:session member
+  kept     opencode/step-part                                2  a part of type patch is not sent; it is kept in opencode:parts
+  kept     opencode/unsent-part                              1  a part of type agent, which OpenCode does not send in a user message; it is kept in opencode:unsent
+  kept     opencode/usage-member                             1  the cost and the total OpenCode records with the usage are in opencode:usage

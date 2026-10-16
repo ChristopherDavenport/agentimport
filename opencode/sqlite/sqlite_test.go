@@ -1,10 +1,13 @@
 package sqlite
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/ChristopherDavenport/agentimport/opencode"
@@ -173,3 +176,88 @@ func TestBusy(t *testing.T) {
 	}
 }
 
+// TestRoundTripFixtures decodes the data of every row of the converter's
+// fixtures and encodes it again: the same JSON value, members undeclared
+// included.
+func TestRoundTripFixtures(t *testing.T) {
+	scripts, _ := filepath.Glob(filepath.Join("..", "convert", "testdata", "*", "db.sql"))
+	if len(scripts) == 0 {
+		t.Fatal("no fixtures")
+	}
+	for _, s := range scripts {
+		data, err := os.ReadFile(s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var names []string
+		for _, line := range strings.Split(string(data), "\n") {
+			if rest, ok := strings.CutPrefix(line, "-- schema:"); ok {
+				names = strings.Fields(rest)
+			}
+		}
+		path := filepath.Join(t.TempDir(), opencode.DatabaseName)
+		w, err := Fixture(path, schema(t, names...)+string(data))
+		if err != nil {
+			t.Fatalf("%s: %v", s, err)
+		}
+		w.Close()
+		db, err := Open(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sessions, _, err := db.Sessions()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, sess := range sessions {
+			var raws [][2][]byte
+			if sess.Gen == opencode.G2 {
+				msgs, _, err := db.Messages(sess)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, m := range msgs {
+					out, _ := json.Marshal(m.Info)
+					raws = append(raws, [2][]byte{withoutIDs(t, m.Raw), withoutIDs(t, out)})
+					for _, p := range m.Parts {
+						out, _ := json.Marshal(p.Part)
+						raws = append(raws, [2][]byte{withoutIDs(t, p.Raw), withoutIDs(t, out)})
+					}
+				}
+			} else {
+				rows, _, err := db.Rows(sess)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, r := range rows {
+					if r.Err != nil {
+						continue
+					}
+					out, _ := json.Marshal(r.Data)
+					raws = append(raws, [2][]byte{r.Raw, out})
+				}
+			}
+			for _, pair := range raws {
+				var a, b any
+				if json.Unmarshal(pair[0], &a) != nil || json.Unmarshal(pair[1], &b) != nil || !reflect.DeepEqual(a, b) {
+					t.Errorf("%s: wrote back\n%s\nfrom\n%s", s, pair[1], pair[0])
+				}
+			}
+		}
+		db.Close()
+	}
+}
+
+// withoutIDs drops the members a decoder fills from a row's columns.
+func withoutIDs(t *testing.T, raw []byte) []byte {
+	t.Helper()
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return raw
+	}
+	for _, k := range []string{"id", "sessionID", "messageID"} {
+		delete(m, k)
+	}
+	out, _ := json.Marshal(m)
+	return out
+}

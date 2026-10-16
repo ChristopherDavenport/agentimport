@@ -1,0 +1,11 @@
+opencode: 15 records: mapped 15 kept 0 dropped 0 malformed 0
+  gap      agentimport/provenance                            2  the import is recorded in the header's agentimport:source member
+  dropped  opencode/system-prompt                            2  OpenCode builds the system prompt and the tool list for each request and does not store them; the settings carry the model alone
+  lossy    opencode/compaction                               1  a compaction: OpenCode 2's requests from here start with it, and nothing before it is kept
+  lossy    opencode/fork-copied                              1  the session is a fork of ses_orig, named in parent_session and by a fork_of link; its first 2 rows are copies of the origin's, converted as its own, their usage kept off the responses
+  lossy    opencode/revert-staged                            1  the session stages a revert from this row: it and the 1 rows after it are on a branch the session does not resume, as OpenCode deletes them before its next step
+  kept     opencode/fork-usage                               1  the response is a copy a fork made, and its usage, the origin's, is kept in opencode:copied_usage
+  kept     opencode/members                                  8  kept in opencode:row
+  kept     opencode/native-checkpoint                        1  a provider's own compaction checkpoint, the provider's messages, is the compaction's summary as an opencode.native_checkpoint item; OpenCode 2 replays it only to a model of that provider
+  kept     opencode/session-record                           2  the session record's members the header has no place for are in the header's opencode:session member
+  kept     opencode/usage-member                             4  the cost and the total OpenCode records with the usage are in opencode:usage

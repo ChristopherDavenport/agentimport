@@ -1,0 +1,39 @@
+session 0 ses_cmpold
+  model: claude-x
+  user: What did we do so far?
+  assistant: Summary: did one and two.
+  user: Continue if you have next steps, or stop and ask f
+  assistant: continuing
+  user: What did we do so far?
+  user: and now
+  assistant: ok
+session 1 ses_cmptail
+  model: claude-x
+  user: keep me
+  call toolu_tail read
+  assistant: kept answer
+  output toolu_tail y body
+  user: What did we do so far?
+  assistant: Summary: asked and answered.
+  user: next ask
+  assistant: next answer
+session 2 ses_cmpreorder
+  model: claude-x
+  user: What did we do so far?
+  assistant: Summary: asked and answered.
+  user: keep me
+  call toolu_rder read
+  assistant: kept answer
+  output toolu_rder y body
+  user: next ask
+  assistant: next answer
+session 3 ses_cmpresumed
+  model: claude-x
+  user: What did we do so far?
+  assistant: Summary: asked and answered.
+  user: keep me
+  call toolu_umed read
+  assistant: kept answer
+  output toolu_umed y body
+  user: next ask
+  assistant: next answer

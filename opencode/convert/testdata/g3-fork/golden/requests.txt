@@ -1,0 +1,22 @@
+session 0 ses_orig
+  request of msg_o2:
+    user: origin ask
+  request of msg_o4:
+    user: origin ask
+    assistant: origin answer
+    user: origin carries on
+session 1 ses_forked
+  request of msg_evtfork_2:
+    user: origin ask
+  request of msg_f6:
+    user: origin ask
+    assistant: origin answer
+    user: forked ask
+  request of msg_f8a:
+    opencode.native_checkpoint
+    user: after the checkpoint
+  request of msg_f9a:
+    opencode.native_checkpoint
+    user: after the checkpoint
+    assistant: kept answer
+    user: reverted ask

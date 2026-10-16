@@ -1,0 +1,27 @@
+session 0 ses_g2reason
+  request of msg_b02:1:
+    user: explain the cache
+  request of msg_b04:1:
+    user: explain the cache
+    anthropic.redacted_thinking
+    assistant: It is keyed by path.
+    user: ask the other model
+  request of msg_b06:1:
+    user: explain the cache
+    anthropic.redacted_thinking
+    assistant: It is keyed by path.
+    user: ask the other model
+    assistant: The other answer.
+    user: plan a screenshot
+  request of msg_b08:1:
+    user: explain the cache
+    anthropic.redacted_thinking
+    reasoning The cache is keyed by path. [encrypted]
+    assistant: It is keyed by path.
+    user: ask the other model
+    assistant: The other answer.
+    user: plan a screenshot
+    assistant: Taking one.
+    call call_s1 screenshot
+    output call_s1 
+    user: search the web

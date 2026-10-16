@@ -1,0 +1,18 @@
+session 0 ses_revmsg
+  request of msg_rm2:1:
+    user: first
+  request of msg_rm2:2:
+    user: first
+    assistant: answer one
+  request of msg_rm4:1:
+    user: first
+    assistant: answer one
+    assistant: answer two
+    user: undone ask
+session 1 ses_revpart
+  request of msg_rp2:1:
+    user: first
+  request of msg_rp4:1:
+    user: first
+    assistant: answer one
+    user: undone ask

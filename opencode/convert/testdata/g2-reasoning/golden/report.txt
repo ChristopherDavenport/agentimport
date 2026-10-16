@@ -1,0 +1,13 @@
+opencode: 32 records: mapped 31 kept 1 dropped 0 malformed 0
+  gap      agentimport/context-replace                       1  the model changes from claude-x to gpt-x: OpenCode sends the reasoning an earlier model wrote without its provider's metadata, as plain text in later releases, which replaces the item in place; the session leaves it out instead, by omit other_models
+  gap      agentimport/provenance                            1  the import is recorded in the header's agentimport:source member
+  gap      agentimport/reasoning-provider                    1  the reasoning's signature or encrypted content is anthropic's, which encrypted_content does not say; the item entry carries opencode:provider
+  dropped  opencode/system-prompt                            1  OpenCode builds the system prompt and the tool list for each request and does not store them; the settings carry the model alone
+  lossy    opencode/media-relocated                          1  the output carries 1 media attachments; for provider google OpenCode may move them to a user message after the assistant's, which depends on the provider's package and is not reproduced
+  lossy    opencode/reasoning-unsent                         1  reasoning with no anthropic metadata, which the AI SDK's anthropic provider does not send back; it is left out of the requests after its own by omit
+  lossy    opencode/reminder-unrecorded                      1  the session ran the plan agent: OpenCode adds its plan-mode reminders to a request's last user message in memory and does not store them, so those requests are missing them
+  kept     opencode/hosted-tool                              1  a tool the provider ran, its call and result in the response, is an opencode.hosted_tool item holding the part
+  kept     opencode/members                                 21  kept in opencode:message
+  kept     opencode/redacted-thinking                        1  Anthropic's redacted thinking is an anthropic.redacted_thinking item
+  kept     opencode/session-record                           1  the session record's members the header has no place for are in the header's opencode:session member
+  kept     opencode/usage-member                             4  the cost and the total OpenCode records with the usage are in opencode:usage

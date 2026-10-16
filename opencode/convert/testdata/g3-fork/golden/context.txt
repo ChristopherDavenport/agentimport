@@ -1,0 +1,11 @@
+session 0 ses_orig
+  model: claude-x
+  user: origin ask
+  assistant: origin answer
+  user: origin carries on
+  assistant: origin later
+session 1 ses_forked
+  model: claude-x
+  opencode.native_checkpoint
+  user: after the checkpoint
+  assistant: kept answer
