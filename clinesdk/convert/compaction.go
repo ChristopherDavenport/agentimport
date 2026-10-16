@@ -58,6 +58,10 @@ func (sc *sconv) planCompaction(c *clinesdk.Compaction) *compPlan {
 		plan.apply, plan.why = false, "it holds no messages"
 		return plan
 	}
+	if id := c.ConversationID; id != "" && id != sc.fam.rootID() && sc.h.row != nil && sc.h.row.ConversationID != "" && sc.h.row.ConversationID != id {
+		plan.apply, plan.why = false, "it names conversation "+id+", and the index records the session's as "+sc.h.row.ConversationID
+		return plan
+	}
 	var source []int
 	for k, m := range msgs {
 		if m.Err == nil && m.DisplayOnly() {
@@ -172,6 +176,9 @@ func (sc *sconv) writeCompaction() error {
 		sc.addf(agentimport.Kept, "clinesdk/compaction-marker", c.Name, 0, "the compaction keeps no message of the history after its summary; a custom marker is its first_kept")
 	}
 	cfg := agentsession.Settings{Model: sc.model}
+	if len(sc.omits) > 0 {
+		cfg.Omit.Items = append([]string(nil), sc.omits...)
+	}
 	if sp := c.SystemPrompt; sp != nil {
 		cfg.Instructions = *sp
 	} else if sp := sc.h.f.SystemPrompt; sp != nil {

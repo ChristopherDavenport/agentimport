@@ -13,7 +13,6 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"strings"
 
 	"github.com/ChristopherDavenport/agentimport/clinesdk"
 	isqlite "github.com/ChristopherDavenport/agentimport/internal/sqlite"
@@ -79,27 +78,17 @@ func (d *DB) Name() string { return d.name }
 // Close closes the copy and removes it.
 func (d *DB) Close() error { return d.c.Close() }
 
-// rowColumns are the columns of sessions a Row reads; a column an
-// older schema lacks reads as empty.
-var rowColumns = []string{"session_id", "source", "started_at", "ended_at", "status", "parent_session_id", "parent_agent_id",
-	"agent_id", "conversation_id", "is_subagent", "prompt", "messages_path", "metadata_json"}
-
 // Family returns the rows of root and of every session whose parent is
 // root or whose ID starts with root and "__".
 func (d *DB) Family(root string) ([]*clinesdk.Row, error) {
-	var cols []string
-	for _, c := range rowColumns {
-		if d.columns[c] {
-			cols = append(cols, c)
-		}
-	}
-	where := "session_id = ? OR substr(session_id, 1, ?) = ?"
-	args := []any{root, len(root) + 2, root + "__"}
+	// substr and length count characters, both of the same argument.
+	where := "session_id = ? OR substr(session_id, 1, length(?)) = ?"
+	args := []any{root, root + "__", root + "__"}
 	if d.columns["parent_session_id"] {
 		where += " OR parent_session_id = ?"
 		args = append(args, root)
 	}
-	rows, err := d.c.Query("SELECT "+strings.Join(cols, ", ")+" FROM sessions WHERE "+where+" ORDER BY session_id", args...)
+	rows, err := d.c.Query("SELECT * FROM sessions WHERE "+where+" ORDER BY session_id", args...)
 	if err != nil {
 		return nil, fmt.Errorf("read sessions: %w", err)
 	}
@@ -116,6 +105,19 @@ func (d *DB) Family(root string) ([]*clinesdk.Row, error) {
 			row.Metadata = json.RawMessage(m)
 		}
 		row.Unit = d.name + ":sessions/" + row.SessionID
+		all := map[string]any{}
+		for k, v := range r {
+			if b, ok := v.([]byte); ok {
+				v = string(b)
+			}
+			if k == "metadata_json" && row.Metadata != nil {
+				v = row.Metadata
+			}
+			all[k] = v
+		}
+		if raw, err := json.Marshal(all); err == nil {
+			row.Raw = raw
+		}
 		out = append(out, row)
 	}
 	return out, nil

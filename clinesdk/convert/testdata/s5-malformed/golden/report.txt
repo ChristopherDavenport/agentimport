@@ -1,6 +1,6 @@
 clinesdk: 13 files and elements: mapped 7 kept 2 dropped 1 malformed 3
   gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
-  dropped  clinesdk/file-unread                              1  a file of the session directory the converter does not read
+  dropped  clinesdk/file-unread                              2  a file of the session directory the converter does not read
   dropped  clinesdk/null-block                               2  a content block that is not an object is left out (at 1759345200000_bad01.messages.json:4, 1759345200000_bad01.messages.json:5)
   lossy    clinesdk/empty-message                            2  a message with no content; Cline sends "ERROR: EMPTY CONTENT" in its place (at 1759345200000_bad01.messages.json:9, 1759345200000_bad01.messages.json:10)
   lossy    clinesdk/invalid-input                            1  a tool_use input that is not a JSON object is recorded as its JSON text (at 1759345200000_bad01.messages.json:5)

@@ -1,7 +1,6 @@
 session 0 9a6bafc8-538d-5bd8-b0f6-74195ea2b3bc
   model: claude-x
   user: <task> … | <environment_details> …
-  reasoning Look at a.go first.
   call toolu_01 read_file
   output toolu_01 [read_file for 'a.go'] Result: …
   assistant: I added the test.
@@ -11,7 +10,6 @@ session 0 9a6bafc8-538d-5bd8-b0f6-74195ea2b3bc
 session 1 1759345300000_frk02
   model: claude-x
   user: <task> … | <environment_details> …
-  reasoning Look at a.go first.
   call toolu_01 read_file
   output toolu_01 [read_file for 'a.go'] Result: …
   assistant: I added the test.

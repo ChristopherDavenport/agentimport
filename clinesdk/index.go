@@ -30,6 +30,8 @@ type Row struct {
 	Metadata json.RawMessage
 	// Unit names the row in findings.
 	Unit string
+	// Raw is the whole row as a JSON object, its columns by name.
+	Raw json.RawMessage
 }
 
 // Index is Cline's index of its sessions, read for one root session
@@ -95,7 +97,7 @@ func ReadFileIndex(path string) (*FileIndex, error) {
 			SessionID: r.SessionID, Source: r.Source, StartedAt: r.StartedAt, EndedAt: deref(r.EndedAt), Status: r.Status,
 			ParentSessionID: deref(r.ParentSessionID), ParentAgentID: deref(r.ParentAgentID), AgentID: deref(r.AgentID),
 			ConversationID: deref(r.ConversationID), IsSubagent: r.IsSubagent, Prompt: deref(r.Prompt),
-			MessagesPath: deref(r.MessagesPath), Metadata: r.Metadata, Unit: FileIndexName + ":" + r.SessionID,
+			MessagesPath: deref(r.MessagesPath), Metadata: r.Metadata, Unit: FileIndexName + ":" + r.SessionID, Raw: raw,
 		}
 	}
 	return ix, nil

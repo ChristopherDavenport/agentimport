@@ -78,6 +78,8 @@ type sconv struct {
 	respIDs  map[string]bool
 
 	comp *compPlan
+	// omits are the item entries config entries left out of context.
+	omits []string
 	// ctx is the context the next request sends, for the projection;
 	// rd its index of reads; bytes its text's size.
 	ctx      []*clinesdk.Message
@@ -472,16 +474,16 @@ func (sc *sconv) header() (agentsession.Header, error) {
 		}
 		setHeader(&h, "file", raw)
 	}
-	if sc.h.row != nil && !sc.root() && !sc.fam.opts.Slim {
-		row := map[string]string{"parent_session_id": sc.h.row.ParentSessionID, "parent_agent_id": sc.h.row.ParentAgentID, "agent_id": sc.h.row.AgentID, "conversation_id": sc.h.row.ConversationID}
-		for k, v := range row {
-			if v == "" {
-				delete(row, k)
+	if r := sc.h.row; r != nil && len(r.Raw) > 0 {
+		if sc.fam.opts.Slim {
+			sc.addf(agentimport.Dropped, "clinesdk/index-row", "", 0, "the session's row in Cline's index is left out")
+		} else {
+			raw, err := sc.clean(0, r.Raw)
+			if err != nil {
+				return h, err
 			}
-		}
-		if len(row) > 0 {
-			raw, _ := json.Marshal(row)
 			setHeader(&h, "index_row", raw)
+			sc.addf(agentimport.Kept, "clinesdk/index-row", "", 0, "the session's row in Cline's index is the header member %s:index_row", Source)
 		}
 	}
 	return h, nil

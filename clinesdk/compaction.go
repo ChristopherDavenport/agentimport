@@ -76,11 +76,7 @@ func normalized(m *Message) (*jsjson.Value, error) {
 	if err != nil || v.Kind != jsjson.Object {
 		return nil, ErrUnhashable
 	}
-	role := v.Get("role")
-	if role == nil || role.Kind != jsjson.Str {
-		return nil, ErrUnhashable
-	}
-	if r, _ := role.Text(); r != RoleUser {
+	if r, ok := v.Get("role").Text(); !ok || r != RoleUser {
 		return v, nil
 	}
 	content := v.Get("content")
@@ -95,8 +91,13 @@ func normalized(m *Message) (*jsjson.Value, error) {
 		v.Set("content", text)
 	case content.Kind == jsjson.Array:
 		for i, part := range content.Items {
-			if part.Kind != jsjson.Object {
+			// part.type of a string, a number or an array is undefined;
+			// of null, Cline throws.
+			if part.Kind == jsjson.Null {
 				return nil, ErrUnhashable
+			}
+			if part.Kind != jsjson.Object {
+				continue
 			}
 			if t, ok := part.Get("type").Text(); !ok || t != BlockText {
 				continue
@@ -137,7 +138,7 @@ func hashInput(m *Message) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if r, _ := v.Get("role").Text(); strings.Contains(r, ":") {
+	if r, ok := v.Get("role").Text(); !ok || strings.Contains(r, ":") {
 		return nil, ErrUnhashable
 	}
 	pair := func(name string) *jsjson.Value {
@@ -168,8 +169,8 @@ func BoundaryKey(m *Message) (string, error) {
 			return "id:" + s, nil
 		}
 	}
-	role, _ := v.Get("role").Text()
-	if strings.Contains(role, ":") {
+	role, ok := v.Get("role").Text()
+	if !ok || strings.Contains(role, ":") {
 		return "", ErrUnhashable
 	}
 	if ts := v.Get("ts"); ts != nil && ts.Kind == jsjson.Number {

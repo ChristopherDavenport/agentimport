@@ -332,3 +332,29 @@ func TestManyNotices(t *testing.T) {
 		t.Errorf("%v for 5000 notices, %v for 20000: not linear", a, b)
 	}
 }
+
+// The wants were printed by node 25 running Cline's functions,
+// transcribed: the /team prefix is cut by UTF-16 units from a text a
+// non-ASCII letter lowercases into; a user part that is a string, a
+// number or an array is hashed as it is; an id keys a message whatever
+// its role.
+func TestHashEdges(t *testing.T) {
+	in := "<user_command slash=\"team\">spawn a team of agents for the following tasK: ship it now</user_command>"
+	if got := FormatDisplayUserInput(in); got != "/team ship it now" {
+		t.Errorf("FormatDisplayUserInput = %q", got)
+	}
+	m := &Message{}
+	if err := m.UnmarshalJSON([]byte(`{"role":"user","content":["a string part",7,[1],{"type":"text","text":"<user_input mode=\"act\">x</user_input>"}]}`)); err != nil {
+		t.Fatal(err)
+	}
+	got, err := SourcePrefixHash([]*Message{m}, 1)
+	if want := "sha256:fa63aef338babe22ef0043ac037ceb719e6de2124f4cdfbe710a7b69760ab0de"; err != nil || got != want {
+		t.Errorf("hash %s, %v; want %s", got, err, want)
+	}
+	if err := m.UnmarshalJSON([]byte(`{"id":" k1 ","role":7,"content":"x"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if key, err := BoundaryKey(m); err != nil || key != "id:k1" {
+		t.Errorf("key %q, %v", key, err)
+	}
+}

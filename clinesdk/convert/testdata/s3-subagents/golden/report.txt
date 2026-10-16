@@ -9,5 +9,6 @@ clinesdk: 23 files and elements: mapped 23 kept 0 dropped 0 malformed 0
   lossy    clinesdk/system-prompt-latest                     1  the system prompt is the one the file holds, the latest Cline sent; earlier requests may have sent another
   lossy    clinesdk/teammate-peer                            1  team task reviewer__Ab3dE9.messages.json outlives call call_t1 (team_run_task), whose output is the dispatch's acknowledgement or the run's text; matched by its agent and task, it is a peer, linked after the output (at 1759327200000_sub01.messages.json:6)
   lossy    clinesdk/user-input                               1  Cline sends a user's text trimmed and without its <user_input> or <user_command> wrapper, which names the mode; the item holds the text sent, the block as written is clinesdk:original (at 1759327200000_sub01.messages.json:1)
+  kept     clinesdk/index-row                                5  the session's row in Cline's index is the header member clinesdk:index_row
   kept     clinesdk/manifest                                 1  the manifest is the header member clinesdk:manifest
   kept     clinesdk/members                                 17  the message's members the session has no place for are clinesdk:message (at agent_7.messages.json:1, agent_7.messages.json:2, agent_9.messages.json:1, agent_9.messages.json:2, agent_8.messages.json:1)

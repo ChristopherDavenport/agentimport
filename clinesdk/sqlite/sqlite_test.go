@@ -3,6 +3,7 @@ package sqlite
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -73,5 +74,34 @@ func TestNotCline(t *testing.T) {
 	}
 	if _, err := Open(filepath.Join(t.TempDir(), "missing.db")); err == nil {
 		t.Error("a missing database opened")
+	}
+}
+
+// TestFamilyNonASCII finds a child of a root whose ID is not ASCII by
+// its ID's prefix, and keeps every column of a row.
+func TestFamilyNonASCII(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sessions.db")
+	script, err := os.ReadFile("../convert/testdata/s3-subagents/db.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, err := Fixture(path, string(script)+`
+INSERT INTO sessions (session_id, source, pid, started_at, status, interactive, provider, model, cwd, workspace_root, enable_tools, enable_spawn, enable_teams, hook_path, updated_at)
+VALUES ('rööt__agent_1', 'cli', 1, 't', 'completed', 1, 'p', 'm', '/w', '/w', 1, 1, 1, '', 't');`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Close()
+	db, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	rows, err := db.Family("rööt")
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("rows %v, %v", rows, err)
+	}
+	if !strings.Contains(string(rows[0].Raw), `"workspace_root":"/w"`) {
+		t.Errorf("row %s", rows[0].Raw)
 	}
 }

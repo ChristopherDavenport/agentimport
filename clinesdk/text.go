@@ -3,6 +3,7 @@ package clinesdk
 import (
 	"regexp"
 	"strings"
+	"unicode/utf16"
 )
 
 // The user-input rules of @cline/shared's prompt/format.ts, which the
@@ -99,8 +100,12 @@ func FormatDisplayUserInput(input string) string {
 	if strings.ToLower(slash) == "team" {
 		const prefix = "spawn a team of agents for the following task:"
 		stripped := normalized
-		if strings.HasPrefix(strings.ToLower(normalized), prefix) && len(normalized) >= len(prefix) {
-			stripped = Trim(normalized[len(prefix):])
+		// JavaScript lowercases the text to compare and cuts the
+		// prefix's length, in UTF-16 units, from the text itself.
+		if lower := strings.ReplaceAll(normalized, "\u0130", "i\u0307"); strings.HasPrefix(strings.ToLower(lower), prefix) {
+			if units := utf16.Encode([]rune(normalized)); len(units) >= len(prefix) {
+				stripped = Trim(string(utf16.Decode(units[len(prefix):])))
+			}
 		}
 		if stripped == "" {
 			return "/team"

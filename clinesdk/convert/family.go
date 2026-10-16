@@ -158,6 +158,9 @@ func (fam *family) index() error {
 		h.row = fam.rows[h.native]
 		fam.scan(h)
 	}
+	if dir := childDir(fam.rootID()); dir != fam.s.ID {
+		fam.report.Addf(agentimport.Lossy, "clinesdk/root-id", "", 0, "Cline files the histories of this session's sub-agents and team tasks by the session ID made safe and cut at its first \"__\", under sessions/%s/, not this directory, which is not read for them", dir)
+	}
 	if !fam.indexed && len(fam.hists) > 1 {
 		fam.report.Addf(agentimport.Lossy, "clinesdk/no-index", "", 0, "no index of Cline's sessions is read: the session's %d children are matched to their calls by their task and time alone, without the spawning agent and the task the index records for each", len(fam.hists)-1)
 	}
@@ -689,10 +692,23 @@ func (fam *family) tally() {
 		fam.mark(unit{uOther, i, 0}, agentimport.LineDropped)
 		count(unit{uOther, i, 0}, name, 0)
 	}
+	for _, name := range s.Dirs {
+		fam.report.Addf(agentimport.Dropped, "clinesdk/file-unread", name, 0, "a directory of the session directory the converter does not read")
+	}
 }
 
 // rawJSON is a string as a JSON value.
 func rawJSON(s string) json.RawMessage {
 	b, _ := json.Marshal(s)
 	return b
+}
+
+// childDir is the directory Cline files the children of root's session
+// in (childArtifactFileStem): the children's session IDs are the root's
+// made safe, "__" and the agent's, and their directory is what comes
+// before the first "__".
+func childDir(root string) string {
+	safe := clinesdk.SanitizeSessionToken(root)
+	dir, _, _ := strings.Cut(safe, "__")
+	return dir
 }

@@ -446,3 +446,80 @@ func TestCompactionBatching(t *testing.T) {
 		t.Error("the compaction's effect on the batching is not reported")
 	}
 }
+
+// TestConversationMismatch leaves a sidecar for another conversation
+// stale when the index records the session's own.
+func TestConversationMismatch(t *testing.T) {
+	files := map[string][]byte{
+		"r.messages.json": msgs(userMsg("a", 1000), reply("b", 2000), userMsg("c", 3000), reply("d", 4000)),
+		"r.compaction.json": []byte(`{"version":1,"updated_at":"2026-10-01T10:00:00Z","conversation_id":"conv_other","source_message_count":2,"source_last_message_key":"ts:assistant:2000",` +
+			`"messages":[{"role":"user","content":"Context summary:\n\ns","metadata":{"kind":"compaction_summary"}}]}`),
+	}
+	ix := &fakeIndex{rows: []*clinesdk.Row{{SessionID: "r", ConversationID: "conv_mine"}}}
+	if codes := strings.Join(convertFiles(t, files, Options{Index: ix}).Report.Codes(), " "); !strings.Contains(codes, "clinesdk/stale-compaction") {
+		t.Errorf("codes %s", codes)
+	}
+}
+
+// TestMissingAfterResults answers a missing call after the results a
+// message leads with, as Cline's request does, not before them.
+func TestMissingAfterResults(t *testing.T) {
+	files := map[string][]byte{"r.messages.json": msgs(
+		userMsg("go", 1000),
+		`{"role":"assistant","content":[{"type":"tool_use","id":"a","name":"ls","input":{}},{"type":"tool_use","id":"b","name":"cat","input":{}}],"ts":2000}`,
+		`{"role":"user","content":[{"type":"tool_result","tool_use_id":"a","name":"ls","content":"x"},{"type":"text","text":"and then"}],"ts":3000}`,
+		reply("next", 4000),
+	)}
+	ctx, err := convertFiles(t, files, Options{}).Sessions[0].Context()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := strings.Join(renderItems(ctx.Items), "\n")
+	want := "user: go\ncall a ls\ncall b cat\noutput a x\noutput b Tool execution was interrupted before a result was\nuser: and then\nassistant: next"
+	if got != want {
+		t.Errorf("context:\n%s", got)
+	}
+}
+
+// TestMarkupSpaces counts tool-call markup with JavaScript's \s, which
+// takes in a no-break space: eight such tags cap the text at 12,000.
+func TestMarkupSpaces(t *testing.T) {
+	text := strings.Repeat("<\u00a0tool_call>", 8) + strings.Repeat("x", 13000)
+	if n := utf16Len(truncateAssistantText(text)); n > maxAssistantToolMarkupChars || n < maxAssistantToolMarkupChars-1 {
+		t.Errorf("cut to %d", n)
+	}
+	if got := truncateAssistantText(strings.Repeat("<D\u017fML invoke>", 8) + strings.Repeat("x", 13000)); utf16Len(got) <= maxAssistantToolMarkupChars {
+		t.Error("\u017f matched s, which JavaScript's i flag does not fold")
+	}
+}
+
+// TestRootID reports a session whose children Cline files elsewhere.
+func TestRootID(t *testing.T) {
+	s := clinesdk.ParseSession("17__x", map[string][]byte{"17__x.messages.json": msgs(userMsg("go", 1000))})
+	res, err := Convert(s, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(res.Report.Codes(), " "), "clinesdk/root-id") {
+		t.Error("no clinesdk/root-id finding")
+	}
+}
+
+// TestUnsignedThinking leaves thinking with no signature out of the
+// requests after it for Anthropic, and keeps it for another provider.
+func TestUnsignedThinking(t *testing.T) {
+	for provider, kept := range map[string]bool{"anthropic": false, "openai": true} {
+		files := map[string][]byte{"r.messages.json": msgs(
+			userMsg("go", 1000),
+			fmt.Sprintf(`{"role":"assistant","content":[{"type":"thinking","thinking":"hmm"},{"type":"text","text":"ok"}],"modelInfo":{"id":"m","provider":%q},"ts":2000}`, provider),
+			userMsg("more", 3000),
+		)}
+		ctx, err := convertFiles(t, files, Options{}).Sessions[0].Context()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.Contains(strings.Join(renderItems(ctx.Items), "\n"), "reasoning hmm"); got != kept {
+			t.Errorf("%s: thinking in context %v, want %v", provider, got, kept)
+		}
+	}
+}

@@ -6,6 +6,7 @@ clinesdk: 9 files and elements: mapped 9 kept 0 dropped 0 malformed 0
   lossy    clinesdk/no-stop-reason                           1  Cline records no stop reason; every response is completed
   lossy    clinesdk/session-id                               1  the VS Code extension carried a classic task on under the task's ID, which the cline source's session of the task has; this one's ID is derived from it, as SubsessionID(task ID, "clinesdk")
   lossy    clinesdk/system-prompt-latest                     1  the system prompt is the one the file holds, the latest Cline sent; earlier requests may have sent another
+  lossy    clinesdk/unsigned-thinking                        1  thinking with no signature, which the AI SDK's Anthropic provider does not send, is a reasoning item the next config entry omits (at 1759341600000.messages.json:2)
   lossy    clinesdk/user-input                               1  Cline sends a user's text trimmed and without its <user_input> or <user_command> wrapper, which names the mode; the item holds the text sent, the block as written is clinesdk:original (at 1759341600000.messages.json:6)
   kept     clinesdk/copied-usage                             1  the response is a copy of the classic task's history, whose usage is clinesdk:copied_usage, so it is not counted twice (at 1759341600000.messages.json:4)
   kept     clinesdk/manifest                                 1  the manifest is the header member clinesdk:manifest

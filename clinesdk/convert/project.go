@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/ChristopherDavenport/agentimport/clinesdk"
 	"github.com/ChristopherDavenport/agentimport/internal/jsjson"
@@ -43,8 +44,30 @@ func markupMarker(n int) string {
 	return fmt.Sprintf("\n\n...[assistant text truncated: omitted %d chars due to repeated tool-call markup]...\n\n", n)
 }
 
-// toolCallMarkup is MessageBuilder's TOOL_CALL_MARKUP_PATTERN.
-var toolCallMarkup = regexp.MustCompile(`(?i)<\s*(?:[|\x{FF5C}]\s*)?DSML\s*(?:[|\x{FF5C}]\s*)?(?:tool_calls|invoke)\b[^>]*>|<\s*/?\s*(?:tool_calls?|tool_call|function_calls?|function_call|invoke)\b[^>]*>`)
+// toolCallMarkup is MessageBuilder's TOOL_CALL_MARKUP_PATTERN, with
+// JavaScript's \s, which takes in Unicode's spaces, and its
+// case-insensitive matching without the u flag, which folds no letter
+// outside ASCII into one inside, as Go's (?i) folds ſ and K.
+var toolCallMarkup = regexp.MustCompile(strings.NewReplacer(`\s`, jsSpaceClass).Replace(
+	`<\s*(?:[|\x{FF5C}]\s*)?` + ascii("DSML") + `\s*(?:[|\x{FF5C}]\s*)?(?:` + ascii("tool_calls") + `|` + ascii("invoke") + `)\b[^>]*>|<\s*/?\s*(?:` +
+		ascii("tool_call") + `[sS]?|` + ascii("function_call") + `[sS]?|` + ascii("invoke") + `)\b[^>]*>`))
+
+// jsSpaceClass is JavaScript's \s.
+const jsSpaceClass = `[\t\n\v\f\r \x{A0}\x{1680}\x{2000}-\x{200A}\x{2028}\x{2029}\x{202F}\x{205F}\x{3000}\x{FEFF}]`
+
+// ascii is a pattern matching word in either case of its ASCII letters
+// alone.
+func ascii(word string) string {
+	var b strings.Builder
+	for _, c := range word {
+		if lo, up := unicode.ToLower(c), unicode.ToUpper(c); lo != up && c < 0x80 {
+			b.WriteString("[" + string(lo) + string(up) + "]")
+			continue
+		}
+		b.WriteString(regexp.QuoteMeta(string(c)))
+	}
+	return b.String()
+}
 
 // utf16Len is a string's length as JavaScript counts it.
 func utf16Len(s string) int {

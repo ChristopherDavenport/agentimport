@@ -70,7 +70,13 @@ func (sc *sconv) user(k int, m *clinesdk.Message, ts time.Time) error {
 			toolOnly = false
 		}
 	}
-	if !toolOnly {
+	// Cline answers missing calls after the results a message leads
+	// with, else before it.
+	lead := 0
+	for lead < len(blocks) && blocks[lead].Err == nil && blocks[lead].Type == clinesdk.BlockToolResult {
+		lead++
+	}
+	if lead == 0 {
 		if err := sc.flushMissing(k, ts); err != nil {
 			return err
 		}
@@ -99,7 +105,15 @@ func (sc *sconv) user(k int, m *clinesdk.Message, ts time.Time) error {
 		_, err := sc.messageEntry(k, m, e)
 		return err
 	}
-	for _, b := range blocks {
+	for i, b := range blocks {
+		if i == lead && lead > 0 && !toolOnly {
+			if err := flush(); err != nil {
+				return err
+			}
+			if err := sc.flushMissing(k, ts); err != nil {
+				return err
+			}
+		}
 		if b.Err != nil {
 			sc.at(agentimport.Dropped, "clinesdk/null-block", k, "a content block that is not an object is left out")
 			continue
@@ -596,6 +610,8 @@ func (sc *sconv) assistant(k int, m *clinesdk.Message, ts time.Time) error {
 	if m.ModelInfo != nil {
 		provider = m.ModelInfo.Provider
 	}
+	var lastID string
+	var unsigned []string
 	add := func(item openresponses.Item, b *clinesdk.Block, mapped []string, sigProvider string) error {
 		e := itemEntry(item, ts)
 		e.ResponseID = respID
@@ -610,7 +626,8 @@ func (sc *sconv) assistant(k int, m *clinesdk.Message, ts time.Time) error {
 				return err
 			}
 		}
-		_, err := sc.messageEntry(k, m, e)
+		id, err := sc.messageEntry(k, m, e)
+		lastID = id
 		return err
 	}
 	signature := func(sig string) error {
@@ -644,6 +661,9 @@ func (sc *sconv) assistant(k int, m *clinesdk.Message, ts time.Time) error {
 			}
 			if err := add(r, b, []string{"thinking", "signature"}, sig); err != nil {
 				return err
+			}
+			if b.Signature == "" {
+				unsigned = append(unsigned, lastID)
 			}
 		case clinesdk.BlockText:
 			if b.Signature != "" {
@@ -693,6 +713,11 @@ func (sc *sconv) assistant(k int, m *clinesdk.Message, ts time.Time) error {
 		sc.at(agentimport.Lossy, "clinesdk/empty-message", k, "an assistant message with no content is a response with no items; Cline sends %q in its place", emptyContent)
 	}
 	sc.pending = calls
+	if len(unsigned) > 0 {
+		if err := sc.unsignedThinking(k, m, unsigned, ts); err != nil {
+			return err
+		}
+	}
 	for _, t := range texts {
 		if cut := truncateAssistantText(t); cut != t {
 			if err := sc.replaced(k, ts, map[string]any{"kind": "assistant_text", "response": respID, "text": cut}); err != nil {
@@ -919,4 +944,33 @@ func semver(s string) ([3]int, bool) {
 		v[i] = n
 	}
 	return v, true
+}
+
+// unsignedThinking leaves thinking with no signature out of the
+// requests after its response when they go to Anthropic: Cline hands
+// the AI SDK a reasoning part with no Anthropic signature, which its
+// Anthropic provider does not send. The provider is the message's,
+// else, for the migration's copy, which names none, the session's.
+func (sc *sconv) unsignedThinking(k int, m *clinesdk.Message, ids []string, ts time.Time) error {
+	provider := ""
+	if m.ModelInfo != nil {
+		provider = m.ModelInfo.Provider
+	}
+	if (provider == "" || provider == "unknown") && sc.fam.s.Manifest != nil {
+		provider = sc.fam.s.Manifest.Provider
+	}
+	if provider != "anthropic" {
+		sc.at(agentimport.Lossy, "clinesdk/unsigned-thinking", k, "thinking with no signature, for provider %q, is kept in context; whether its provider package sends a reasoning part with no signature is its own", orUnknown(provider))
+		return nil
+	}
+	sc.omits = append(sc.omits, ids...)
+	cfg := &agentsession.ConfigEntry{Omit: &agentsession.Omit{Items: ids}}
+	cfg.Timestamp = ts
+	id, err := sc.appendEntry(cfg)
+	if err != nil {
+		return err
+	}
+	sc.written(k, id)
+	sc.at(agentimport.Lossy, "clinesdk/unsigned-thinking", k, "thinking with no signature, which the AI SDK's Anthropic provider does not send, is a reasoning item the next config entry omits")
+	return nil
 }

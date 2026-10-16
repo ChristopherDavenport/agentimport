@@ -111,7 +111,12 @@ would have added.
   (`normalizeUserInput`, `formatDisplayUserInput`) are ported with
   JavaScript's `trim`. Both are checked against node running Cline's
   functions, transcribed. User text holding a lone surrogate is the one
-  input the port cannot hash.
+  input the port cannot hash; then a sidecar applies only when its kept
+  messages copy the history's. Inputs Cline does not write may still
+  disagree: invalid UTF-8 becomes one U+FFFD per byte here and one per
+  maximal subpart in node, a sidecar's `updated_at` is checked for
+  zod's shape and not its calendar ranges, and a `version` of `1.0`,
+  which zod's `literal(1)` takes, is refused.
 
 ### Units
 
@@ -224,12 +229,13 @@ and nothing before it survives.
 | --- | --- |
 | session directory | session `id` the session ID; `created_at` the manifest's `started_at`, else the first message's time; `cwd` the manifest's; `harness` `cline`, version the envelope's `origin.version`; header `agentimport:source` |
 | manifest | header member `clinesdk:manifest`; its title an `info` entry |
+| the session's row in the index | header member `clinesdk:index_row`, every column |
 | envelope (`version`, `agent`, `origin`, …) | header member `clinesdk:file` |
 | `system_prompt` | the first `config`'s `instructions` |
 | model (the first assistant message's `modelInfo`, else the manifest's) | the first `config`'s `model`, a later change a config delta; the provider `clinesdk:provider` |
 | user `text`, `image`, `file` blocks | a user `message` of `input_text` and `input_image` (data URL) parts, in order |
 | `tool_result` | `function_call_output`, in the order the blocks stand; `is_error` `clinesdk:is_error` |
-| `thinking` | `reasoning`: `summary_text`, the signature in `encrypted_content` |
+| `thinking` | `reasoning`: `summary_text`, the signature in `encrypted_content`; with no signature, sent to Anthropic, omitted after the response, as the AI SDK's Anthropic provider leaves it out |
 | `redacted_thinking` | `anthropic.redacted_thinking` |
 | `text` with a Gemini `signature` | a `reasoning` holding only `encrypted_content`, then the `output_text` |
 | `tool_use` | `function_call`, arguments the input as JSON.stringify writes it; a Gemini `signature` a `reasoning` before it |
@@ -315,7 +321,7 @@ child reached twice is converted once.
 | `clinesdk/children-alone` | dropped | A child not converted, with `Options.Alone`. |
 | `clinesdk/compaction-copy` | dropped | The sidecar's copy of a history message, which the compaction keeps from `first_kept`. |
 | `clinesdk/duplicate-store` | dropped | A classic task carried on with nothing written after its copy: the task's alone, not converted. |
-| `clinesdk/file-unread` | dropped | A file of the session directory the converter does not read. |
+| `clinesdk/file-unread` | dropped | A file or directory of the session directory the converter does not read. |
 | `clinesdk/null-block` | dropped | A content block that is not an object. |
 | `clinesdk/subagent-cycle` | dropped | A child being converted, or converted already, reached again. |
 | `clinesdk/unreached` | dropped | A unit the converter did not reach; a bug if it occurs. |
@@ -346,6 +352,7 @@ child reached twice is converted once.
 | `clinesdk/outdated-read` | lossy | A read result Cline sends as a notice from a request on, or whole again; at a compaction, that a manual one clears the batch. |
 | `clinesdk/pending-call` | lossy | A call with no result at the end of the history. |
 | `clinesdk/rejection` | lossy | A refused call: a reject decision before the output. |
+| `clinesdk/root-id` | lossy | A session ID Cline makes safe, or holding `__`: its children's histories are under another directory, not read. |
 | `clinesdk/request-budget` | lossy | A request over Cline's 6 MB text budget, cut by Cline, not rebuilt. |
 | `clinesdk/request-projection` | lossy | What a request sends differs from the file: a result or file block cut, an assistant text cut later, images checked against a budget. |
 | `clinesdk/result-malformed` | lossy | A tool result with no content, or content that is not JSON. |
@@ -358,6 +365,7 @@ child reached twice is converted once.
 | `clinesdk/teammate-continued` | lossy | A team task whose history starts with an earlier task's conversation. |
 | `clinesdk/teammate-peer` | lossy | A team task is a peer of the calls that ran it, linked after their outputs. |
 | `clinesdk/teammate-unlinked` | lossy | A team task linked to no call: `parent_session` alone. |
+| `clinesdk/unsigned-thinking` | lossy | Thinking with no signature: omitted after its response for Anthropic, whose AI SDK provider does not send it; kept for another provider. |
 | `clinesdk/user-input` | lossy | User text sent without its wrapper; the block is `clinesdk:original`. |
 | `clinesdk/version` | lossy | A messages file of another version, or a bare array from before the version. |
 | `clinesdk/compaction-marker` | kept | A custom marker is the `first_kept` of a compaction that keeps nothing after its summary. |
@@ -365,6 +373,7 @@ child reached twice is converted once.
 | `clinesdk/copied-usage` | kept | A copied response's usage is `clinesdk:copied_usage`. |
 | `clinesdk/display-only` | kept, or dropped | A display-only message, a custom entry. |
 | `clinesdk/extension-item` | kept | A block Open Responses has no item for, an extension item. |
+| `clinesdk/index-row` | kept, or dropped | The session's row in Cline's index is `clinesdk:index_row`. |
 | `clinesdk/manifest` | kept, or dropped | The manifest is `clinesdk:manifest`. |
 | `clinesdk/members` | kept, or dropped | Members the session has no place for, `clinesdk:message` or `clinesdk:block`. |
 | `clinesdk/stale-compaction` | kept, or dropped | A sidecar Cline would not apply, a custom entry. |
