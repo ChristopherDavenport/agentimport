@@ -59,6 +59,8 @@ type sconv struct {
 	copyWhy string
 	legacy  bool
 	fork    *clinesdk.Fork
+	// forkSID is the session the fork's source converts to.
+	forkSID string
 	// skipWhy is set when the history converts to no session.
 	skipWhy string
 
@@ -236,7 +238,17 @@ func (sc *sconv) prepare() {
 	if !sc.root() {
 		return
 	}
-	if w := legacyAt(f.Messages); w >= 0 {
+	if m := sc.fam.s.Manifest; m != nil {
+		if fk := m.Fork(); fk != nil {
+			// A fork copies its source's history and metadata, a
+			// carried-on classic task's warning and flags among them:
+			// it is the source's fork, whatever it copied.
+			sc.fork = fk
+			sc.copyEnd, sc.forkSID = sc.forkCopy(fk)
+			sc.copyWhy = "fork"
+		}
+	}
+	if w := legacyCopy(sc.fam.s); w >= 0 {
 		sc.legacy, sc.copyEnd, sc.copyWhy = true, w+1, "legacy"
 		own := false
 		for _, m := range f.Messages[w+1:] {
@@ -248,18 +260,62 @@ func (sc *sconv) prepare() {
 			sc.skipWhy = fmt.Sprintf("the VS Code extension carried classic task %s on as this session and nothing was written after its copy of the task's history; the session is the classic task's, which the cline source converts, and the copy (%d messages) is left out", sc.fam.rootID(), len(f.Messages))
 			return
 		}
-	} else if m := sc.fam.s.Manifest; m != nil && m.LegacyTask() {
-		sc.addf(agentimport.Lossy, "clinesdk/legacy-flag", sc.fam.s.ManifestName(), 0, "the manifest marks the session as a classic task carried on, and its history holds no copy of one; it is converted as a session of its own")
-	}
-	if m := sc.fam.s.Manifest; m != nil && !sc.legacy {
-		if fk := m.Fork(); fk != nil {
-			sc.fork = fk
-			sc.copyEnd, sc.copyWhy = sc.forkCopy(fk), "fork"
+	} else if sc.fork == nil {
+		if m := sc.fam.s.Manifest; m != nil && m.LegacyTask() {
+			sc.addf(agentimport.Lossy, "clinesdk/legacy-flag", sc.fam.s.ManifestName(), 0, "the manifest marks the session as a classic task carried on, and its history holds no copy of one; it is converted as a session of its own")
+		} else if w := legacyAt(f.Messages); w >= 0 {
+			sc.at(agentimport.Lossy, "clinesdk/legacy-flag", w, "the history holds the warning the VS Code extension appends to a classic task it carries on, but the session is no classic task's: its manifest does not mark it so and its ID is not a task's; it is converted as a session of its own")
 		}
 	}
 	if c := sc.fam.s.Compaction; c != nil {
 		sc.comp = sc.planCompaction(c)
 	}
+}
+
+// legacyCopy is the index of the legacy warning in a session's history
+// when the history is the VS Code extension's copy of a classic task
+// carried on: the session is no fork, its history holds the warning,
+// and its manifest marks it a classic task or its ID is a task's, the
+// digits of a time. -1 otherwise.
+func legacyCopy(s *clinesdk.Session) int {
+	if s == nil || s.Messages == nil {
+		return -1
+	}
+	m := s.Manifest
+	if m != nil && m.Fork() != nil {
+		return -1
+	}
+	w := legacyAt(s.Messages.Messages)
+	if w < 0 {
+		return -1
+	}
+	if m != nil && m.LegacyTask() || classicID(nativeID(s)) {
+		return w
+	}
+	return -1
+}
+
+// classicID reports whether id is a classic task's: Date.now() as
+// digits.
+func classicID(id string) bool {
+	if id == "" {
+		return false
+	}
+	for _, c := range id {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// nativeID is a session's ID: its manifest's, else its directory's
+// name.
+func nativeID(s *clinesdk.Session) string {
+	if m := s.Manifest; m != nil && m.SessionID != "" {
+		return m.SessionID
+	}
+	return s.ID
 }
 
 // legacyAt is the index of the user message holding the legacy
@@ -306,7 +362,7 @@ func (sc *sconv) header() (agentsession.Header, error) {
 		case sc.legacy:
 			h.ParentSession = ClassicSessionID(sc.fam.rootID())
 		case sc.fork != nil:
-			h.ParentSession = forkParent(sc.fork.From)
+			h.ParentSession = sc.forkSID
 		}
 	}
 	var created time.Time
@@ -461,8 +517,20 @@ func setHeader(h *agentsession.Header, name string, raw json.RawMessage) {
 	h.Extra[Source+":"+name] = raw
 }
 
-// forkParent is the session ID a fork's source converts to.
-func forkParent(native string) string {
+// sessionID is the session ID a session directory's own history
+// converts to, as rootTarget and ownID give it: derived for a classic
+// task carried on, or for an ID a store does not take.
+func sessionID(s *clinesdk.Session) string {
+	native := nativeID(s)
+	if legacyCopy(s) >= 0 {
+		return agentsession.SubsessionID(native, Source)
+	}
+	return nativeSID(native)
+}
+
+// nativeSID is the session ID a native ID converts to when nothing
+// more is known of its session.
+func nativeSID(native string) string {
 	if storeName(native) {
 		return native
 	}
@@ -484,7 +552,7 @@ func (sc *sconv) start() error {
 		}
 		sc.addf(agentimport.Lossy, "clinesdk/legacy-copy", "", 0, "the VS Code extension carried classic task %[1]s on as this session: its first %[2]d messages are the extension's copy of the task's history after its deleted range, which the cline source converts as session %[3]s, named in parent_session and by a fork_of link; the copy is converted as this session's own entries, its usage kept off the responses. The copy is lossy: thinking without its signature, redacted thinking, documents and reasoning details left out, tool results made text, and the whole task's usage put on its last assistant message", sc.fam.rootID(), sc.copyEnd, ClassicSessionID(sc.fam.rootID()))
 	case sc.fork != nil:
-		link := agentsession.NewLinkEntry(agentsession.RelForkOf, forkParent(sc.fork.From))
+		link := agentsession.NewLinkEntry(agentsession.RelForkOf, sc.forkSID)
 		link.Timestamp = sc.created
 		raw, err := sc.clean(0, sc.fork.Raw)
 		if err != nil {

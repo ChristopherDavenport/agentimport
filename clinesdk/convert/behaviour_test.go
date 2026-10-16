@@ -226,3 +226,35 @@ func TestMissingResult(t *testing.T) {
 		t.Errorf("context:\n%s", strings.Join(lines, "\n"))
 	}
 }
+
+// TestForkOfLegacy converts a fork of a classic task the VS Code
+// extension carried on: the fork copied the warning and the legacy
+// flags, and is still its source's fork, the copy's usage kept off.
+func TestForkOfLegacy(t *testing.T) {
+	root := build(t, "s4-legacy-fork")
+	res, err := ConvertFile(filepath.Join(root, "sessions", "1759345300000_frk02"), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := res.Sessions[0]
+	src := agentsession.SubsessionID("1759341600000", Source)
+	if h := s.Header(); h.ID != "1759345300000_frk02" || h.ParentSession != src {
+		t.Errorf("header id %s, parent %s; want the fork's own ID and parent %s", h.ID, h.ParentSession, src)
+	}
+	counted := 0
+	for _, e := range s.Entries() {
+		switch e := e.(type) {
+		case *agentsession.LinkEntry:
+			if e.Rel == agentsession.RelForkOf && e.Session != src {
+				t.Errorf("fork_of names %s", e.Session)
+			}
+		case *agentsession.ResponseEntry:
+			if e.Usage != nil {
+				counted++
+			}
+		}
+	}
+	if counted != 1 {
+		t.Errorf("%d responses carry usage; the fork's own one alone should", counted)
+	}
+}

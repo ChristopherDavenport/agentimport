@@ -117,7 +117,7 @@ func (fam *family) systemOf(hi int, native string) string {
 // an ID derived from the task's, which the cline source's session has.
 func (fam *family) rootTarget() target {
 	native := fam.rootID()
-	if fam.s.Messages != nil && legacyAt(fam.s.Messages.Messages) >= 0 {
+	if legacyCopy(fam.s) >= 0 {
 		id := agentsession.SubsessionID(native, Source)
 		for n := 2; fam.ids[id]; n++ {
 			id = agentsession.SubsessionID(native, Source+"/"+itoa(n))

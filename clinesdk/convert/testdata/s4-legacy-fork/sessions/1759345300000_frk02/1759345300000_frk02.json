@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "session_id": "1759345300000_frk02",
+  "source": "cli",
+  "pid": 4242,
+  "started_at": "2025-10-02T19:00:00.000Z",
+  "status": "completed",
+  "interactive": true,
+  "provider": "anthropic",
+  "model": "claude-x",
+  "cwd": "/work/proj",
+  "workspace_root": "/work/proj",
+  "enable_tools": true,
+  "enable_spawn": false,
+  "enable_teams": false,
+  "metadata": {
+    "title": "Add a test (fork)",
+    "legacyTask": true,
+    "migratedFromLegacyTask": true,
+    "fork": {
+      "forkedFromSessionId": "1759341600000",
+      "forkedAt": "2025-10-02T19:00:00.000Z",
+      "source": "vscode"
+    }
+  },
+  "messages_path": "/home/u/.cline/data/sessions/1759345300000_frk02/1759345300000_frk02.messages.json"
+}

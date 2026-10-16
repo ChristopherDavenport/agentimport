@@ -410,10 +410,11 @@ func (sc *sconv) renderItems(k int, m *clinesdk.Message) (openresponses.Items, e
 	return out, nil
 }
 
-// forkCopy is how many messages a fork copied from its source: the
-// prefix the source's history shares with it when the source is beside
-// it, else the messages written before the fork was made.
-func (sc *sconv) forkCopy(fk *clinesdk.Fork) int {
+// forkCopy is how many messages a fork copied from its source, and the
+// session the source converts to: the prefix the source's history
+// shares with it when the source is beside it, else the messages
+// written before the fork was made.
+func (sc *sconv) forkCopy(fk *clinesdk.Fork) (int, string) {
 	msgs := sc.h.f.Messages
 	if dir := sessionsDir(sc.fam.s); dir != "" && storeName(fk.From) {
 		if _, err := os.Stat(filepath.Join(dir, fk.From)); err == nil {
@@ -423,8 +424,9 @@ func (sc *sconv) forkCopy(fk *clinesdk.Fork) int {
 				for n < len(msgs) && n < len(src.Messages.Messages) && sameMessage(msgs[n], src.Messages.Messages[n]) {
 					n++
 				}
-				sc.addf(agentimport.Lossy, "clinesdk/fork-copied", "", 0, "the session is a fork of %s, named in parent_session and by a fork_of link; its first %d messages are the source's, as its history beside it shows, converted as its own, their usage kept off the responses", fk.From, n)
-				return n
+				parent := sessionID(src)
+				sc.addf(agentimport.Lossy, "clinesdk/fork-copied", "", 0, "the session is a fork of %s, converted as %s, named in parent_session and by a fork_of link; its first %d messages are the source's, as its history beside it shows, converted as its own, their usage kept off the responses", fk.From, parent, n)
+				return n, parent
 			}
 		}
 	}
@@ -439,6 +441,7 @@ func (sc *sconv) forkCopy(fk *clinesdk.Fork) int {
 			n++
 		}
 	}
-	sc.addf(agentimport.Lossy, "clinesdk/fork-copied", "", 0, "the session is a fork of %s, named in parent_session and by a fork_of link; the source's history is not beside it, so its first %d messages, written before the fork, are taken as the copy, a guess; they are converted as its own, their usage kept off the responses", fk.From, n)
-	return n
+	parent := nativeSID(fk.From)
+	sc.addf(agentimport.Lossy, "clinesdk/fork-copied", "", 0, "the session is a fork of %s, named in parent_session and by a fork_of link; the source's history is not beside it, so its first %d messages, written before the fork, are taken as the copy, a guess, and the source's session ID is taken as %s; they are converted as its own, their usage kept off the responses", fk.From, n, parent)
+	return n, parent
 }
