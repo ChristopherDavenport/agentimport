@@ -73,6 +73,9 @@ type Event struct {
 	// file name.
 	Index int
 	File  string
+	// FileID is the event ID the file name holds, by which OpenHands
+	// indexes the event and resolves parent_id and its legacy parent.
+	FileID string
 
 	Kind      string
 	ID        string

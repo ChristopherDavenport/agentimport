@@ -52,6 +52,9 @@ type conv struct {
 	// tree says an event carries a parent_id, as SDK 1.31 and later
 	// write.
 	tree bool
+	// byFileID maps the event IDs the file names hold to the first event
+	// holding each.
+	byFileID map[string]int
 
 	calls   map[string]*call
 	respIDs map[string]bool
@@ -217,19 +220,27 @@ func (c *conv) run() error {
 // the leaf, and a fork's copied events.
 func (c *conv) plan() {
 	evs := c.c.Events
+	// OpenHands indexes events by the IDs their file names hold, the
+	// first index of an ID winning, and resolves parents through it.
 	firstIdx := map[string]int{}
 	for i, e := range evs {
-		if e.Err != nil {
-			continue
+		if e.Err == nil && e.FileID != "" && e.ID != e.FileID {
+			c.at(agentimport.Repaired, "openhands/id-mismatch", i, "the event's id %q is not the one its file name holds; parents resolve by the file name's, as OpenHands resolves them", e.ID)
 		}
-		if j, ok := firstIdx[e.ID]; ok {
+		if j, ok := firstIdx[e.FileID]; ok {
 			c.at(agentimport.Repaired, "openhands/duplicate-event-id", i, "the event ID is event %d's too; a parent naming it names event %d, as OpenHands takes the first", j+1, j+1)
 			continue
 		}
-		firstIdx[e.ID] = i
+		firstIdx[e.FileID] = i
 	}
+	c.byFileID = firstIdx
 	for i, e := range evs {
 		c.parent[i] = i - 1
+		if i > 0 {
+			// The legacy parent is the event the previous file's ID
+			// names.
+			c.parent[i] = firstIdx[evs[i-1].FileID]
+		}
 		if e.Err != nil {
 			continue
 		}
@@ -339,7 +350,7 @@ func (c *conv) pickLeaf() int {
 	evs := c.c.Events
 	if s := c.c.State; s != nil && s.LeafEventID != "" {
 		for i, e := range evs {
-			if e.Err == nil && e.ID == s.LeafEventID {
+			if e.Err == nil && e.FileID == s.LeafEventID {
 				return i
 			}
 		}

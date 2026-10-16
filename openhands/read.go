@@ -97,6 +97,9 @@ type Conversation struct {
 	Others    []string
 	Dirs      []string
 	Subagents []string
+	// SubagentsErr says why the subagents directory could not be
+	// listed.
+	SubagentsErr error
 }
 
 // Units is the number of units the conversation accounts for:
@@ -132,9 +135,10 @@ func ConversationDir(path string) (string, error) {
 }
 
 // IsConversationDir reports whether dir holds a conversation: a
-// base_state.json, or an events directory with an event file in it.
+// base_state.json that is OpenHands' state, or an events directory with
+// an event file in it.
 func IsConversationDir(dir string) bool {
-	if info, err := os.Stat(filepath.Join(dir, FileBaseState)); err == nil && info.Mode().IsRegular() {
+	if isStateFile(filepath.Join(dir, FileBaseState)) {
 		return true
 	}
 	f, err := os.Open(filepath.Join(dir, DirEvents))
@@ -161,9 +165,30 @@ func IsConversationDir(dir string) bool {
 func IsConversationFile(path string) bool {
 	base := filepath.Base(path)
 	if base == FileBaseState {
-		return true
+		return isStateFile(path)
 	}
 	return eventName.MatchString(base) && filepath.Base(filepath.Dir(path)) == DirEvents
+}
+
+// isStateFile reports whether path is a ConversationState: a JSON
+// object with the agent, or the id and persistence_dir, OpenHands
+// writes in every base_state.json.
+func isStateFile(path string) bool {
+	if info, err := os.Stat(path); err != nil || !info.Mode().IsRegular() {
+		return false
+	}
+	data, err := readLimited(path)
+	if err != nil {
+		return false
+	}
+	var all map[string]json.RawMessage
+	if json.Unmarshal(data, &all) != nil {
+		return false
+	}
+	_, agent := all["agent"]
+	_, id := all["id"]
+	_, dir := all["persistence_dir"]
+	return agent || id && dir
 }
 
 // ReadConversation reads the conversation directory path names, or the
@@ -186,10 +211,17 @@ func ReadConversation(path string) (*Conversation, error) {
 	hasEvents := false
 	for _, e := range entries {
 		name := e.Name()
+		isDir := e.IsDir()
+		if e.Type()&fs.ModeSymlink != 0 {
+			// A linked directory is read as the directory it names.
+			if info, err := os.Stat(filepath.Join(dir, name)); err == nil {
+				isDir = info.IsDir()
+			}
+		}
 		switch {
-		case e.IsDir() && name == DirEvents:
+		case isDir && name == DirEvents:
 			hasEvents = true
-		case e.IsDir():
+		case isDir:
 			dirs = append(dirs, name)
 		case name == FileBaseState || name == FileMeta:
 			data, err := readLimited(filepath.Join(dir, name))
@@ -234,7 +266,7 @@ func ReadConversation(path string) (*Conversation, error) {
 	c.Others = others
 	c.Dirs = dirs
 	if slices.Contains(dirs, DirSubagents) {
-		c.Subagents = subagentDirs(filepath.Join(dir, DirSubagents))
+		c.Subagents, c.SubagentsErr = subagentDirs(filepath.Join(dir, DirSubagents))
 	}
 	return c, nil
 }
@@ -249,19 +281,21 @@ func hasEventFile(files map[string][]byte) bool {
 }
 
 // subagentDirs lists the directories under subagents/ that hold a
-// conversation, sorted.
-func subagentDirs(dir string) []string {
+// conversation, sorted, a linked one among them; the error says the
+// directory cannot be listed, and names no path.
+func subagentDirs(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return nil
+		return nil, errors.New("the directory cannot be listed")
 	}
 	var out []string
 	for _, e := range entries {
-		if e.IsDir() && IsConversationDir(filepath.Join(dir, e.Name())) {
+		p := filepath.Join(dir, e.Name())
+		if info, err := os.Stat(p); err == nil && info.IsDir() && IsConversationDir(p) {
 			out = append(out, e.Name())
 		}
 	}
-	return out
+	return out, nil
 }
 
 // readLimited reads a file of at most MaxSize bytes; the error names no
@@ -383,7 +417,7 @@ func parse(name string, files map[string][]byte, errs map[string]error) *Convers
 			f.Status, f.Err = StatusMalformed, err
 			e = &Event{Err: err}
 		}
-		e.Index, e.File = i, f.Name
+		e.Index, e.File, e.FileID = i, f.Name, f.ID
 		if e.ID == "" {
 			e.ID = f.ID
 		}

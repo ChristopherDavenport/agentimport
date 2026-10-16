@@ -88,7 +88,7 @@ func TestDetect(t *testing.T) {
 		{"../../openhands/convert/testdata/linear-chat/conversations/00000001000040009000000000000001", "openhands", ""},
 		{"../../openhands/convert/testdata/linear-chat/conversations/00000001000040009000000000000001/base_state.json", "openhands", ""},
 		{"../../openhands/convert/testdata/linear-chat/conversations/00000001000040009000000000000001/events/event-00001-00000001-0001-4000-8000-000000000002.json", "openhands", ""},
-		{write("base_state.json", "{}"), "openhands", ""},
+		{write("base_state.json", "{}"), "", "-from"},
 		{"../../openhands/convert/testdata/linear-chat", "", "-from"},
 	} {
 		s, err := detect(tc.path)

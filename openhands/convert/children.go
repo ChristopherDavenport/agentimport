@@ -62,6 +62,9 @@ type spawn struct {
 func (c *conv) matchChildren() {
 	c.kids = &children{byCall: map[string][]*answer{}}
 	subs := c.c.Subagents
+	if err := c.c.SubagentsErr; err != nil {
+		c.addf(agentimport.Dropped, "openhands/subagent-unreadable", openhands.DirSubagents, 0, "the sub-agents' directory cannot be read: %s", agentimport.ErrorText(err))
+	}
 	if len(subs) == 0 {
 		return
 	}
@@ -357,7 +360,7 @@ func (c *conv) forkCopies() {
 	switch {
 	case m.ForkedFromEventID != "":
 		for i, e := range c.c.Events {
-			if e.Err == nil && e.ID == m.ForkedFromEventID {
+			if e.Err == nil && e.FileID == m.ForkedFromEventID {
 				c.copied, c.copyKnown = i+1, true
 				break
 			}

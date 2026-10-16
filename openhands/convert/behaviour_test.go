@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ChristopherDavenport/agentimport/openhands"
 	"github.com/ChristopherDavenport/agentsession"
 )
 
@@ -94,5 +95,26 @@ func TestTruncate(t *testing.T) {
 	cut, ok := sendCut(s)
 	if !ok || len([]rune(cut)) != textContentLimit {
 		t.Errorf("sendCut kept %d characters", len([]rune(cut)))
+	}
+}
+
+// TestParentByFileName resolves parent_id through the event IDs the
+// file names hold, as OpenHands does, and reports an event whose id is
+// another.
+func TestParentByFileName(t *testing.T) {
+	c := openhands.Parse("0123456789abcdef0123456789abcdef", map[string][]byte{
+		"events/event-00000-aaaaaaaa.json": []byte(`{"kind":"MessageEvent","id":"not-the-file","timestamp":"2026-01-01T00:00:00","source":"user","llm_message":{"role":"user","content":[{"type":"text","text":"a"}]}}`),
+		"events/event-00001-bbbbbbbb.json": []byte(`{"kind":"MessageEvent","id":"bbbbbbbb","timestamp":"2026-01-01T00:00:01","source":"user","parent_id":"aaaaaaaa","llm_message":{"role":"user","content":[{"type":"text","text":"b"}]}}`),
+	})
+	res, err := Convert(c, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	codes := map[string]bool{}
+	for _, f := range res.Report.Findings {
+		codes[f.Code] = true
+	}
+	if codes["openhands/parent-missing"] || !codes["openhands/id-mismatch"] {
+		t.Errorf("codes %v: want the parent resolved by its file name and the mismatch reported", res.Report.Codes())
 	}
 }

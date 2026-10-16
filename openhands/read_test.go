@@ -27,7 +27,8 @@ func fixtureDirs(t *testing.T) []string {
 		if depth > 4 {
 			return
 		}
-		for _, s := range subagentDirs(filepath.Join(dir, DirSubagents)) {
+		subs, _ := subagentDirs(filepath.Join(dir, DirSubagents))
+		for _, s := range subs {
 			walk(filepath.Join(dir, DirSubagents, s), depth+1)
 		}
 	}
@@ -234,5 +235,59 @@ func TestFindSessions(t *testing.T) {
 	}
 	if !IsConversationFile(ev[0]) || IsConversationFile(filepath.Join(dirs[0], "notes.txt")) {
 		t.Error("IsConversationFile is wrong")
+	}
+}
+
+// TestSubagentLinkAndDetection lists a sub-agent whose directory is a
+// symbolic link, reports a subagents directory that cannot be listed,
+// and takes a base_state.json for OpenHands' only when it holds the
+// state's members.
+func TestSubagentLinkAndDetection(t *testing.T) {
+	root := t.TempDir()
+	write := func(p, body string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	state := `{"id":"x","agent":{"kind":"Agent"},"persistence_dir":"p"}`
+	parent := filepath.Join(root, "parent")
+	write(filepath.Join(parent, FileBaseState), state)
+	other := filepath.Join(root, "elsewhere")
+	write(filepath.Join(other, FileBaseState), state)
+	if err := os.MkdirAll(filepath.Join(parent, DirSubagents), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(other, filepath.Join(parent, DirSubagents, "linked")); err != nil {
+		t.Fatal(err)
+	}
+	c, err := ReadConversation(parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(c.Subagents, []string{"linked"}) || c.SubagentsErr != nil {
+		t.Errorf("sub-agents %v, %v; want the linked one", c.Subagents, c.SubagentsErr)
+	}
+	if err := os.Chmod(filepath.Join(parent, DirSubagents), 0); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(filepath.Join(parent, DirSubagents), 0o755)
+	if _, err := os.ReadDir(filepath.Join(parent, DirSubagents)); err == nil {
+		t.Skip("the directory is readable without permission (running as root?)")
+	}
+	if c, err = ReadConversation(parent); err != nil || c.SubagentsErr == nil {
+		t.Errorf("an unreadable subagents directory: %v, %v", c.SubagentsErr, err)
+	}
+
+	foreign := filepath.Join(root, "foreign", FileBaseState)
+	write(foreign, `{"version":2}`)
+	if IsConversationFile(foreign) || IsConversationDir(filepath.Dir(foreign)) {
+		t.Error("another tool's base_state.json is taken for OpenHands'")
+	}
+	if !IsConversationFile(filepath.Join(parent, FileBaseState)) {
+		t.Error("OpenHands' base_state.json is not recognised")
 	}
 }

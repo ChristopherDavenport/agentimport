@@ -66,7 +66,9 @@ algorithm (sequential condensations from 1.12). Timestamps are
 `OPENHANDS_CONVERSATIONS_DIR`), `~/.openhands/agent-canvas/conversations`
 for Agent Canvas, and `workspace/conversations` for the agent server
 and SDK scripts by default. `openhands.FindSessions` lists every
-directory holding a `base_state.json` or an event file below a root,
+directory holding a `base_state.json` that is OpenHands' state (an
+object with `agent`, or `id` and `persistence_dir`) or an event file
+below a root,
 without walking `events`, `observations` or `subagents`; the command
 detects a conversation by such a directory, its `base_state.json` or
 one of its event files.
@@ -82,6 +84,12 @@ one of its event files.
   An event file that is empty, not JSON or not an object is
   `openhands/malformed-event`; OpenHands skips an empty one and fails on
   the rest.
+- **IDs.** OpenHands indexes events by the IDs their file names hold,
+  the first index of an ID winning, and resolves `parent_id`, the
+  legacy parent (the previous file's ID), the leaf and a fork's event
+  through that index; so does the converter, and an event whose `id`
+  differs is reported. A sub-agent directory that is a symbolic link is
+  followed.
 - **Lenient decoding.** An event's envelope (`kind`, `id`,
   `timestamp`, `source`, `parent_id`) is decoded member by member, and
   its kind's members on demand. Every object keeps the members it does
@@ -343,7 +351,7 @@ every converter can report are in [README.md](README.md).
 | `openhands/subagent-cycle` | dropped | A sub-agent directory being converted, or converted already; it is not converted again. |
 | `openhands/subagent-failed` | dropped | A sub-agent that could not be converted. |
 | `openhands/subagent-nesting` | dropped | Sub-agents nested past 16 conversations. |
-| `openhands/subagent-unreadable` | dropped | A sub-agent directory that cannot be read. |
+| `openhands/subagent-unreadable` | dropped | A sub-agent directory, or the `subagents` directory, that cannot be read. |
 | `openhands/subagents-alone` | dropped | Sub-agents not converted, with `Options.Alone`. |
 | `openhands/unreached` | dropped | An event the converter did not reach; a bug if it occurs. |
 | `openhands/acp-agent` | lossy | The agent is an `ACPAgent`, which records an external agent's tool calls rather than the model's context. |
@@ -408,6 +416,7 @@ every converter can report are in [README.md](README.md).
 | `openhands/call-id` | repaired | A repeated or ill-formed call ID is renamed; the native one is in `openhands:event`. |
 | `openhands/call-id-mismatch` | repaired | An action's `tool_call_id` differs from its tool call's id; outputs naming either answer it. |
 | `openhands/duplicate-event-id` | repaired | An event ID another event has; a parent naming it names the first. |
+| `openhands/id-mismatch` | repaired | An event whose `id` is not the one its file name holds; parents resolve by the file name's, as OpenHands resolves them. |
 | `openhands/duplicate-index` | repaired | Two event files with one index; one is read. |
 | `openhands/leaf-missing` | repaired | `leaf_event_id` names no event read; the last event is the leaf. |
 | `openhands/malformed-event` | repaired | An event file that is empty, not JSON or not an object is skipped. |
