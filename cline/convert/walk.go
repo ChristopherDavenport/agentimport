@@ -744,9 +744,37 @@ func (c *conv) prepareSide() {
 		key := [2]int{e.Message, e.Block}
 		c.edits[key] = append(c.edits[key], e)
 		ts, _ := e.Time()
-		c.side = append(c.side, &sideRecord{pos: c.posByTime(ts), ts: ts, ui: -1, edit: i})
+		c.side = append(c.side, &sideRecord{pos: c.editPos(ts), ts: ts, ui: -1, edit: i})
 	}
 	sort.SliceStable(c.side, func(a, b int) bool { return c.side[a].pos < c.side[b].pos })
+}
+
+// editPos places a context edit after the API element the request that
+// first sent it follows. Cline stamps an edit with the time of the
+// previous request's record (ContextManager, previousApiReqIndex), so
+// the request after that record's is the first to send it: the edit
+// goes after the user message that request sent. With no such record,
+// it goes by time.
+func (c *conv) editPos(ts time.Time) int {
+	ui := c.t.UI.Elems
+	for i, m := range ui {
+		if m.Err != nil || m.Type != "say" || m.Say != "api_req_started" {
+			continue
+		}
+		if mt, ok := m.Time(); !ok || !mt.Equal(ts) {
+			continue
+		}
+		for j := i + 1; j < len(ui); j++ {
+			if n := ui[j]; n.Err == nil && n.Type == "say" && n.Say == "api_req_started" {
+				if hi, ok := n.HistoryIndex(); ok {
+					return min(hi+1, len(c.t.API.Elems)-1)
+				}
+				break
+			}
+		}
+		break
+	}
+	return c.posByTime(ts)
 }
 
 // restated reports whether a UI message carries nothing the API
@@ -898,7 +926,7 @@ func (c *conv) contextEdit(i int) error {
 	}
 	c.mark(unit{uContext, i}, agentimport.LineKept)
 	c.addf(agentimport.Gap, "agentimport/context-replace", c.t.Context.Name, i+1,
-		"from this point Cline sends %s with its text replaced by %s; the session keeps the original, and the edit is a custom entry",
+		"from here on Cline sends %s with its text replaced by %s; the session keeps the original, and the edit is a custom entry",
 		c.describeBlock(e.Message, e.Block), describeText(e.NewText()))
 	return nil
 }

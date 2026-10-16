@@ -614,3 +614,52 @@ func TestFreshStartOrphan(t *testing.T) {
 		t.Errorf("context %v, want %v", got, want)
 	}
 }
+
+// TestEditPlacement checks a classic context edit is written where it
+// first applied: after the user message of the request after the one
+// whose record's time it carries, not a request early.
+func TestEditPlacement(t *testing.T) {
+	s := convertFixture(t, fixtures(t)["classic-truncation"], Options{}).Sessions[0]
+	edit, out3, step4 := -1, -1, -1
+	for i, e := range s.Path(s.Leaf()) {
+		switch e := e.(type) {
+		case *agentsession.CustomEntry:
+			if edit < 0 && strings.Contains(string(e.Data), "context_edit") {
+				edit = i
+			}
+		case *agentsession.ItemEntry:
+			switch it := e.Item.(type) {
+			case *openresponses.FunctionCallOutput:
+				if it.CallID == "toolu_3" {
+					out3 = i
+				}
+			case *openresponses.Message:
+				if step4 < 0 && it.Text() == "Step 4." {
+					step4 = i
+				}
+			}
+		}
+	}
+	if !(out3 < edit && edit < step4) {
+		t.Errorf("the edit at %d is not between the message it follows (%d) and the response it first applied to (%d)", edit, out3, step4)
+	}
+}
+
+// TestNestedMembers checks the members of the blocks inside a tool
+// result's content are kept.
+func TestNestedMembers(t *testing.T) {
+	s := convertFixture(t, fixtures(t)["classic-native"], Options{}).Sessions[0]
+	for _, e := range s.Entries() {
+		ie, ok := e.(*agentsession.ItemEntry)
+		if !ok {
+			continue
+		}
+		if out, ok := ie.Item.(*openresponses.FunctionCallOutput); ok && out.CallID == "toolu_2" {
+			if got := string(ie.Unknown["cline:content_blocks"]); !strings.Contains(got, "cache_control") {
+				t.Errorf("content block members %q", got)
+			}
+			return
+		}
+	}
+	t.Fatal("no output for toolu_2")
+}

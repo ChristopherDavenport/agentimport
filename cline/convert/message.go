@@ -336,12 +336,17 @@ func (c *conv) result(k int, m *cline.Message, b *cline.Block, p *call, ts time.
 		}
 	}
 	out := &openresponses.FunctionCallOutput{CallID: p.id}
+	var nested map[string]json.RawMessage
 	if b.Content != nil {
 		switch {
 		case b.Content.IsText:
 			out.Output.Text = b.Content.Text
 		case b.Content.Err == nil:
-			out.Output.Parts, _ = c.parts(k, b.Content.Blocks, nil)
+			idx := make([]int, len(b.Content.Blocks))
+			for i := range idx {
+				idx[i] = i
+			}
+			out.Output.Parts, nested = c.parts(k, b.Content.Blocks, idx)
 		default:
 			c.apiAt(agentimport.Lossy, "cline/result-malformed", k, "a tool result whose content is neither text nor blocks is an empty output; the content is %s:block", Source)
 		}
@@ -359,6 +364,9 @@ func (c *conv) result(k int, m *cline.Message, b *cline.Block, p *call, ts time.
 		mapped = mapped[:1]
 	}
 	if err := c.keepMembers(e, k, "block", blockRest(b, mapped...), "the tool result's"); err != nil {
+		return err
+	}
+	if err := c.keepMembers(e, k, "content_blocks", nested, "the tool result's content blocks'"); err != nil {
 		return err
 	}
 	if err := setMembers(e); err != nil {

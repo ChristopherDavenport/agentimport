@@ -252,7 +252,7 @@ classic's by the API index they carry, Roo's and the edits by time.
 | classic `modelInfo.modelId` | the first `config`'s `model`; a `config` delta where it changes; the response's `model` | `modelInfo` and `metrics` stay in `cline:message` |
 | Roo, which records no model | the first `config` with no model and members `cline:api_config_name` and `cline:mode` | |
 | user message: text, images, documents | `item`, user `message`: `input_text`, `input_image` (data URL), `input_file` (a base64 document); another block an `anthropic.<type>` extension part | the blocks' other members in `cline:blocks` by index; the message's in `cline:message` |
-| user `tool_result` answering a call of the response before | `item`, `function_call_output`, before the message's other content | `is_error` as `cline:is_error` (gap `agentimport/tool-error`); a result answering no call a custom entry `{"orphan_result": …}` |
+| user `tool_result` answering a call of the response before | `item`, `function_call_output`, before the message's other content | `is_error` as `cline:is_error` (gap `agentimport/tool-error`); members of the blocks inside its content in `cline:content_blocks` by index; a result answering no call a custom entry `{"orphan_result": …}` |
 | a call the next user message does not answer (classic) | a `function_call_output` `result missing`, marked `cline:synthesized` | what Cline sends |
 | a refusal (`The user denied this operation.` with optional `<feedback>`, Roo's `{"status":"denied"}`; `.clineignore`, Roo's `access_denied`, a command permission) | a `reject` `decision` before the output, `by` `human` or `policy`, `reason` the feedback or the text | the output follows as written |
 | assistant `text` | `item`, assistant `message`, `output_text` | XML-era tool calls stay text; parsed into `cline:xml_tools` |
@@ -266,7 +266,7 @@ classic's by the API index they carry, Roo's and the edits by time.
 | assistant message | `response`: `response_id` the message's `id` (`resp_<n>` when it has none or a repeated one), `model`, `usage`, `status` | `incomplete` for `[Response interrupted by user]` or a `user_cancelled` request; `failed` for `[Response interrupted by API Error]`, `Failure: I did not provide a response.` or a failed request; the text stays, since later requests send it |
 | UI `api_req_started` | its request's usage on the response it produced, matched by `conversationHistoryIndex` (classic) or time; `api_req_retried` after it count `attempts` | the record minus its `request` text is `cline:usage`; one with no response a custom entry, or dropped when it holds nothing |
 | other UI messages | dropped when they restate the API history or are prompts carrying nothing (`say` text, tool, command, completion; `ask` followup, tool, resume); else a custom entry `{"ui_message": …}` | a restating message carrying a checkpoint is kept; partial messages dropped |
-| `context_history.json` update | a custom entry `{"context_edit": …}` where it was made | gap `agentimport/context-replace` |
+| `context_history.json` update | a custom entry `{"context_edit": …}` after the user message of the first request that sent it | gap `agentimport/context-replace` |
 | a classic range | a `config` delta whose `omit.items` names what it leaves out, as above | |
 | a Roo summary or marker | a `compaction`, as above | |
 
@@ -307,6 +307,7 @@ compaction's `cline:ui`.
 | --- | --- |
 | Roo 3.35+ `new_task` whose output names the child (`Subtask <id> completed.` or `Delegated to child task <id>`) | the child's task directory, beside the parent's, converted as a `subsession`: its own session `SubsessionID(parent, call_id)` with `parent_session` and `spawned_by`, a link before the output, the output's `parents` naming the child's leaf. The parent waits while the child runs. Roo wrote the output as `Delegated to child task <id>` and rewrote it in place when the child completed; the model saw only the result (lossy) |
 | Roo before 3.35: the output an acknowledgement, the result a later user message `[new_task completed] Result: …` | by the RFC's lifetime rule a `peer`, but neither file names the child: unlinked, reported; the child converts on its own |
+| Roo's fallback when the parent's history holds no `new_task` call: a user text `Subtask <id> completed.` | unlinked: a subsession link names the call that spawned it, and there is none; the child converts on its own, `parent_session` naming the parent |
 | a Roo task converted on its own whose index entry names a parent | `parent_session` the parent task's ID, no `spawned_by`, no link |
 | classic `new_task` | starts a new chat with no recorded link: unlinked, reported |
 | classic `use_subagents` | ran in memory and wrote no transcript: reported; the UI `subagent` records are custom entries |
@@ -415,7 +416,7 @@ every converter can report are in [README.md](README.md).
 | `cline/content-malformed` | kept | A message whose content is neither text nor blocks is a custom entry. |
 | `cline/extension-part` | kept | A user block with no Open Responses part is an `anthropic.<type>` part. |
 | `cline/history-item` | kept, or dropped | The index entry is `cline:history_item`. |
-| `cline/members` | kept, or dropped | Members the conversion does not map are `cline:message`, `cline:block` or `cline:blocks`. |
+| `cline/members` | kept, or dropped | Members the conversion does not map are `cline:message`, `cline:block`, `cline:blocks` or `cline:content_blocks`. |
 | `cline/orphan-result` | kept | A tool result answering no call of the response before it is a custom entry. |
 | `cline/task-file` | kept, or dropped | The metadata or settings are `cline:task_metadata`, `cline:settings`. |
 | `cline/ui-record` | kept, or dropped | A UI message the API history does not hold is a custom entry. |

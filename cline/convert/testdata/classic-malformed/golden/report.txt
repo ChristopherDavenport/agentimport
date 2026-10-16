@@ -1,5 +1,5 @@
 cline: 20 elements and files: mapped 3 kept 6 dropped 2 malformed 9
-  gap      agentimport/context-replace                       1  from this point Cline sends a block 0 of API message 4 with its text replaced by other text (1 bytes); the session keeps the original, and the edit is a custom entry (at context_history.json:2)
+  gap      agentimport/context-replace                       1  from here on Cline sends a block 0 of API message 4 with its text replaced by other text (1 bytes); the session keeps the original, and the edit is a custom entry (at context_history.json:2)
   gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
   gap      agentimport/tool-error                            1  is_error is the member cline:is_error; function_call_output has no error flag (at api_conversation_history.json:7)
   dropped  cline/file-unread                                 1  a file of the task directory the converter does not read
