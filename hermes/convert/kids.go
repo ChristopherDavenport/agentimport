@@ -3,6 +3,7 @@ package convert
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/ChristopherDavenport/agentimport"
 	"github.com/ChristopherDavenport/agentimport/hermes"
@@ -11,12 +12,15 @@ import (
 
 // kids are a session's sub-agents, by the delegate_task calls that ran
 // them. Hermes records neither side of the tie: the call's output does
-// not name the child, and the child's row names only its parent. A
-// child is a call's when it started between the call and its output, as
-// Hermes creates a child's session while the call runs; when one row
-// made several delegate_task calls, a child is the call's whose goal
-// its first message holds, as Hermes sends a child its goal as that
-// message.
+// not name the child, and the child's row names only its parent. The
+// tie is a heuristic, reported as one: a child is a call's when it
+// started while the call's run was open, after the call's row and no
+// later than its end; and when several calls' runs were open, the call
+// whose goals its first message holds, as Hermes sends a child its goal
+// as that message, else the call made last before it started. A run
+// ends at the call's output for a call that waited, at the delivery of
+// its result (or the time async_delegations records it completed) for a
+// background run, and at the next turn for a call with no output.
 type kids struct {
 	// calls are the delegate_task calls, by row and pairing ID;
 	// current each one the walk wrote, by the call ID it gave it.
@@ -35,32 +39,46 @@ type callKey struct {
 
 // delegateCall is one delegate_task call and what it ran.
 type delegateCall struct {
-	row      *hermes.Message
-	output   *hermes.Message
-	callID   string
-	goals    []string
+	row    *hermes.Message
+	output *hermes.Message
+	callID string
+	goals  []string
+	// end is when the call's run ended; zero when nothing says.
+	end time.Time
+	// h is what the output says of the run.
+	h        handle
 	children []*record
-	// background says the output is the handle of a background run,
-	// and delegationID its delegation.
-	background   bool
-	delegationID string
+	// unit names the delegation that ran each child of a background
+	// call, and inline the children of tasks it ran inline.
+	unit   map[*record]string
+	inline map[*record]bool
 }
 
 // findKids binds the session's sub-agents to the calls that ran them.
 func (sc *sconv) findKids(msgs []*hermes.Message) *kids {
 	k := &kids{calls: map[callKey]*delegateCall{}, current: map[string]*delegateCall{}, bound: map[*record]bool{}, failed: map[*record]bool{}}
 	// open maps an alias of a delegate_task call of the current
-	// assistant turn to the call, as Hermes pairs a result.
+	// assistant turn to the call, as Hermes pairs a result; pending
+	// lists the calls whose run has no end yet.
 	open := map[string]*delegateCall{}
-	var byRow [][]*delegateCall
+	var all, pending []*delegateCall
+	delivered := map[string]time.Time{}
+	turn := func(at time.Time) {
+		for _, dc := range pending {
+			if dc.output == nil && !at.IsZero() {
+				dc.end = at
+			}
+		}
+		pending = nil
+		open = map[string]*delegateCall{}
+	}
 	for _, m := range msgs {
 		if m.Err != nil {
 			continue
 		}
 		switch m.Role {
 		case hermes.RoleAssistant:
-			open = map[string]*delegateCall{}
-			var row []*delegateCall
+			turn(m.Time)
 			for _, c := range m.ToolCalls {
 				if c.Name() != "delegate_task" {
 					continue
@@ -72,81 +90,135 @@ func (sc *sconv) findKids(msgs []*hermes.Message) *kids {
 						open[a] = dc
 					}
 				}
-				row = append(row, dc)
-			}
-			if len(row) > 0 {
-				byRow = append(byRow, row)
+				all = append(all, dc)
+				pending = append(pending, dc)
 			}
 		case hermes.RoleUser:
-			open = map[string]*delegateCall{}
+			if id := delegationID(m); id != "" && !m.Time.IsZero() && m.Time.After(delivered[id]) {
+				delivered[id] = m.Time
+			}
+			turn(m.Time)
 		case hermes.RoleTool:
 			for _, a := range hermes.ResultAliases(m.ToolCallID) {
 				if dc := open[a]; dc != nil && dc.output == nil {
 					dc.output = m
-					dc.delegationID, dc.background = delegation(m.Content.String())
+					dc.h = readHandle(m.Content.String())
+					dc.end = m.Time
 					break
 				}
 			}
 		}
 	}
-	var children []*record
-	for _, id := range sc.fam.children[sc.rec.s.ID] {
-		rec := sc.fam.recs[id]
-		if rec.rel == hermes.Delegate || rec.rel == hermes.Tool {
-			children = append(children, rec)
+	for _, dc := range all {
+		if !dc.h.background {
+			continue
+		}
+		// A background run ends when its last unit's result arrives,
+		// or async_delegations says it completed; until then, it is
+		// open.
+		dc.end = time.Time{}
+		if len(dc.h.goals) > 0 {
+			dc.goals = dc.h.goals
+		}
+		for _, id := range dc.h.ids() {
+			t := delivered[id]
+			if d := sc.fam.delegations[id]; d != nil && t.IsZero() {
+				if f, ok := d.Cols.Float("completed_at"); ok {
+					t, _ = hermes.Epoch(f)
+				}
+			}
+			if t.IsZero() {
+				dc.end = time.Time{}
+				break
+			}
+			if t.After(dc.end) {
+				dc.end = t
+			}
 		}
 	}
-	for _, row := range byRow {
-		for _, child := range children {
-			if k.bound[child] {
-				continue
+	for _, id := range sc.fam.children[sc.rec.s.ID] {
+		rec := sc.fam.recs[id]
+		if rec.rel != hermes.Delegate || rec.s.Started.IsZero() {
+			continue
+		}
+		dc := sc.bind(rec, all)
+		if dc == nil {
+			continue
+		}
+		dc.children = append(dc.children, rec)
+		k.bound[rec] = true
+		if dc.h.background {
+			if dc.unit == nil {
+				dc.unit, dc.inline = map[*record]string{}, map[*record]bool{}
 			}
-			var in []*delegateCall
-			for _, dc := range row {
-				if dc.window(child) {
-					in = append(in, dc)
-				}
-			}
-			switch {
-			case len(in) == 0:
-			case len(row) == 1:
-				in[0].children = append(in[0].children, child)
-				k.bound[child] = true
-			default:
-				text := sc.firstUserText(child)
-				for _, dc := range in {
-					if dc.holdsGoal(text) {
-						dc.children = append(dc.children, child)
-						k.bound[child] = true
-						break
-					}
-				}
-			}
+			i := dc.goalIndex(sc.firstUserText(rec))
+			dc.unit[rec] = dc.h.unitOf(i)
+			dc.inline[rec] = i >= 0 && dc.h.inline[i]
 		}
 	}
 	return k
 }
 
-// window reports whether a child started while the call ran: after the
-// call's row and no later than its output, or at any later time when
-// the call has none.
-func (dc *delegateCall) window(child *record) bool {
-	start := child.s.Started
-	if start.IsZero() || dc.row.Time.IsZero() || start.Before(dc.row.Time) {
-		return false
-	}
-	return dc.output == nil || dc.output.Time.IsZero() || !start.After(dc.output.Time)
-}
-
-// holdsGoal reports whether a child's first message holds one of the
-// call's goals.
-func (dc *delegateCall) holdsGoal(text string) bool {
-	for _, g := range dc.goals {
-		if g != "" && strings.Contains(text, g) {
-			return true
+// bind chooses the call that ran a child, nil when none can be told.
+func (sc *sconv) bind(child *record, calls []*delegateCall) *delegateCall {
+	var in []*delegateCall
+	for _, dc := range calls {
+		if dc.window(child) {
+			in = append(in, dc)
 		}
 	}
-	return false
+	if len(in) == 0 {
+		return nil
+	}
+	text := sc.firstUserText(child)
+	var held []*delegateCall
+	for _, dc := range in {
+		if dc.goalIndex(text) >= 0 {
+			held = append(held, dc)
+		}
+	}
+	pool := in
+	if len(held) > 0 {
+		pool = held
+	}
+	// The call made last before the child started; calls of one row
+	// that its goals do not tell apart cannot be told apart.
+	var best *delegateCall
+	tie := false
+	for _, dc := range pool {
+		switch {
+		case best == nil || dc.row.Time.After(best.row.Time):
+			best, tie = dc, false
+		case dc.row.Time.Equal(best.row.Time):
+			tie = true
+		}
+	}
+	if tie {
+		return nil
+	}
+	return best
+}
+
+// window reports whether a child started while the call's run was
+// open: after the call's row and no later than the run's end, when it
+// has one.
+func (dc *delegateCall) window(child *record) bool {
+	start := child.s.Started
+	if dc.row.Time.IsZero() || start.Before(dc.row.Time) {
+		return false
+	}
+	return dc.end.IsZero() || !start.After(dc.end)
+}
+
+// goalIndex is the index of the first of the call's goals a child's
+// first message holds, -1 for none.
+func (dc *delegateCall) goalIndex(text string) int {
+	for i, g := range dc.goals {
+		if g = strings.TrimSpace(g); g != "" && strings.Contains(text, g) {
+			return i
+		}
+	}
+	return -1
 }
 
 // firstUserText is the text of a session's first user row.
@@ -174,9 +246,9 @@ func (k *kids) called(c *hermes.ToolCall, callID string, row *hermes.Message) {
 }
 
 // usable lists the children of a call this conversion converts now.
-func (sc *sconv) usable(dc *delegateCall, unit string) []*record {
+func (sc *sconv) usable(dc *delegateCall, recs []*record, unit string) []*record {
 	var out []*record
-	for _, rec := range dc.children {
+	for _, rec := range recs {
 		switch {
 		case sc.fam.opts.Alone, sc.depth+1 >= maxDepth, sc.kids.failed[rec]:
 			continue
@@ -195,14 +267,20 @@ func (sc *sconv) usable(dc *delegateCall, unit string) []*record {
 // parents.
 func (sc *sconv) linkBefore(callID string, out *hermes.Message) ([]agentsession.EntryRef, error) {
 	dc := sc.kids.current[callID]
-	if dc == nil || dc.output != out || dc.background {
+	if dc == nil || dc.output != out {
 		return nil, nil
 	}
-	recs := sc.usable(dc, out.Unit)
+	var waited []*record
+	for _, rec := range dc.children {
+		if !dc.h.background || dc.inline[rec] {
+			waited = append(waited, rec)
+		}
+	}
+	recs := sc.usable(dc, waited, out.Unit)
 	var refs []agentsession.EntryRef
 	for _, rec := range recs {
 		var tgt target
-		if len(dc.children) == 1 {
+		if len(waited) == 1 && len(dc.children) == 1 {
 			sid := agentsession.SubsessionID(sc.tgt.id, callID)
 			if sc.fam.ids[sid] {
 				continue
@@ -224,10 +302,12 @@ func (sc *sconv) linkBefore(callID string, out *hermes.Message) ([]agentsession.
 		}
 		refs = append(refs, agentsession.EntryRef{Session: tgt.id, Entry: ch.b.Resume()})
 		how := "the call's only sub-agent; its session ID is derived from the call's"
-		if len(dc.children) > 1 {
+		if dc.h.background {
+			how = "a task its background run ran inline, before the call returned; it keeps its own session ID"
+		} else if len(dc.children) > 1 {
 			how = fmt.Sprintf("one of the %d sub-agents the call ran; it keeps its own session ID", len(dc.children))
 		}
-		sc.addf(agentimport.Lossy, "hermes/subagent", out.Unit, "the call ran sub-agent session %s in the foreground (%s): a subsession, linked before the call's output, tied to the call by when it started, as Hermes records no tie", rec.s.ID, how)
+		sc.addf(agentimport.Lossy, "hermes/subagent", out.Unit, "the call ran sub-agent session %s (%s): a subsession, linked before the call's output, tied to the call by when it started and the goal it was sent, a heuristic, as Hermes records no tie", rec.s.ID, how)
 	}
 	return refs, nil
 }
@@ -237,10 +317,16 @@ func (sc *sconv) linkBefore(callID string, out *hermes.Message) ([]agentsession.
 // child's answer comes later, as a user message of its own.
 func (sc *sconv) linkAfter(callID string, out *hermes.Message) error {
 	dc := sc.kids.current[callID]
-	if dc == nil || dc.output != out || !dc.background {
+	if dc == nil || dc.output != out || !dc.h.background {
 		return nil
 	}
-	for _, rec := range sc.usable(dc, out.Unit) {
+	var later []*record
+	for _, rec := range dc.children {
+		if !dc.inline[rec] {
+			later = append(later, rec)
+		}
+	}
+	for _, rec := range sc.usable(dc, later, out.Unit) {
 		tgt := sc.fam.ownTarget(rec)
 		tgt.parent = sc.tgt.id
 		ch := sc.convertChild(rec, tgt)
@@ -249,10 +335,11 @@ func (sc *sconv) linkAfter(callID string, out *hermes.Message) error {
 		}
 		link := agentsession.NewPeerLink(callID, agentsession.Callee{Session: tgt.id})
 		link.Timestamp = out.Time
-		if err := sc.b.Member(link, "delegation_id", dc.delegationID); err != nil {
+		did := dc.unit[rec]
+		if err := sc.b.Member(link, "delegation_id", did); err != nil {
 			return err
 		}
-		if d := sc.fam.delegations[dc.delegationID]; d != nil {
+		if d := sc.fam.delegations[did]; d != nil {
 			if err := sc.b.Member(link, "delegation_state", d.State); err != nil {
 				return err
 			}
@@ -260,7 +347,7 @@ func (sc *sconv) linkAfter(callID string, out *hermes.Message) error {
 		if _, err := sc.append(link); err != nil {
 			return err
 		}
-		sc.addf(agentimport.Lossy, "hermes/subagent-peer", out.Unit, "the call ran sub-agent session %s in the background: a peer, linked after the call's output, which is Hermes' handle of the run; tied to the call by when it started", rec.s.ID)
+		sc.addf(agentimport.Lossy, "hermes/subagent-peer", out.Unit, "the call ran sub-agent session %s in the background: a peer, linked after the call's output, which is Hermes' handle of the run; tied to the call by when it started and the goal it was sent, a heuristic, as Hermes records no tie", rec.s.ID)
 	}
 	return nil
 }

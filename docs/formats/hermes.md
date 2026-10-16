@@ -353,25 +353,42 @@ holds its children's.
 
 `delegate_task` builds each child agent with `parent_session_id` naming
 the parent (`tools/delegate_tool.py`), and neither side records the
-other's call: the output does not name the child. A child is a call's
-when it started between the call's row and its output, which is when
-Hermes creates it; when one row made several `delegate_task` calls, a
-child is the call's whose goal its first message holds, since Hermes
-sends a child its goal as that message.
+other's call: the output does not name the child. The converter ties
+a child to a call by a heuristic, reported as one in every link's
+finding:
+
+- A child is a call's when it started while the call's run was open:
+  after the call's row, and no later than the run's end. A call that
+  waited ends at its output. A background run ends when the last of its
+  units' results is delivered, a user row naming the delegation in
+  `display_metadata.delegation_id`, or, without one, when
+  `async_delegations` records it completed; until then it is open,
+  since Hermes creates a child's session on its first turn
+  (`run_agent.py` `_ensure_db_session`), on the async worker, after the
+  handle row. A call with no output ends at the next turn.
+- When several calls' runs were open, the child is the call's whose
+  goals (its `tasks`' goals, or the handle's `goals`) its first message
+  holds, as Hermes sends a child its goal as that message, else the
+  call made last before it started; calls of one row that the goals do
+  not tell apart tie, and the child is linked to none.
 
 - A call whose output is the handle of a background run
   (`{"status": "dispatched", "mode": "background", "delegation_id": …}`,
   `_dispatched_payload`) ran its children as **peers**: a `peer` link
-  after the output, carrying `hermes:delegation_id` and the state
-  `async_delegations` records; the child's answer arrives later as a
-  user row naming the delegation in `display_metadata`.
+  after the output, carrying `hermes:delegation_id`, the unit's
+  delegation (a handle of several units lists each unit's ID and task
+  indexes), and the state `async_delegations` records for it; the
+  child's answer arrives later as a user row naming the delegation. A
+  task of the handle's `inline_results`, which ran inline before the
+  call returned, is a subsession.
 - Any other call waited for its children: each is a **subsession**,
   linked before the output, which names the children's leaves in
   `parents`. A call's only child takes the session ID derived from the
   call (`SubsessionID`); the children of a call that ran several keep
   their own IDs.
-- A child no call was running for, and a tool session, is converted
-  after its parent with `parent_session` and no link.
+- A sub-agent no call is tied to, and a tool session (`source =
+  'tool'`, which no call names), is converted after its parent with
+  `parent_session` and no link.
 
 ## Extension types
 

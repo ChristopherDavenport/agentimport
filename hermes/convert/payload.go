@@ -353,20 +353,85 @@ func thoughtSignature(c *hermes.ToolCall) string {
 	return ""
 }
 
-// delegation reads a delegate_task call's output as the handle of a
-// background run: {"status": "dispatched", "mode": "background",
-// "delegation_id": …} (tools/delegate_tool_dispatch.py
-// _dispatched_payload).
-func delegation(output string) (id string, background bool) {
+// handle is what a delegate_task call's output says of the run: for a
+// background run, Hermes' handle of it, {"status": "dispatched", "mode":
+// "background", "delegation_id": …, "goals": […], "units": [{
+// "delegation_id", "task_indexes"}], "inline_results": […]}
+// (tools/delegate_tool_dispatch.py _dispatched_payload and
+// _dispatch_background): one delegation per unit of tasks, and the
+// tasks of a unit the pool refused run inline before the call returns.
+type handle struct {
+	background   bool
+	delegationID string
+	goals        []string
+	units        []unit
+	inline       map[int]bool
+}
+
+// unit is a background unit: its delegation and the tasks it ran.
+type unit struct {
+	id    string
+	tasks []int
+}
+
+// readHandle reads a delegate_task call's output.
+func readHandle(output string) handle {
 	var p struct {
-		Status       string `json:"status"`
-		Mode         string `json:"mode"`
-		DelegationID string `json:"delegation_id"`
+		Status       string   `json:"status"`
+		Mode         string   `json:"mode"`
+		DelegationID string   `json:"delegation_id"`
+		Goals        []string `json:"goals"`
+		Units        []struct {
+			DelegationID string `json:"delegation_id"`
+			TaskIndexes  []int  `json:"task_indexes"`
+		} `json:"units"`
+		Inline []struct {
+			TaskIndex *int `json:"task_index"`
+		} `json:"inline_results"`
 	}
 	if json.Unmarshal([]byte(strings.TrimSpace(output)), &p) != nil {
-		return "", false
+		return handle{}
 	}
-	return p.DelegationID, p.Status == "dispatched" || p.Mode == "background"
+	h := handle{background: p.Status == "dispatched" || p.Mode == "background", delegationID: p.DelegationID, goals: p.Goals}
+	for _, u := range p.Units {
+		h.units = append(h.units, unit{id: u.DelegationID, tasks: u.TaskIndexes})
+	}
+	for _, r := range p.Inline {
+		if r.TaskIndex != nil {
+			if h.inline == nil {
+				h.inline = map[int]bool{}
+			}
+			h.inline[*r.TaskIndex] = true
+		}
+	}
+	return h
+}
+
+// ids lists the delegations a handle names: its units', else its own.
+func (h handle) ids() []string {
+	var out []string
+	for _, u := range h.units {
+		if u.id != "" {
+			out = append(out, u.id)
+		}
+	}
+	if len(out) == 0 && h.delegationID != "" {
+		out = append(out, h.delegationID)
+	}
+	return out
+}
+
+// unitOf is the delegation that ran task i: its unit's, else the
+// handle's.
+func (h handle) unitOf(i int) string {
+	for _, u := range h.units {
+		for _, t := range u.tasks {
+			if t == i {
+				return u.id
+			}
+		}
+	}
+	return h.delegationID
 }
 
 // goals reads the goals of a delegate_task call: each task's, or the

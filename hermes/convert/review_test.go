@@ -172,3 +172,79 @@ INSERT INTO messages (session_id, role, content, tool_calls, tool_call_id, times
 		t.Errorf("%d subsession links for call_9, want 1", links)
 	}
 }
+
+// links lists a session's subsession and peer links as "rel call
+// session delegation".
+func links(s *agentsession.Session) []string {
+	var out []string
+	for _, e := range s.Entries() {
+		if l, ok := e.(*agentsession.LinkEntry); ok && (l.Rel == agentsession.RelSubsession || l.Rel == agentsession.RelPeer) {
+			line := l.Rel + " " + l.CallID + " " + l.Session
+			if d := member(l, "delegation_id"); d != nil {
+				line += " " + string(d)
+			}
+			out = append(out, line)
+		}
+	}
+	return out
+}
+
+// TestBackgroundTie (F3): a background run's children start after the
+// handle row, as Hermes creates a child's session on its first turn on
+// the async worker; the run is open until its result is delivered, and
+// the handle's goals and units tell its children apart; a task it ran
+// inline is a subsession.
+func TestBackgroundTie(t *testing.T) {
+	res := convertScript(t, `
+INSERT INTO sessions (id, source, model, started_at) VALUES ('bg', 'tui', 'm', 1760000000.0);
+INSERT INTO sessions (id, source, model, model_config, parent_session_id, started_at) VALUES
+  ('k1', 'subagent', 'm', '{"_delegate_from":"bg"}', 'bg', 1760000100.3),
+  ('k2', 'subagent', 'm', '{"_delegate_from":"bg"}', 'bg', 1760000200.4),
+  ('k3', 'subagent', 'm', '{"_delegate_from":"bg"}', 'bg', 1760000200.5),
+  ('k4', 'subagent', 'm', '{"_delegate_from":"bg"}', 'bg', 1760000200.01);
+INSERT INTO async_delegations (delegation_id, origin_session, parent_session_id, state, dispatched_at, completed_at, updated_at) VALUES
+  ('d1', 'x', 'bg', 'completed', 1760000100.04, 1760000140.0, 1760000140.0),
+  ('d2-1', 'x', 'bg', 'completed', 1760000200.04, 1760000250.0, 1760000250.0),
+  ('d2-2', 'x', 'bg', 'running', 1760000200.04, NULL, 1760000250.0);
+INSERT INTO messages (session_id, role, content, tool_calls, tool_call_id, display_metadata, timestamp) VALUES
+  ('bg', 'user', 'audit', NULL, NULL, NULL, 1760000001.0),
+  ('bg', 'assistant', '', '[{"id":"c1","call_id":"c1","type":"function","function":{"name":"delegate_task","arguments":"{\"goal\":\"Audit.\"}"}}]', NULL, NULL, 1760000100.0),
+  ('bg', 'tool', '{"status":"dispatched","mode":"background","count":1,"delegation_id":"d1","goals":["Audit."]}', NULL, 'c1', NULL, 1760000100.05),
+  ('bg', 'assistant', 'running', NULL, NULL, NULL, 1760000100.1),
+  ('bg', 'user', '[d1 done] fine', NULL, NULL, '{"delegation_id":"d1"}', 1760000150.0),
+  ('bg', 'assistant', '', '[{"id":"c2","call_id":"c2","type":"function","function":{"name":"delegate_task","arguments":"{\"tasks\":[{\"goal\":\"One.\"},{\"goal\":\"Two.\"},{\"goal\":\"Three.\"}]}"}}]', NULL, NULL, 1760000200.0),
+  ('bg', 'tool', '{"status":"dispatched","mode":"background","count":3,"delegation_id":"d2","goals":["One.","Two.","Three."],"units":[{"delegation_id":"d2-1","group":"a","task_indexes":[0]},{"delegation_id":"d2-2","group":"b","task_indexes":[1]}],"inline_results":[{"task_index":2,"status":"completed"}]}', NULL, 'c2', NULL, 1760000200.05),
+  ('bg', 'assistant', 'two running', NULL, NULL, NULL, 1760000200.1),
+  ('k1', 'user', 'Audit.', NULL, NULL, NULL, 1760000100.4),
+  ('k2', 'user', 'One.', NULL, NULL, NULL, 1760000200.5),
+  ('k3', 'user', 'Two.', NULL, NULL, NULL, 1760000200.6),
+  ('k4', 'user', 'Three.', NULL, NULL, NULL, 1760000200.02);
+`, Options{})
+	sameLines(t, "links", links(sessionOf(t, res, "bg")), []string{
+		`peer c1 k1 "d1"`,
+		"subsession c2 k4",
+		`peer c2 k2 "d2-1"`,
+		`peer c2 k3 "d2-2"`,
+	})
+}
+
+// TestOutputlessCall (F4): a delegate_task call with no output stops
+// its run at the next turn, so a later call's child is the later
+// call's.
+func TestOutputlessCall(t *testing.T) {
+	res := convertScript(t, `
+INSERT INTO sessions (id, source, model, started_at) VALUES ('oc', 'cli', 'm', 1760000000.0);
+INSERT INTO sessions (id, source, model, model_config, parent_session_id, started_at) VALUES ('kx', 'subagent', 'm', '{"_delegate_from":"oc"}', 'oc', 1760000201.0);
+INSERT INTO messages (session_id, role, content, tool_calls, tool_call_id, timestamp) VALUES
+  ('oc', 'user', 'go', NULL, NULL, 1760000001.0),
+  ('oc', 'assistant', '', '[{"id":"c1","call_id":"c1","type":"function","function":{"name":"delegate_task","arguments":"{\"goal\":\"x\"}"}}]', NULL, 1760000100.0),
+  ('oc', 'user', 'again', NULL, NULL, 1760000150.0),
+  ('oc', 'assistant', '', '[{"id":"c2","call_id":"c2","type":"function","function":{"name":"delegate_task","arguments":"{\"goal\":\"x\"}"}}]', NULL, 1760000200.0),
+  ('oc', 'tool', '{"results":[]}', NULL, 'c2', 1760000210.0),
+  ('kx', 'user', 'x', NULL, NULL, 1760000201.5);
+`, Options{})
+	sameLines(t, "links", links(sessionOf(t, res, "oc")), []string{"subsession c2 " + agentsession.SubsessionID("oc", "c2")})
+	if n := codes(res.Report)["hermes/subagent-unlinked"]; n != 0 {
+		t.Errorf("%d unlinked sub-agents", n)
+	}
+}
