@@ -140,3 +140,34 @@ session 0 20261002_090000_bb0002
     output call_7 a.txt
     assistant: There is a.txt.
     user: eight
+  request of row-20:
+    user: one
+    reasoning text I think about one.
+    assistant: Answer one.
+    user: two
+    reasoning text Plain reasoning text.
+    assistant: Answer two.
+    user: three
+    reasoning Thinking about three. [encrypted]
+    anthropic.redacted_thinking
+    assistant: Answer three.
+    user: four
+    reasoning Text four. [encrypted]
+    reasoning Summary four.
+    reasoning [encrypted]
+    assistant: Answer four.
+    user: five
+    reasoning text Native five.
+    assistant: Answer five.
+    user: six
+    reasoning Summary six. [encrypted]
+    assistant: Answer six.
+    user: seven
+    reasoning [encrypted]
+    call call_7 terminal
+    output call_7 a.txt
+    assistant: There is a.txt.
+    user: eight
+    reasoning text Unsigned eight.
+    assistant: Answer eight.
+    user: nine

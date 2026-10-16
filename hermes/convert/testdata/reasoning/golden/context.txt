@@ -29,3 +29,6 @@ session 0 20261002_090000_bb0002
   user: eight
   reasoning text Unsigned eight.
   assistant: Answer eight.
+  user: nine
+  reasoning text Bare nine.
+  assistant: Answer nine.

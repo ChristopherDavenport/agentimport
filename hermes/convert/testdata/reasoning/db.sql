@@ -5,8 +5,8 @@
 -- OpenRouter's reasoning.text, reasoning.summary and
 -- reasoning.encrypted, a provider's native carrier no item holds, the
 -- Codex route's Responses items with a phase, and a Gemini thought
--- signature on a tool call, and an unsigned reasoning.text. Written by
--- hand.
+-- signature on a tool call, an unsigned reasoning.text and an unsigned
+-- thinking block. Written by hand.
 INSERT INTO sessions (id, source, model, started_at, cwd) VALUES ('20261002_090000_bb0002', 'tui', 'deepseek/deepseek-v4', 1759395600.0, '/work/r');
 INSERT INTO messages (session_id, role, content, timestamp) VALUES ('20261002_090000_bb0002', 'user', 'one', 1759395601.0);
 INSERT INTO messages (session_id, role, content, reasoning, reasoning_content, timestamp, finish_reason) VALUES ('20261002_090000_bb0002', 'assistant', 'Answer one.', ' ', 'I think about one.', 1759395602.0, 'stop');
@@ -35,3 +35,7 @@ INSERT INTO messages (session_id, role, content, timestamp, finish_reason) VALUE
 INSERT INTO messages (session_id, role, content, timestamp) VALUES ('20261002_090000_bb0002', 'user', 'eight', 1759395617.0);
 INSERT INTO messages (session_id, role, content, reasoning, reasoning_content, reasoning_details, timestamp, finish_reason) VALUES ('20261002_090000_bb0002', 'assistant', 'Answer eight.', 'Unsigned eight.', 'Unsigned eight.',
   '[{"type":"reasoning.text","text":"Unsigned eight.","format":"unknown","index":0}]', 1759395618.0, 'stop');
+-- An Anthropic thinking block that carries no signature.
+INSERT INTO messages (session_id, role, content, timestamp) VALUES ('20261002_090000_bb0002', 'user', 'nine', 1759395619.0);
+INSERT INTO messages (session_id, role, content, reasoning, reasoning_details, timestamp, finish_reason) VALUES ('20261002_090000_bb0002', 'assistant', 'Answer nine.', 'Bare nine.',
+  '[{"type":"thinking","thinking":"Bare nine."}]', 1759395620.0, 'stop');
