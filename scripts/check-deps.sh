@@ -2,7 +2,8 @@
 # Holds the module to its dependency rule: every package builds from
 # agentsession, openresponses, the standard library and this module
 # alone, with one exception. A package named sqlite (opencode/sqlite,
-# clinesdk/sqlite, and internal/sqlite, the copy-then-read they share)
+# clinesdk/sqlite, hermes/sqlite, and internal/sqlite, the copy-then-read
+# they share)
 # may import modernc.org/sqlite, a SQLite written in Go, and what that
 # imports in turn; no other package may import either, and none but the
 # command may depend on a sqlite package at any depth, so the format

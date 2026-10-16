@@ -2,7 +2,7 @@
 
 Converters from other coding agents' session logs into the Agent
 Session Format: Claude Code, pi, Codex, ATIF, Cline and Roo, the Cline
-SDK, OpenHands and OpenCode today. Each source is a
+SDK, OpenHands, OpenCode and Hermes Agent today. Each source is a
 format package that reads the native log as it is, and a `convert`
 package that turns it into `agentsession` sessions and reports every
 difference. The design is `docs/plans/agentimport.md`; read it before
@@ -22,8 +22,9 @@ decisions they settled, and what is known of the candidates.
   `modernc.org/sqlite` (SQLite in Go, no cgo), and what it imports, to
   read OpenCode's database, which keeps its sessions in SQLite since
   1.2 and is in WAL mode while OpenCode runs, and Cline's index,
-  `sessions.db` (`opencode/sqlite`, `clinesdk/sqlite`, and
-  `internal/sqlite`, the copy-then-read both use); a
+  `sessions.db`, and Hermes Agent's `state.db` (`opencode/sqlite`,
+  `clinesdk/sqlite`, `hermes/sqlite`, and
+  `internal/sqlite`, the copy-then-read they all use); a
   hand-written reader of pages, records and the log would be a second
   SQLite to get right. No other package may import a driver, the
   convert packages included (they take the opener in their Options).
