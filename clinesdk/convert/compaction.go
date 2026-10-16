@@ -188,13 +188,8 @@ func (sc *sconv) writeCompaction() error {
 	if tb, ok := tokensBefore(sm[0]); ok {
 		e.TokensBefore = tb
 	}
-	if !sc.fam.opts.Slim {
-		raw, err := sc.clean(0, sm[0].Metadata)
-		if err == nil && len(raw) > 0 && !clinesdk.IsNull(raw) {
-			if err := sc.b.Member(e, "summary_metadata", raw); err != nil {
-				return err
-			}
-		}
+	if err := sc.sidecarMembers(e, plan); err != nil {
+		return err
 	}
 	if _, err := sc.appendEntry(e); err != nil {
 		return err
@@ -234,6 +229,53 @@ func (sc *sconv) writeCompaction() error {
 		}
 	}
 	sc.project(c.Messages)
+	return nil
+}
+
+// sidecarMembers keeps what the compaction entry has no place for: the
+// sidecar's envelope, and the members of the summary and the pinned
+// messages beside their role and content, as clinesdk:sidecar.
+func (sc *sconv) sidecarMembers(e *agentsession.CompactionEntry, plan *compPlan) error {
+	c := plan.c
+	if sc.fam.opts.Slim {
+		sc.addf(agentimport.Dropped, "clinesdk/members", c.Name, 0, "the sidecar's envelope and its messages' members the compaction has no place for are left out")
+		return nil
+	}
+	g := *c
+	g.HasMessages, g.Messages = false, nil
+	raw, err := json.Marshal(g)
+	if err != nil {
+		return err
+	}
+	var env map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &env); err != nil {
+		return err
+	}
+	var rests []map[string]json.RawMessage
+	for _, m := range c.Messages[:1+len(plan.pinned)] {
+		rest, err := messageRest(m)
+		if err != nil {
+			return err
+		}
+		if rest == nil {
+			rest = map[string]json.RawMessage{}
+		}
+		rests = append(rests, rest)
+	}
+	if raw, err = json.Marshal(rests); err != nil {
+		return err
+	}
+	env["messages"] = raw
+	if raw, err = json.Marshal(env); err != nil {
+		return err
+	}
+	if raw, err = sc.clean(0, raw); err != nil {
+		return err
+	}
+	if err := sc.b.Member(e, "sidecar", json.RawMessage(raw)); err != nil {
+		return err
+	}
+	sc.addf(agentimport.Kept, "clinesdk/members", c.Name, 0, "the sidecar's envelope, and its summary's and pinned messages' members, are %s:sidecar", Source)
 	return nil
 }
 

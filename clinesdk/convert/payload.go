@@ -618,7 +618,12 @@ func (sc *sconv) assistant(k int, m *clinesdk.Message, ts time.Time) error {
 	}
 	var texts []string
 	var calls []*call
-	for _, b := range m.Blocks() {
+	blocks := m.Blocks()
+	if m.Content.IsText && clinesdk.Trim(m.Content.Text) == "" {
+		// Cline reads a blank string as no content.
+		blocks = nil
+	}
+	for _, b := range blocks {
 		if b.Err != nil {
 			sc.at(agentimport.Dropped, "clinesdk/null-block", k, "a content block that is not an object is left out")
 			continue
@@ -683,7 +688,7 @@ func (sc *sconv) assistant(k int, m *clinesdk.Message, ts time.Time) error {
 		return err
 	}
 	sc.written(k, id)
-	if len(m.Blocks()) == 0 {
+	if len(blocks) == 0 {
 		sc.at(agentimport.Lossy, "clinesdk/empty-message", k, "an assistant message with no content is a response with no items; Cline sends %q in its place", emptyContent)
 	}
 	sc.pending = calls
