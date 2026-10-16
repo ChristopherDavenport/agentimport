@@ -342,6 +342,7 @@ every converter can report are in [README.md](README.md).
 | `cline/range-invalid` | lossy | A deleted range that is not two counts in order is ignored. |
 | `cline/rejection` | lossy | A refused call: a reject decision precedes its output. |
 | `cline/result-malformed` | lossy | A tool result whose content is neither text nor blocks is an empty output. |
+| `cline/results-reordered` | lossy | Classic tool results stood in another order than the calls; they are written in the calls' order, as Cline sends them. |
 | `cline/results-first` | lossy | A user message held content before its tool results; the outputs are written first, as sent. |
 | `cline/rewound` | lossy | A checkpoint restore deleted messages here; nothing of them can be recovered. |
 | `cline/roo-condense` | lossy | A Roo summary, its era guessed: a compaction as that release sent it. |

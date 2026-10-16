@@ -314,9 +314,16 @@ func TestRejection(t *testing.T) {
 			got = append(got, d.CallID+" "+d.Verdict+" "+d.By+" "+d.Reason)
 		}
 	}
+	// Cline writes "[tool for 'x'] Result:" before the refusal, the
+	// feedback in a text block before the result, a permission or
+	// .clineignore refusal inside a tool error, and a text block for a
+	// call it skipped after the user rejected an earlier one.
 	want := []string{
 		"call_a reject human No, keep build.",
-		"call_b reject policy Access to .env is blocked by the .clineignore file settings. You must try to continue in the task without using this file, or ask the user to update the .clineignore file.",
+		"call_b reject policy The tool execution failed with the following error:\n<error>\nAccess to .env is blocked by the .clineignore file settings. You must try to continue in the task without using this file, or ask the user to update the .clineignore file.\n</error>",
+		"call_p reject policy The tool execution failed with the following error:\n<error>\nCommand execution blocked by CLINE_COMMAND_PERMISSIONS: curl is not allowed. You must try a different approach or ask the user to update the permission settings.\n</error>",
+		"call_e reject human The user denied this operation.",
+		"call_f reject human Skipping tool due to user rejecting a previous tool. [read_file for 'b.go']",
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("decisions:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
@@ -377,5 +384,23 @@ func TestVariant(t *testing.T) {
 		if guessed := name == "roo-reasoning"; task.Guessed != guessed {
 			t.Errorf("%s: guessed %v (%s)", name, task.Guessed, task.VariantBy)
 		}
+	}
+}
+
+// TestResultOrder checks classic results are written in the order of
+// the calls, as Cline sends them, whatever order the message holds.
+func TestResultOrder(t *testing.T) {
+	s := convertFixture(t, fixtures(t)["classic-reject"], Options{}).Sessions[0]
+	var got []string
+	for _, e := range s.Path(s.Leaf()) {
+		if ie, ok := e.(*agentsession.ItemEntry); ok {
+			if out, ok := ie.Item.(*openresponses.FunctionCallOutput); ok {
+				got = append(got, out.CallID)
+			}
+		}
+	}
+	want := []string{"call_a", "call_b", "call_c", "call_p", "call_d", "call_e", "call_f"}
+	if !slices.Equal(got, want) {
+		t.Errorf("outputs %v, want %v", got, want)
 	}
 }

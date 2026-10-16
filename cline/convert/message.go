@@ -115,24 +115,51 @@ func (c *conv) user(k int, m *cline.Message) error {
 	}
 	var results, rest []*cline.Block
 	var restIdx []int
+	// at is each tool result's index in the message, and feedback the
+	// text blocks carrying the user's feedback on an approval, by index.
+	at := map[*cline.Block]int{}
+	var feedback []int
 	textFirst := false
 	if m.Content.IsText {
 		rest = append(rest, &cline.Block{Type: cline.BlockText, Text: m.Content.Text})
 		restIdx = append(restIdx, -1)
 	}
+	skip := ""
 	for i, b := range m.Content.Blocks {
 		if b.Err == nil && b.Type == cline.BlockToolResult {
 			if len(rest) > 0 {
 				textFirst = true
 			}
 			results = append(results, b)
+			at[b] = i
 			continue
+		}
+		if b.Err == nil && b.Type == cline.BlockText {
+			switch {
+			case strings.HasPrefix(b.Text, feedbackPrefix):
+				feedback = append(feedback, i)
+			case skip == "" && (strings.HasPrefix(b.Text, skipRejected) || strings.HasPrefix(b.Text, skipInterrupted)):
+				skip = b.Text
+			}
 		}
 		rest = append(rest, b)
 		restIdx = append(restIdx, i)
 	}
 	if textFirst {
 		c.apiAt(agentimport.Lossy, "cline/results-first", k, "the message holds content before its tool results; the outputs are written first, as the request sends them")
+	}
+	// feedbackFor is the feedback the user gave on the call whose
+	// result stands at index i: the feedback block nearest before it.
+	feedbackFor := func(i int) string {
+		text := ""
+		for _, f := range feedback {
+			if f < i {
+				if mm := feedbackRE.FindStringSubmatch(m.Content.Blocks[f].Text); mm != nil {
+					text = strings.TrimSpace(mm[1])
+				}
+			}
+		}
+		return text
 	}
 	// The calls a request answers here: those of the response just
 	// before, when this message follows it.
@@ -149,21 +176,61 @@ func (c *conv) user(k int, m *cline.Message) error {
 		}
 		return c.keepMembers(e, k, "message", rest, "the message's")
 	}
-	for _, b := range results {
-		p := c.pending[b.ToolUseID]
-		if p == nil || p.output {
-			if err := c.orphan(k, b, ts, setMembers); err != nil {
+	if !c.roo && follows {
+		// Classic sends the results in the order of the calls, each
+		// call's last result, and "result missing" for a call with none
+		// (ContextManager.ensureToolResultsFollowToolUse).
+		last := map[string]*cline.Block{}
+		for _, b := range results {
+			if p := c.pending[b.ToolUseID]; p != nil && !p.output {
+				last[b.ToolUseID] = b
+			}
+		}
+		var matched []*cline.Block
+		for _, p := range c.calls {
+			if c.pending[p.native] != p || p.output {
+				continue
+			}
+			b := last[p.native]
+			if b == nil {
+				if err := c.missingResult(k, p, ts, skip, setMembers); err != nil {
+					return err
+				}
+				continue
+			}
+			matched = append(matched, b)
+			if err := c.result(k, m, b, p, ts, feedbackFor(at[b]), setMembers); err != nil {
 				return err
 			}
-			continue
 		}
-		if err := c.result(k, m, b, p, ts, setMembers); err != nil {
-			return err
+		inOrder := true
+		for i := 1; i < len(matched); i++ {
+			if at[matched[i]] < at[matched[i-1]] {
+				inOrder = false
+			}
 		}
-	}
-	if !c.roo && follows {
-		if err := c.missingResults(k, ts, setMembers); err != nil {
-			return err
+		if !inOrder {
+			c.apiAt(agentimport.Lossy, "cline/results-reordered", k, "the tool results stand in another order than the calls; they are written in the calls' order, as Cline sends them")
+		}
+		for _, b := range results {
+			if !slices.Contains(matched, b) {
+				if err := c.orphan(k, b, ts, setMembers); err != nil {
+					return err
+				}
+			}
+		}
+	} else {
+		for _, b := range results {
+			p := c.pending[b.ToolUseID]
+			if p == nil || p.output {
+				if err := c.orphan(k, b, ts, setMembers); err != nil {
+					return err
+				}
+				continue
+			}
+			if err := c.result(k, m, b, p, ts, feedbackFor(at[b]), setMembers); err != nil {
+				return err
+			}
 		}
 	}
 	if len(rest) > 0 {
@@ -239,9 +306,9 @@ func (c *conv) orphan(k int, b *cline.Block, ts time.Time, setMembers func(agent
 // result writes a tool result: a reject decision when it refuses the
 // call, the link to the sub-task a new_task call waited for, and the
 // output.
-func (c *conv) result(k int, m *cline.Message, b *cline.Block, p *call, ts time.Time, setMembers func(agentsession.Entry) error) error {
+func (c *conv) result(k int, m *cline.Message, b *cline.Block, p *call, ts time.Time, feedback string, setMembers func(agentsession.Entry) error) error {
 	text := resultText(b)
-	if by, reason, ok := refusal(text, b.IsError); ok {
+	if by, reason, ok := refusal(text, feedback); ok {
 		d := agentsession.NewDecision(p.id, p.entry, agentsession.VerdictReject, by).WithReason(reason)
 		d.Timestamp = ts
 		id, err := c.appendEntry(d)
@@ -297,30 +364,37 @@ func (c *conv) result(k int, m *cline.Message, b *cline.Block, p *call, ts time.
 	return nil
 }
 
-// missingResults writes the output Cline puts in a request for each
-// call of the response before that this message does not answer.
-func (c *conv) missingResults(k int, ts time.Time, setMembers func(agentsession.Entry) error) error {
-	for _, p := range c.calls {
-		if p.output {
-			continue
-		}
-		out := &openresponses.FunctionCallOutput{CallID: p.id, Output: openresponses.FunctionCallOutputData{Text: resultMissingText}}
-		e := itemEntry(out, ts)
-		if err := c.b.Member(e, "synthesized", true); err != nil {
-			return err
-		}
-		if err := setMembers(e); err != nil {
-			return err
-		}
-		id, err := c.appendEntry(e)
+// missingResult writes the output Cline puts in a request for a call
+// of the response before that this message does not answer: "result
+// missing", after a reject decision when Cline skipped the call
+// because the user rejected an earlier one.
+func (c *conv) missingResult(k int, p *call, ts time.Time, skip string, setMembers func(agentsession.Entry) error) error {
+	if skip != "" {
+		d := agentsession.NewDecision(p.id, p.entry, agentsession.VerdictReject, agentsession.ByHuman).WithReason(strings.TrimSpace(skip))
+		d.Timestamp = ts
+		id, err := c.appendEntry(d)
 		if err != nil {
 			return err
 		}
-		p.output = true
-		c.written(k, id, out)
-		c.outputs[k] = append(c.outputs[k], id)
-		c.apiAt(agentimport.Repaired, "cline/result-missing", k, "no tool result answers call %s (%s); Cline sends %q in its place, which is written, marked %s:synthesized", p.id, p.name, resultMissingText, Source)
+		c.written(k, id, nil)
+		c.apiAt(agentimport.Lossy, "cline/rejection", k, "Cline skipped call %s (%s) after the user rejected an earlier one; a reject decision by human precedes its output", p.id, p.name)
 	}
+	out := &openresponses.FunctionCallOutput{CallID: p.id, Output: openresponses.FunctionCallOutputData{Text: resultMissingText}}
+	e := itemEntry(out, ts)
+	if err := c.b.Member(e, "synthesized", true); err != nil {
+		return err
+	}
+	if err := setMembers(e); err != nil {
+		return err
+	}
+	id, err := c.appendEntry(e)
+	if err != nil {
+		return err
+	}
+	p.output = true
+	c.written(k, id, out)
+	c.outputs[k] = append(c.outputs[k], id)
+	c.apiAt(agentimport.Repaired, "cline/result-missing", k, "no tool result answers call %s (%s); Cline sends %q in its place, which is written, marked %s:synthesized", p.id, p.name, resultMissingText, Source)
 	return nil
 }
 
@@ -345,6 +419,17 @@ var (
 	subtaskPending = regexp.MustCompile(`^Delegated to child task (\S+)`)
 	xmlResult      = regexp.MustCompile(`^\[[a-z_]+(?: for [^\]]*)?\] Result:`)
 	feedbackRE     = regexp.MustCompile(`(?s)<feedback>\n?(.*?)\n?</feedback>`)
+	// description is the "[tool for 'x'] Result:" line Cline puts before
+	// a string tool result (ToolResultUtils.pushToolResult).
+	description = regexp.MustCompile(`^\[[^\]\n]*\] Result:\n`)
+)
+
+// Texts classic Cline writes around a refusal.
+const (
+	feedbackPrefix  = "The user provided the following feedback:"
+	skipRejected    = "Skipping tool due to user rejecting a previous tool."
+	skipInterrupted = "Tool was interrupted and not executed due to user rejecting a previous tool."
+	userDenied      = "The user denied this operation."
 )
 
 // resultText is what a tool result says, as text.
@@ -365,18 +450,22 @@ func resultText(b *cline.Block) string {
 }
 
 // refusal reports whether a tool result says the call was refused, by
-// whom and why: the user's denial (Cline's text, Roo's JSON), a
-// command permission, or an ignore file.
-func refusal(text string, isError bool) (by, reason string, ok bool) {
-	t := strings.TrimSpace(text)
+// whom and why: the user's denial (Cline's text after the tool's
+// description, Roo's JSON), a command permission, or an ignore file.
+// feedback is what the user wrote when refusing, which classic Cline
+// puts in a text block before the result.
+func refusal(text, feedback string) (by, reason string, ok bool) {
+	t := strings.TrimSpace(description.ReplaceAllString(strings.TrimSpace(text), ""))
 	switch {
-	case strings.HasPrefix(t, "The user denied this operation."):
-		reason = "The user denied this operation."
+	case strings.HasPrefix(t, userDenied):
+		reason = userDenied
 		if f := feedbackRE.FindStringSubmatch(t); f != nil {
 			reason = strings.TrimSpace(f[1])
+		} else if feedback != "" {
+			reason = feedback
 		}
 		return agentsession.ByHuman, reason, true
-	case strings.HasPrefix(t, "Command execution blocked by CLINE_COMMAND_PERMISSIONS"):
+	case strings.Contains(t, "Command execution blocked by CLINE_COMMAND_PERMISSIONS"):
 		return agentsession.ByPolicy, t, true
 	case strings.Contains(t, "is blocked by the .clineignore file settings"):
 		return agentsession.ByPolicy, t, true
@@ -397,7 +486,7 @@ func refusal(text string, isError bool) (by, reason string, ok bool) {
 				reason = j.Message
 			}
 			if reason == "" {
-				reason = "The user denied this operation."
+				reason = userDenied
 			}
 			return agentsession.ByHuman, reason, true
 		case j.Status == "error" && j.Type == "access_denied":
