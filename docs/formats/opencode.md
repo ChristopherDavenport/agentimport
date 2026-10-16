@@ -416,6 +416,7 @@ every converter can report are in [README.md](README.md).
 | `opencode/subagent-peer` | lossy | A sub-agent that outlives its calls, a peer. |
 | `opencode/subagent-unlinked` | lossy | A child session linked to no call. |
 | `opencode/subtask` | lossy | A user subtask: OpenCode sends a fixed text and runs the task tool itself. |
+| `opencode/synthetic-text` | kept | Text OpenCode wrote into a user message, sent with it, marked `opencode:synthetic`. |
 | `opencode/system-prompt` | dropped | The system prompt and tool list are not stored. |
 | `opencode/text-space` | lossy | An empty text beside signed reasoning, sent as a space. |
 | `opencode/tool-output-pruned` | lossy | A pruned output stays as first sent. |

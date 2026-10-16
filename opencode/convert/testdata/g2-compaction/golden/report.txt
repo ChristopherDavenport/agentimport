@@ -11,4 +11,5 @@ opencode: 114 records: mapped 114 kept 0 dropped 0 malformed 0
   lossy    opencode/version-resumed                          1  the session was created by 1.10.0, which keeps no tail after a compaction, but a compaction names one, so a later release resumed it; the compaction is read as 1.14.40 and later read it, the tail after the summary
   kept     opencode/members                                 62  kept in opencode:message
   kept     opencode/session-record                           4  the session record's members the header has no place for are in the header's opencode:session member
+  kept     opencode/synthetic-text                           1  text OpenCode wrote into the user's message, which it sends with it; the item entry carries opencode:synthetic
   kept     opencode/usage-member                            17  the cost and the total OpenCode records with the usage are in opencode:usage

@@ -9,4 +9,5 @@ opencode: 87 records: mapped 87 kept 0 dropped 0 malformed 0
   kept     opencode/members                                 41  kept in opencode:message
   kept     opencode/session-record                           8  the session record's members the header has no place for are in the header's opencode:session member
   kept     opencode/subagent                                 2  the call ran sub-agent session ses_kid1 in the foreground and alone; it is a subsession, linked before the call's output
+  kept     opencode/synthetic-text                           2  text OpenCode wrote into the user's message, which it sends with it; the item entry carries opencode:synthetic
   kept     opencode/usage-member                            13  the cost and the total OpenCode records with the usage are in opencode:usage

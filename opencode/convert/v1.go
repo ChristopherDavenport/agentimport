@@ -298,6 +298,7 @@ func (v *v1walk) user(i int) error {
 			}
 			content = append(content, &openresponses.InputText{Text: pt.Text})
 			if pt.Synthetic {
+				sc.addf(agentimport.Kept, "opencode/synthetic-text", p.Unit, "text OpenCode wrote into the user's message, which it sends with it; the item entry carries %s:synthetic", Source)
 				synthetic = true
 				if id := taskResult(pt.Text); id != "" {
 					result = id

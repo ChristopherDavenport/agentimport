@@ -19,5 +19,6 @@ opencode: 39 records: mapped 31 kept 7 dropped 1 malformed 0
   kept     opencode/message-empty                            1  a user message with no part OpenCode sends is not in context
   kept     opencode/session-record                           1  the session record's members the header has no place for are in the header's opencode:session member
   kept     opencode/step-part                                2  a part of type patch is not sent; it is kept in opencode:parts
+  kept     opencode/synthetic-text                           1  text OpenCode wrote into the user's message, which it sends with it; the item entry carries opencode:synthetic
   kept     opencode/unsent-part                              1  a part of type agent, which OpenCode does not send in a user message; it is kept in opencode:unsent
   kept     opencode/usage-member                             1  the cost and the total OpenCode records with the usage are in opencode:usage
