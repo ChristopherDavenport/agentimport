@@ -326,3 +326,38 @@ INSERT INTO messages (session_id, role, content, tool_calls, tool_call_id, times
 		t.Errorf("%d hermes/sanitized-content findings, want 3", n)
 	}
 }
+
+// TestRequestPasses (F7): an assistant turn of reasoning alone is left
+// out of every request after it, as drop_thinking_only_and_merge_users
+// leaves it out of each request's copy; an empty turn, which
+// repair_empty_non_final_messages sends as a placeholder once it is not
+// the last, is reported.
+func TestRequestPasses(t *testing.T) {
+	res := convertScript(t, `
+INSERT INTO sessions (id, source, model, started_at) VALUES ('rp', 'cli', 'm', 1760000000.0);
+INSERT INTO messages (session_id, role, content, reasoning_content, timestamp) VALUES
+  ('rp', 'user', 'one', NULL, 1760000001.0),
+  ('rp', 'assistant', '', 'thinking', 1760000002.0),
+  ('rp', 'user', 'two', NULL, 1760000003.0),
+  ('rp', 'assistant', '', NULL, 1760000004.0),
+  ('rp', 'user', 'three', NULL, 1760000005.0),
+  ('rp', 'assistant', 'done', NULL, 1760000006.0);
+`, Options{})
+	s := sessionOf(t, res, "rp")
+	sameLines(t, "leaf", leaf(t, s), []string{"user: one", "user: two", "assistant: ", "user: three", "assistant: done"})
+	for _, e := range s.Entries() {
+		r, ok := e.(*agentsession.ResponseEntry)
+		if !ok || r.ResponseID != "row-4" {
+			continue
+		}
+		c, err := s.RequestContext(r.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sameLines(t, "request of row-4", renderItems(c.Items), []string{"user: one", "user: two"})
+	}
+	got := codes(res.Report)
+	if got["hermes/thinking-only"] != 1 || got["hermes/empty-turn"] != 1 {
+		t.Errorf("findings %v", got)
+	}
+}

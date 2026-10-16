@@ -183,6 +183,17 @@ history:
   names the latest call of its alias, as Hermes sent it then. Hermes
   also merges consecutive user turns and consecutive assistant turns;
   that is reported, not done.
+- **Per-request passes.** Each request's copy also drops an assistant
+  turn whose only payload is reasoning (no text, no calls)
+  (`drop_thinking_only_and_merge_users`): the converter leaves its
+  reasoning out by `omit` from every request after it
+  (`hermes/thinking-only`); a turn of Codex reasoning items alone is
+  dropped only off the Codex route, which the row does not record, and
+  is reported and kept. An empty user or assistant turn that is not the
+  request's last is sent as `[interrupt: no assistant output for this
+  turn]` (`repair_empty_non_final_messages`); the item stays empty and
+  `hermes/empty-turn` reports it. The users a dropped turn leaves side
+  by side, which the pass merges, are not merged.
 - **Not reproduced.** What Hermes adds per request and does not store:
   the ephemeral system prompt, prefill messages, per-turn notes, the
   gateway's timestamps on user text and a Telegram channel's block of
@@ -427,6 +438,7 @@ finding:
 | `hermes/denial-text` | lossy | An output carrying the approval gate's refusal; a reject decision, told by the text. |
 | `hermes/display-index` | dropped | `display_identity` and `display_order`, the display index Hermes derives from a row's other columns, are not kept. |
 | `hermes/duplicate-session` | dropped | A second row of one session ID. |
+| `hermes/empty-turn` | lossy | An empty user or assistant turn, which Hermes sends as a placeholder once a message follows it; the item stays empty. |
 | `hermes/inactive-rows` | lossy | Runs of rows out of context (rewound, superseded, deactivated), each a branch. |
 | `hermes/malformed` | repaired | A row that cannot be read (no id, no role) is skipped. |
 | `hermes/members` | kept | Native values kept in a namespaced member, or dropped under `Slim`. |
@@ -458,6 +470,7 @@ finding:
 | `hermes/system-prompt` | lossy | The instructions are the stored system prompt; what Hermes adds per request is not stored. Dropped when the row has none. |
 | `hermes/system-prompt-missing` | lossy | The session names a system prompt hash `system_prompts` does not hold. |
 | `hermes/system-row` | lossy | A system row is in context where it stands; the gateway's replay leaves it out. |
+| `hermes/thinking-only` | lossy | An assistant turn of reasoning alone, left out by `omit` from every request after it as Hermes drops it from each request's copy; or, of Codex items alone, kept, as only the route decides. |
 | `hermes/tools` | dropped | Hermes stores no tool definitions. |
 | `hermes/unanswered-call` | repaired | A call with no output in the context at the leaf, left out there by `omit`. |
 | `hermes/unknown-role` | kept | A row of a role Hermes' readers do not send, a custom entry. |

@@ -552,6 +552,9 @@ func (w *walk) user(i int) error {
 		used = append(used, "_compressed_summary")
 	}
 	w.used = used
+	if !m.Content.Structured && msg.Text() == "" && !m.HasAPIContent {
+		sc.addf(agentimport.Lossy, "hermes/empty-turn", m.Unit, "an empty user turn: once a message follows it, Hermes sends %q in its place in each request's copy (repair_empty_non_final_messages); the item stays empty", emptyPlaceholder)
+	}
 	if _, _, err := w.item(msg, m, "", visible(m), nil); err != nil {
 		return err
 	}

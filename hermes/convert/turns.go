@@ -82,8 +82,14 @@ func (w *walk) assistant(i int) error {
 		case text != "":
 			msg = openresponses.AssistantText(text)
 		case len(m.ToolCalls) == 0 && len(r.items) == 0:
-			// Hermes sends the empty turn as it is.
+			// The turn is empty, and so was the model's output. Once a
+			// later message follows it, each request sends a placeholder
+			// in its place (repair_empty_non_final_messages), which the
+			// item cannot become.
 			msg = openresponses.AssistantText("")
+			if len(m.CodexMessageItems) == 0 && len(m.CodexReasoningItems) == 0 {
+				sc.addf(agentimport.Lossy, "hermes/empty-turn", m.Unit, "an empty assistant turn: once a message follows it, Hermes sends %q in its place in each request's copy (repair_empty_non_final_messages); the item stays empty", emptyPlaceholder)
+			}
 		}
 	}
 	if msg != nil {
@@ -100,9 +106,10 @@ func (w *walk) assistant(i int) error {
 	}
 	w.used = used
 
+	var reasoningEntries []string
 	for k, it := range r.items {
 		k, it := k, it
-		_, _, err := w.item(it, m, respID, nil, func(e *agentsession.ItemEntry) error {
+		id, e, err := w.item(it, m, respID, nil, func(e *agentsession.ItemEntry) error {
 			if ri, ok := it.(*openresponses.ReasoningItem); ok && ri.EncryptedContent != "" || it.ItemType() == "anthropic.redacted_thinking" || it.ItemType() == openresponses.ItemTypeCompaction {
 				if err := sc.b.Member(e, "provider", r.providers[k]); err != nil {
 					return err
@@ -115,6 +122,9 @@ func (w *walk) assistant(i int) error {
 		})
 		if err != nil {
 			return err
+		}
+		if e != nil {
+			reasoningEntries = append(reasoningEntries, id)
 		}
 		if it.ItemType() == openresponses.ItemTypeCompaction {
 			sc.addf(agentimport.Lossy, "hermes/native-compaction", m.Unit, "a provider's compaction item Hermes keeps among the reasoning items; it replays only to a request that carries context management, and it is in context here")
@@ -199,8 +209,40 @@ func (w *walk) assistant(i int) error {
 		}
 		w.rowKept = true
 	}
-	_, err := sc.append(resp)
-	return err
+	if _, err := sc.append(resp); err != nil {
+		return err
+	}
+	return w.thinkingOnly(m, msg, reasoningEntries)
+}
+
+// emptyPlaceholder is the text Hermes sends for an empty turn that is
+// not the request's last (agent/agent_runtime_helpers_placeholders.py
+// _INTERRUPTED_PLACEHOLDER).
+const emptyPlaceholder = "[interrupt: no assistant output for this turn]"
+
+// thinkingOnly leaves out of every later request an assistant turn
+// whose only payload is reasoning, as each request's copy drops it
+// (drop_thinking_only_and_merge_users, AIAgent._is_thinking_only_assistant):
+// no tool calls, no text, and reasoning text or reasoning_details. A
+// turn of Codex reasoning items alone is dropped only off the Codex
+// route, which the row does not record; it is reported and kept.
+func (w *walk) thinkingOnly(m *hermes.Message, msg *openresponses.Message, entries []string) error {
+	sc := w.sc
+	if len(m.ToolCalls) > 0 || msg != nil && strings.TrimSpace(msg.Text()) != "" || len(entries) == 0 {
+		return nil
+	}
+	rc := m.ReasoningContent != nil && strings.TrimSpace(*m.ReasoningContent) != ""
+	if !rc && m.Reasoning == "" && len(splitArray(m.ReasoningDetails)) == 0 {
+		sc.addf(agentimport.Lossy, "hermes/thinking-only", m.Unit, "an assistant turn of Codex reasoning items alone, which Hermes drops from each request's copy off the Codex route and keeps on it; the row does not say which route, and the turn stays in context")
+		return nil
+	}
+	cfg := &agentsession.ConfigEntry{Omit: &agentsession.Omit{Items: entries}}
+	cfg.Timestamp = m.Time
+	if _, err := sc.append(cfg); err != nil {
+		return err
+	}
+	sc.addf(agentimport.Lossy, "hermes/thinking-only", m.Unit, "an assistant turn of reasoning alone, which Hermes drops from each request's copy (drop_thinking_only_and_merge_users): left out by omit from every request after it; the user turns it leaves side by side, which Hermes then merges, are not merged")
+	return nil
 }
 
 // callRest is a tool call without the members a function call maps.
