@@ -232,9 +232,10 @@ func (e jsonErr) Error() string { return string(e) }
 // block (agent/transports/anthropic.py keeps the blocks there) to a
 // reasoning item, its text the summary and its signature in
 // encrypted_content, as providers/anthropic does, and redacted thinking
-// to an anthropic.redacted_thinking item; OpenRouter's reasoning.text,
-// reasoning.summary and reasoning.encrypted to a reasoning item of the
-// same members. Anything else, a provider's native carrier among them,
+// to an anthropic.redacted_thinking item; OpenRouter's reasoning.text
+// the same way; reasoning.summary to a summary and reasoning.encrypted
+// to encrypted_content. Thinking text that carries no signature is the
+// item's content. Anything else, a provider's native carrier among them,
 // is no item.
 func detailItem(raw json.RawMessage) (openresponses.Item, string, bool) {
 	var d struct {
@@ -256,15 +257,29 @@ func detailItem(raw json.RawMessage) (openresponses.Item, string, bool) {
 		}
 		return openresponses.Contents{&openresponses.SummaryText{Text: text}}
 	}
+	// Text a signature covers is a summary beside its encrypted_content,
+	// as providers/anthropic writes a thinking block; text no signature
+	// covers is the item's content, as openresponses/chatcompletions
+	// reads plain reasoning text and replays it.
+	text := func(t, sig string) *openresponses.ReasoningItem {
+		if sig != "" {
+			return &openresponses.ReasoningItem{Summary: summary(t), EncryptedContent: sig}
+		}
+		r := &openresponses.ReasoningItem{}
+		if t != "" {
+			r.Content = openresponses.Contents{&openresponses.ReasoningText{Text: t}}
+		}
+		return r
+	}
 	switch d.Type {
 	case "thinking":
-		return &openresponses.ReasoningItem{Summary: summary(d.Thinking), EncryptedContent: d.Signature}, "anthropic", true
+		return text(d.Thinking, d.Signature), "anthropic", true
 	case "redacted_thinking":
 		block, _ := json.Marshal(map[string]string{"type": "redacted_thinking", "data": d.Data})
 		item, _ := json.Marshal(map[string]json.RawMessage{"type": rawJSON("anthropic.redacted_thinking"), "block": block})
 		return &openresponses.UnknownItem{Type: "anthropic.redacted_thinking", Raw: item}, "anthropic", true
 	case "reasoning.text":
-		return &openresponses.ReasoningItem{Summary: summary(d.Text), EncryptedContent: d.Signature}, providerOf(d.Format), true
+		return text(d.Text, d.Signature), providerOf(d.Format), true
 	case "reasoning.summary":
 		return &openresponses.ReasoningItem{Summary: summary(d.Summary)}, providerOf(d.Format), true
 	case "reasoning.encrypted":

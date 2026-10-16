@@ -5,7 +5,8 @@
 -- OpenRouter's reasoning.text, reasoning.summary and
 -- reasoning.encrypted, a provider's native carrier no item holds, the
 -- Codex route's Responses items with a phase, and a Gemini thought
--- signature on a tool call. Written by hand.
+-- signature on a tool call, and an unsigned reasoning.text. Written by
+-- hand.
 INSERT INTO sessions (id, source, model, started_at, cwd) VALUES ('20261002_090000_bb0002', 'tui', 'deepseek/deepseek-v4', 1759395600.0, '/work/r');
 INSERT INTO messages (session_id, role, content, timestamp) VALUES ('20261002_090000_bb0002', 'user', 'one', 1759395601.0);
 INSERT INTO messages (session_id, role, content, reasoning, reasoning_content, timestamp, finish_reason) VALUES ('20261002_090000_bb0002', 'assistant', 'Answer one.', ' ', 'I think about one.', 1759395602.0, 'stop');
@@ -29,3 +30,8 @@ INSERT INTO messages (session_id, role, content, tool_calls, timestamp, finish_r
   '[{"id":"call_7","type":"function","function":{"name":"terminal","arguments":"{\"command\":\"ls\"}"},"extra_content":{"google":{"thought_signature":"dGhvdWdodC03"}}}]', 1759395614.0, 'tool_calls');
 INSERT INTO messages (session_id, role, content, tool_call_id, tool_name, timestamp) VALUES ('20261002_090000_bb0002', 'tool', 'a.txt', 'call_7', 'terminal', 1759395615.0);
 INSERT INTO messages (session_id, role, content, timestamp, finish_reason) VALUES ('20261002_090000_bb0002', 'assistant', 'There is a.txt.', 1759395616.0, 'stop');
+-- OpenRouter's reasoning.text for a model that signs nothing, beside
+-- the same text in reasoning and reasoning_content.
+INSERT INTO messages (session_id, role, content, timestamp) VALUES ('20261002_090000_bb0002', 'user', 'eight', 1759395617.0);
+INSERT INTO messages (session_id, role, content, reasoning, reasoning_content, reasoning_details, timestamp, finish_reason) VALUES ('20261002_090000_bb0002', 'assistant', 'Answer eight.', 'Unsigned eight.', 'Unsigned eight.',
+  '[{"type":"reasoning.text","text":"Unsigned eight.","format":"unknown","index":0}]', 1759395618.0, 'stop');

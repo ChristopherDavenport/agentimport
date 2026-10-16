@@ -26,3 +26,6 @@ session 0 20261002_090000_bb0002
   call call_7 terminal
   output call_7 a.txt
   assistant: There is a.txt.
+  user: eight
+  reasoning text Unsigned eight.
+  assistant: Answer eight.

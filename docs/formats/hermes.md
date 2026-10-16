@@ -306,10 +306,14 @@ Every column of `messages` at schema version 31:
     reasoning item, its text the summary and its signature in
     `encrypted_content`, `redacted_thinking` an
     `anthropic.redacted_thinking` item, as `providers/anthropic` maps
-    them; OpenRouter's `reasoning.text`, `reasoning.summary` and
-    `reasoning.encrypted` a reasoning item of the same members; a
-    provider's native carrier (`*.native_assistant`) no item, kept in the
-    row's columns;
+    them; OpenRouter's `reasoning.text` the same way when it carries a
+    signature, `reasoning.summary` a summary and `reasoning.encrypted`
+    `encrypted_content`; thinking text no signature covers (an unsigned
+    `reasoning.text`, as OpenRouter writes for most models, or an
+    unsigned `thinking` block) is the item's `content`, as
+    `openresponses/chatcompletions` reads plain reasoning text and
+    replays it; a provider's native carrier (`*.native_assistant`) is
+    no item, kept in the row's columns;
   - else the text, `reasoning_content` when not blank, else
     `reasoning`, as a reasoning item's `content`, as
     `openresponses/chatcompletions` reads a chat-completions response.

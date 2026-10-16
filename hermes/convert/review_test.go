@@ -106,3 +106,26 @@ func TestCopiedResponses(t *testing.T) {
 		}
 	}
 }
+
+// TestUnsignedReasoningText (F21): reasoning text no signature
+// covers, OpenRouter's reasoning.text without one and the plain text
+// columns, is a reasoning item's content, as
+// openresponses/chatcompletions reads plain reasoning; signed Anthropic
+// thinking keeps its summary and encrypted_content.
+func TestUnsignedReasoningText(t *testing.T) {
+	res := convertScript(t, `
+INSERT INTO sessions (id, source, model, started_at) VALUES ('r1', 'cli', 'm', 1760000000.0);
+INSERT INTO messages (session_id, role, content, reasoning, reasoning_details, timestamp, finish_reason) VALUES
+  ('r1', 'user', 'q', NULL, NULL, 1760000001.0, NULL),
+  ('r1', 'assistant', 'a', 'thought', '[{"type":"reasoning.text","text":"thought","format":"unknown","index":0}]', 1760000002.0, 'stop'),
+  ('r1', 'user', 'q2', NULL, NULL, 1760000003.0, NULL),
+  ('r1', 'assistant', 'b', 'signed', '[{"type":"thinking","thinking":"signed","signature":"c2ln"}]', 1760000004.0, 'stop'),
+  ('r1', 'user', 'q3', NULL, NULL, 1760000005.0, NULL),
+  ('r1', 'assistant', 'c', 'bare', '[{"type":"thinking","thinking":"bare"}]', 1760000006.0, 'stop');
+`, Options{})
+	sameLines(t, "context", leaf(t, sessionOf(t, res, "r1")), []string{
+		"user: q", "reasoning text thought", "assistant: a",
+		"user: q2", "reasoning signed [encrypted]", "assistant: b",
+		"user: q3", "reasoning text bare", "assistant: c",
+	})
+}
