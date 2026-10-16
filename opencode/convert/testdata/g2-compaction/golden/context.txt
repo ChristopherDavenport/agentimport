@@ -7,17 +7,7 @@ session 0 ses_cmpold
   user: What did we do so far?
   user: and now
   assistant: ok
-session 1 ses_cmptail
-  model: claude-x
-  user: keep me
-  call toolu_tail read
-  assistant: kept answer
-  output toolu_tail y body
-  user: What did we do so far?
-  assistant: Summary: asked and answered.
-  user: next ask
-  assistant: next answer
-session 2 ses_cmpreorder
+session 1 ses_cmpreorder
   model: claude-x
   user: What did we do so far?
   assistant: Summary: asked and answered.
@@ -27,7 +17,32 @@ session 2 ses_cmpreorder
   output toolu_rder y body
   user: next ask
   assistant: next answer
-session 3 ses_cmpresumed
+session 2 ses_cmpfailtail
+  model: claude-x
+  user: What did we do so far?
+  user: u3
+  assistant: a3
+  user: u4
+  assistant: a4
+session 3 ses_cmptail
+  model: claude-x
+  user: keep me
+  call toolu_tail read
+  assistant: kept answer
+  output toolu_tail y body
+  user: What did we do so far?
+  assistant: Summary: asked and answered.
+  user: next ask
+  assistant: next answer
+session 4 ses_cmpsplit
+  model: claude-x
+  reasoning next [encrypted]
+  assistant: step two done
+  user: What did we do so far?
+  assistant: Summary: two steps.
+  user: go on
+  assistant: going
+session 5 ses_cmpresumed
   model: claude-x
   user: What did we do so far?
   assistant: Summary: asked and answered.

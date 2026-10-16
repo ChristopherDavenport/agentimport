@@ -48,4 +48,5 @@ session 6 ses_kid5
 session 7 ses_fork
   model: claude-x
   user: delegate the work
+  assistant: the origin answer, copied
   assistant: forked answer

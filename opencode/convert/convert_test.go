@@ -125,19 +125,16 @@ func build(t testing.TB, name string) (string, io.Closer) {
 	return root, nil
 }
 
-// units counts the records of a data directory: its storage files and
-// its database's rows.
-func units(t testing.TB, root string) int {
+// units counts the records of a store: its storage files and its
+// database's rows, read from the copy the conversion read.
+func units(t testing.TB, st *Stores) int {
 	t.Helper()
-	n := opencode.Units(root)
-	path := filepath.Join(root, opencode.DatabaseName)
-	if _, err := os.Stat(path); err == nil {
-		db, err := sqlite.Open(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer db.Close()
-		m, err := db.Units()
+	n := 0
+	if info, err := os.Stat(st.Root); err == nil && info.IsDir() {
+		n = opencode.Units(st.Root)
+	}
+	if st.DB != nil {
+		m, err := st.DB.(*sqlite.DB).Units()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -152,12 +149,24 @@ func units(t testing.TB, root string) int {
 func convertFixture(t *testing.T, name string, opts Options) *agentimport.Result {
 	t.Helper()
 	root, _ := build(t, name)
+	return convertStore(t, root, opts)
+}
+
+// convertStore converts a store as ConvertFile does, and checks it.
+func convertStore(t *testing.T, root string, opts Options) *agentimport.Result {
+	t.Helper()
 	opts.OpenDatabase = sqlite.OpenStore
-	res, err := ConvertFile(root, opts)
+	st, err := OpenStores(root, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := res.Report.Lines(), units(t, root); got != want {
+	defer st.Close()
+	res, err := Convert(opts, st.Stores...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.notes(res.Report)
+	if got, want := res.Report.Lines(), units(t, st); got != want {
 		t.Errorf("the report accounts for %d records; the store holds %d", got, want)
 	}
 	for _, fd := range res.Report.Findings {

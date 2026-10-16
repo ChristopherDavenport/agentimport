@@ -20,7 +20,7 @@ func TestParseVersion(t *testing.T) {
 		}
 	}
 	v, _ := parseVersion("1.14.39")
-	if v.atLeast(v11440) || !v.atLeast(v11419) {
+	if v.atLeast(r11440.v) || !v.atLeast(v11419) {
 		t.Error("1.14.39 is between 1.14.19 and 1.14.40")
 	}
 }

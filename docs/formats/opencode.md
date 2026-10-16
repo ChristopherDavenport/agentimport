@@ -24,7 +24,9 @@ Not read here: Crush (`charmbracelet/crush`), once the Go program named
 opencode (`opencode-ai/opencode`), whose per-project
 `.opencode/opencode.db` holds tables `sessions`, `messages` and `files`
 (detection opens a database's schema and passes it over); OpenCode 2's
-preview `opencode-next.db`; and the layout OpenCode wrote before its
+preview `opencode-next.db`, which OpenCode 2's migration imports into
+the V2 tables (reported, `opencode/next-db`, when a data directory holds
+it and that migration has not run); and the layout OpenCode wrote before its
 MessageV2 model, `project/<dir>/storage/session/{info,message,part}`,
 which OpenCode 1.1 moved into `storage/` on start and which is reported
 (`opencode/legacy-layout`), not converted. A message file of that
@@ -60,9 +62,22 @@ tags `v2.0.0`, `v1.19.1`, `v1.14.40`, `v1.14.39`, `v1.14.19`,
   OpenCode 2 copies the V1 tables into its own.
 
 The only version a session records is `version`, the release that
-created it. Behaviour that changed across releases is keyed on it, and a
-session plainly resumed by a later release is reported
-(`opencode/version-resumed`).
+created it; the rules that matter are those of the release that made
+each request, which OpenCode updates itself to. A request follows a
+release's rule when the session was created by that release or a later
+one, does not when it was made before the release was tagged, and
+otherwise is read by the newer rule as a guess, reported once per rule
+(`opencode/version-guess`). The releases, bisected over the tags and
+dated by their commits: 1.3.16 (2026-04-06, output tokens leave out
+reasoning), 1.4.2 (2026-04-09, an interrupted call sends the output it
+had), 1.14.40 (2026-05-07, a compaction's tail after its summary; an
+empty text beside signed reasoning sent as a space), 1.14.42
+(2026-05-09, an empty user text not sent). A step's usage is read by
+its own total where that settles the rule (`opencode/usage-version`
+when it disagrees with the creating release). A tail is followed
+wherever a compaction names one, since only a release that keeps one
+writes it (`opencode/version-resumed` when the creating release is
+older).
 
 ## Layout
 
@@ -90,7 +105,9 @@ whose database holds OpenCode's tables.
 
 - **Order.** G1 messages by file name, their IDs ascending in time; G2
   messages by `time_created`, then ID, as OpenCode's paged read gives
-  them; parts by ID in both; V2 rows by `seq`, never by time.
+  them; parts by ID in both, a G2 message's parts read by its ID, as
+  OpenCode reads them, whatever session a part row names; V2 rows by
+  `seq`, never by time.
 - **The database.** SQLite creates `-wal` and `-shm` files beside a WAL
   database even for a read-only connection, and the last connection to
   close may checkpoint, so `opencode/sqlite` never opens it in place:
@@ -99,9 +116,16 @@ whose database holds OpenCode's tables.
   committed frame of the log included. A running OpenCode keeps
   writing: the database file's size and time and the log's header
   (which a checkpoint that restarts the log rewrites) must not change
-  while it copies, else it retries five times, 200 ms apart, and fails.
-  Detection reads a database's schema opened `immutable`, which takes no
-  lock and writes nothing.
+  while it copies, else it retries five times, 200 ms apart, and fails
+  (on a file system whose times are coarse, a checkpoint of the same
+  size may go unseen; the log's header still changes when the log
+  restarts, and a checkpoint alone only writes pages the copied log
+  holds). The copy is made once per conversion of a store, in
+  `os.TempDir` (`$TMPDIR`), shared by every session of it, and removed
+  when the conversion returns; the command also removes it when it is
+  interrupted. Detection reads a database's schema opened `immutable`,
+  which takes no lock and writes nothing, once per store, and from a
+  copy when the schema is still in the log.
 - **Lenient decoding.** Every object keeps the members it does not
   declare, and a declared member of another JSON type is kept as
   written (`opencode/mistyped`), so a record decoded and encoded again
@@ -115,12 +139,24 @@ whose database holds OpenCode's tables.
   what its model saw: the V1 tables over the storage files, which no
   later release writes (`opencode/duplicate-store`, or
   `opencode/duplicate-diverged` when the files hold messages the tables
-  do not); the V1 record over OpenCode 2's copy of it, which keeps one
-  assistant row per V1 message and drops step boundaries, per-step
-  usage, retries and snapshots. The V2 rows past the copy, those up to
-  the last whose ID is a V1 message's, and the system row the migration
-  appends, are rows OpenCode 2 wrote itself: they continue the session
-  from its V1 leaf (`opencode/generation-join`).
+  do not). A session in the V1 and the V2 tables is two sessions, as the
+  module's rule for copied history has it. The V1 record is one,
+  converted from the V1 tables alone, turns the V1 line wrote after the
+  migration included. OpenCode 2's is the other, when OpenCode 2 wrote
+  rows of its own after the migration's copy: the copy is what OpenCode
+  2 sent from then on, so it is the session's own entries, its
+  responses' usage in `opencode:copied_usage`, the V1 session named in
+  `parent_session` and by a `fork_of` link (`opencode/migration-copy`).
+  Its ID is derived from the native one, `agentsession.SubsessionID(<native
+  ID>, "opencode2")`, the native ID in the header's
+  `opencode:session_id`. The copy is told by the migration's own marks:
+  the rows from seq 0, each at the seq of its place, whose IDs are the V1
+  messages' or minted from the row before by the migration's
+  `syntheticID` (a user message it splits in two), then the system row
+  it appends telling the model of renamed tools, its ID minted from the
+  copy's last. A revert OpenCode 2 committed leaves a prefix of it. A
+  copy OpenCode 2 never carried on converts to no session
+  (`opencode/duplicate-store`).
 
 ### Units
 
@@ -155,9 +191,11 @@ messages. The converter follows each rule:
   was made (`opencode/file-expanded`); `What did we do so far?` for a
   compaction part; `The following tool was executed by the user` for a
   subtask. Agent parts and the rest are not sent (`opencode/unsent-part`).
-  A message that sends nothing is skipped (`opencode/message-empty`). An
-  assistant's empty text beside signed Anthropic reasoning is sent as a
-  space (`opencode/text-space`, 1.19's rule).
+  An empty user text is sent before 1.14.42 and not after
+  (`opencode/empty-text`). A message that sends nothing is skipped
+  (`opencode/message-empty`). An assistant's empty text beside signed
+  Anthropic reasoning is sent as a space from 1.14.40
+  (`opencode/text-space`).
 - **Failed turns.** An assistant message with an error is skipped in
   every later request, but for an abort after output other than
   reasoning. Its items are written and left out from then on by an
@@ -165,7 +203,7 @@ messages. The converter follows each rule:
 - **Calls.** A completed call's output, with data-URL attachments as
   media; an error's text, flagged (`opencode:is_error`); a call cleaned
   up after an abort (`metadata.interrupted`) sends the output it had
-  (`opencode/call-interrupted`). A call still `pending` or `running`
+  from 1.4.2, its error before (`opencode/call-interrupted`). A call still `pending` or `running`
   sends `[Tool execution was interrupted]`: written after a `reject`
   decision by `policy` for one that never started, an `answer` for one
   that may have run (`opencode/call-unfinished`). For a provider whose
@@ -182,7 +220,10 @@ messages. The converter follows each rule:
   block only with its signature or redacted data, and `@ai-sdk/openai`
   a reasoning item only with its item ID or encrypted content; the rest
   they drop. Such reasoning is written and left out by `omit` after its
-  own step (`opencode/reasoning-unsent`).
+  own step (`opencode/reasoning-unsent`). OpenCode chooses by the AI SDK
+  package a model uses, which it does not store; the rule is applied to
+  the providers `anthropic` and `openai`, and reasoning with no metadata
+  from another is taken as sent (`opencode/reasoning-unverified`).
 - **Model switches.** A request's model differs from an earlier
   message's: OpenCode sends that message's reasoning without its
   provider metadata (1.1) or as plain text (1.19). The session sets
@@ -191,17 +232,20 @@ messages. The converter follows each rule:
 - **Compactions.** A user message with a `compaction` part and the
   assistant `summary` answering it, finished without an error, cut the
   history. Walking back from the newest message, `filterCompacted`
-  stops at the request of the latest such compaction; from 1.14.19 it
-  walks on to the message the part's `tail_start_id` names; from
-  1.14.40 it moves that tail after the summary. A compaction entry
-  reproduces the result: its summary is the first message OpenCode then
-  sends (the request, or, from 1.14.19 to 1.14.39, the tail's first
-  message), the rest kept from `first_kept` when it lies on the path in
-  that order, pinned when it does not (`opencode/compaction`, gap
-  `agentimport/fold-head`). The summary's own request sent the
-  compaction agent one user message, the conversation serialized as
-  text, not the path's context (`opencode/compaction-request`). A
-  failed summary cuts nothing (`opencode/compaction-incomplete`).
+  stops at the request of the latest such compaction, or walks on to
+  the message the part's `tail_start_id` names; from 1.14.40 it moves
+  the tail of the latest compaction that names one after that
+  compaction's summary, whether the summary completed or not. Before
+  every request the converter computes that context and, where the
+  path's differs, changes it (`opencode/compaction`): messages cut from
+  the head are left out by `omit`, every item staying where it stands;
+  a context in another order is a compaction whose summary is the first
+  message sent, the compaction's request, the rest pinned or kept from
+  `first_kept` (gap `agentimport/fold-head`). The summary's own request
+  sent the compaction agent one user message, the conversation
+  serialized as text, not the path's context
+  (`opencode/compaction-request`). A failed summary cuts nothing before
+  1.14.40 (`opencode/compaction-incomplete`).
 - **Staged reverts.** `session.revert` hides a message and those after
   it, or a message's parts from one on, until the next prompt deletes
   them. Hidden messages are on a branch the session does not resume;
@@ -239,8 +283,11 @@ by `seq`, and `toLLMMessages` renders each:
   `<conversation-checkpoint>…<summary>…</summary><recent-context>…</recent-context></conversation-checkpoint>`,
   the compaction's summary, keeping nothing before it. A provider's own
   checkpoint (`providerContext`) is its messages, carried as an
-  `opencode.native_checkpoint` item (`opencode/native-checkpoint`). A
-  running or failed one cuts nothing.
+  `opencode.native_checkpoint` item (`opencode/native-checkpoint`).
+  OpenCode 2 replays it only to the provider and model it was made for;
+  a request to another sends the history from the compaction before it,
+  which is reported, not rebuilt (`opencode/native-checkpoint-skipped`).
+  A running or failed one cuts nothing.
 - `agent-switched`, `model-switched`: settings; `idle`: nothing, a
   custom entry. A switch of a model's variant sends an effort marker
   of OpenCode 2's own (`opencode/effort-marker`).
@@ -252,7 +299,7 @@ by `seq`, and `toLLMMessages` renders each:
 
 | Native | Session | Notes |
 | --- | --- | --- |
-| session record | session `id` the native `ses_…` (derived when a store would refuse it, `opencode/session-id`) | `created_at` its creation time; `cwd` `directory`; `harness` `opencode` and `version`; `parent_session` its parent, or a V2 fork's origin; header member `opencode:session` (the record but what the header maps) and `agentimport:source` |
+| session record | session `id` the native `ses_…` (derived when a store would refuse it, `opencode/session-id`) | `created_at` its creation time; `cwd` `directory`; `harness` `opencode` and `version`; `parent_session` its parent, a V2 fork's origin, or for OpenCode 2's session of a migrated one the V1 session; header member `opencode:session` (the record but what the header maps) and `agentimport:source` |
 | the first request's model, provider, agent and variant | the first `config`: `model`, members `opencode:provider`, `opencode:agent`, `opencode:variant` | a later change is a delta |
 | `title` | an `info` entry | |
 | project with `vcs` `git` | an `env` entry, `vcs.system` `git` | `opencode:worktree` when not the directory |
@@ -334,7 +381,10 @@ session names the origin in `parent_session` and opens with a
 response's usage in `opencode:copied_usage` and off the entry
 (`opencode/fork-copied`, `opencode/fork-usage`). An OpenCode 1 fork
 records no origin: told by its title, `… (fork #n)`, and reported
-(`opencode/fork-unlinked`), its copied usage counted again.
+(`opencode/fork-unlinked`). Session.fork copies each message whole,
+its creation time with it, so in such a session the messages created
+before the session are the copies: their usage is in
+`opencode:copied_usage` (`opencode/fork-usage`).
 
 ## Extension types
 
@@ -382,7 +432,6 @@ every converter can report are in [README.md](README.md).
 | `opencode/fork-copied` | lossy | An OpenCode 2 fork's copied rows, converted as its own. |
 | `opencode/fork-unlinked` | lossy | An OpenCode 1 fork, which records no origin. |
 | `opencode/fork-usage` | kept | A copied response's usage is `opencode:copied_usage`. |
-| `opencode/generation-join` | lossy | A session OpenCode 2 carried on after migrating it: its V1 record, then the rows OpenCode 2 wrote. |
 | `opencode/hosted-tool` | kept | A tool the provider ran is an `opencode.hosted_tool` item. |
 | `opencode/ignored-text` | kept, or dropped | An ignored text part, which OpenCode does not send, in `opencode:unsent`. |
 | `opencode/legacy-layout` | dropped | A directory of the layout before MessageV2, not read. |
@@ -390,9 +439,12 @@ every converter can report are in [README.md](README.md).
 | `opencode/media-relocated` | lossy | Tool-result media OpenCode may have moved to a user message for the provider. |
 | `opencode/members` | kept, or dropped | Native members the session has no place for, in a namespaced member. |
 | `opencode/message-empty` | kept, or dropped | A message OpenCode sends nothing of, a custom entry. |
+| `opencode/migration-copy` | lossy | OpenCode 2's session of one it migrated from the V1 tables: the migration's copy is its own entries, the V1 session named in `parent_session`. |
 | `opencode/migration-notice` | lossy | OpenCode 2's migration told the model of renamed tools in a system message. |
 | `opencode/mistyped` | repaired | Members of another JSON type than OpenCode writes, kept as written and read as absent. |
 | `opencode/native-checkpoint` | kept | A provider's own compaction checkpoint is an `opencode.native_checkpoint` summary. |
+| `opencode/native-checkpoint-skipped` | lossy | A request to another provider or model than a native checkpoint's, for which OpenCode 2 sends the history from an earlier compaction. |
+| `opencode/next-db` | dropped | OpenCode 2's preview database, `opencode-next.db`, not read, in a data directory whose migration has not imported it. |
 | `opencode/orphan` | dropped | A record that belongs to no session or message read. |
 | `opencode/parent-cycle` | repaired | Sessions whose parents form a cycle; one converts with no parent. |
 | `opencode/pending-input` | kept, or dropped | OpenCode 2's queued input, not yet in the history. |
@@ -428,5 +480,9 @@ every converter can report are in [README.md](README.md).
 | `opencode/unsent-part` | kept, or dropped | A user message's part OpenCode does not send. |
 | `opencode/usage-member` | kept | The cost and the total are `opencode:usage`. |
 | `opencode/user-system` | lossy | A user message's system text, not in the session's instructions. |
+| `opencode/v1-projection` | dropped | OpenCode 1's own `session_message` table, a projection of its messages no request reads, not read. |
+| `opencode/version-guess` | lossy | A request made after a release that changed a rule, in a session an older release created: read by the newer rule, as OpenCode updates itself. |
+| `opencode/usage-version` | lossy | A step's total says its output tokens follow another rule than the creating release's; each step is read by its total. |
+| `opencode/reasoning-unverified` | lossy | Reasoning with no provider metadata from a provider whose AI SDK package is not known, taken as sent back. |
 | `opencode/version-resumed` | lossy | A session a later release than its creator's resumed, read by the later rules. |
 | `opencode/version-unknown` | lossy | A session with no readable release, read by the newest rules. |

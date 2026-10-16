@@ -3,7 +3,8 @@
 -- the foreground, a child two calls ran, one run in the background
 -- whose result came back as synthetic text, a call naming a session
 -- the store does not hold, a user subtask OpenCode ran itself, a child
--- no call names, a grandchild, and a fork, which names no origin.
+-- no call names, a grandchild, and a fork, which names no origin and
+-- whose copied messages keep the origin's times and usage.
 -- Written by hand; no row of a real database.
 INSERT INTO project VALUES ('prj4', '/work/s', NULL, NULL, NULL, NULL, 1760000000000, 1760000000000, NULL, '[]', NULL);
 INSERT INTO session (id, project_id, parent_id, slug, directory, title, version, time_created, time_updated) VALUES ('ses_par', 'prj4', NULL, 'slug', '/work/s', 'Delegate', '1.15.0', 1760000700000, 1760000800000);
@@ -89,6 +90,10 @@ INSERT INTO part VALUES ('prt_grandv002', 'msg_grandv0', 'ses_grand', 1760000702
 INSERT INTO session (id, project_id, parent_id, slug, directory, title, version, time_created, time_updated) VALUES ('ses_fork', 'prj4', NULL, 'slug', '/work/s', 'Delegate (fork #1)', '1.15.0', 1760000750000, 1760000850000);
 INSERT INTO message VALUES ('msg_fk1', 'ses_fork', 1760000701000, 1760000701000, '{"role":"user","time":{"created":1760000701000},"agent":"build","model":{"providerID":"anthropic","modelID":"claude-x"}}');
 INSERT INTO part VALUES ('prt_fk1a', 'msg_fk1', 'ses_fork', 1760000701000, 1760000701000, '{"type":"text","text":"delegate the work"}');
+INSERT INTO message VALUES ('msg_fk1b', 'ses_fork', 1760000702000, 1760000702000, '{"role":"assistant","parentID":"msg_fk1","providerID":"anthropic","modelID":"claude-x","mode":"build","agent":"build","path":{"cwd":"/work/s","root":"/work/s"},"cost":0.002,"tokens":{"input":20,"output":5,"reasoning":0,"cache":{"read":0,"write":0}},"time":{"created":1760000702000,"completed":1760000703000},"finish":"stop"}');
+INSERT INTO part VALUES ('prt_fk1b0', 'msg_fk1b', 'ses_fork', 1760000702000, 1760000702000, '{"type":"step-start"}');
+INSERT INTO part VALUES ('prt_fk1b1', 'msg_fk1b', 'ses_fork', 1760000702000, 1760000702000, '{"type":"text","text":"the origin answer, copied"}');
+INSERT INTO part VALUES ('prt_fk1b2', 'msg_fk1b', 'ses_fork', 1760000702000, 1760000702000, '{"type":"step-finish","reason":"stop","cost":0.002,"tokens":{"input":20,"output":5,"reasoning":0,"cache":{"read":0,"write":0}}}');
 INSERT INTO message VALUES ('msg_fk2', 'ses_fork', 1760000750100, 1760000755100, '{"role":"assistant","parentID":"msg_fk1","providerID":"anthropic","modelID":"claude-x","mode":"build","agent":"build","path":{"cwd":"/work/s","root":"/work/s"},"cost":0.001,"tokens":{"input":10,"output":10,"reasoning":0,"cache":{"read":0,"write":0}},"time":{"created":1760000750100,"completed":1760000755100},"finish":"stop"}');
 INSERT INTO part VALUES ('prt_fk200', 'msg_fk2', 'ses_fork', 1760000750100, 1760000750100, '{"type":"step-start"}');
 INSERT INTO part VALUES ('prt_fk201', 'msg_fk2', 'ses_fork', 1760000750100, 1760000750100, '{"type":"text","text":"forked answer"}');

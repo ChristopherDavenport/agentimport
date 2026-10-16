@@ -38,3 +38,6 @@ INSERT INTO session (id, project_id, parent_id, slug, directory, title, version,
 INSERT INTO session (id, project_id, parent_id, slug, directory, title, version, revert, time_created, time_updated) VALUES ('ses_cyc2', 'prj7', 'ses_cyc1', 'slug', '/work/m', 'Cycle two', '1.16.0', NULL, 1760004000020, 1760004050020);
 INSERT INTO message VALUES ('msg_cy1', 'ses_cyc1', 1760004000030, 1760004000030, '{"role":"user","time":{"created":1760004000030},"agent":"build","model":{"providerID":"anthropic","modelID":"claude-x"}}');
 INSERT INTO part VALUES ('prt_cy1a', 'msg_cy1', 'ses_cyc1', 1760004000030, 1760004000030, '{"type":"text","text":"in a cycle"}');
+-- A part whose row names another session than its message's: OpenCode
+-- reads parts by message, so it is the message's.
+INSERT INTO part VALUES ('prt_m7b', 'msg_m7', 'ses_cyc1', 1760004003000, 1760004003000, '{"type":"text","text":"read with its message"}');

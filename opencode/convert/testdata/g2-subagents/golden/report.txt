@@ -1,12 +1,13 @@
-opencode: 87 records: mapped 87 kept 0 dropped 0 malformed 0
+opencode: 91 records: mapped 91 kept 0 dropped 0 malformed 0
   gap      agentimport/provenance                            8  the import is recorded in the header's agentimport:source member
   dropped  opencode/system-prompt                            8  OpenCode builds the system prompt and the tool list for each request and does not store them; the settings carry the model alone
-  lossy    opencode/fork-unlinked                            1  the session's title is a fork's; OpenCode 1 records no link from a fork to its origin, so parent_session is empty, and the messages it copied, with their usage, are converted as its own
+  lossy    opencode/fork-unlinked                            1  the session's title is a fork's; OpenCode 1 records no link from a fork to its origin, so parent_session is empty, and the messages it copied are converted as its own, those created before the fork their usage kept off the responses
   lossy    opencode/subagent-missing                         1  the call ran sub-agent session ses_missing, which the store does not hold
   lossy    opencode/subagent-peer                            3  sub-agent session ses_kid2 outlives the call (several calls ran it); it is a peer, linked after the call's output, which is OpenCode's acknowledgement
   lossy    opencode/subagent-unlinked                        2  the session is a child of ses_kid1, linked to no call (no call of the parent names it); its session names the parent in parent_session alone
   lossy    opencode/subtask                                  2  a subtask part: OpenCode sends "The following tool was executed by the user" in its place and runs the task tool itself, in the assistant message that follows
-  kept     opencode/members                                 41  kept in opencode:message
+  kept     opencode/fork-usage                               1  the step is a copy an OpenCode 1 fork made, created before the fork, and its usage, the origin's, is kept in opencode:copied_usage
+  kept     opencode/members                                 42  kept in opencode:message
   kept     opencode/session-record                           8  the session record's members the header has no place for are in the header's opencode:session member
   kept     opencode/subagent                                 2  the call ran sub-agent session ses_kid1 in the foreground and alone; it is a subsession, linked before the call's output
   kept     opencode/synthetic-text                           2  text OpenCode wrote into the user's message, which it sends with it; the item entry carries opencode:synthetic

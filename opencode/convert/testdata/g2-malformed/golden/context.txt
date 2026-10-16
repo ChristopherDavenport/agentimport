@@ -6,7 +6,7 @@ session 0 ses_bad
   output dup a
   output dup_1 b
   assistant: second step
-  user: again
+  user: again | read with its message
 session 1 ses_cyc1
   model: claude-x
   user: in a cycle

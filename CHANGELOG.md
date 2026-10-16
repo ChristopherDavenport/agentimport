@@ -19,19 +19,23 @@ versions may break the API.
   (v1.59.0, Go 1.25), which `make deps` now enforces through
   `scripts/check-deps.sh`; the module's go line reads `go 1.25.0`.
   `opencode/convert` converts each session once, from its most faithful
-  copy: the V1 tables over the storage files they were imported from,
-  the V1 record over OpenCode 2's lossy migration copy, with the rows
-  OpenCode 2 wrote after migrating it joined on. It rebuilds what each
-  request sent as each release did: V1's `filterCompacted` and
+  copy: the V1 tables over the storage files they were imported from;
+  a session OpenCode 2 migrated and carried on is two, the V1 record
+  and OpenCode 2's own, which starts from the migration's copy (told by
+  the migration's own marks) and names the V1 session as its parent. It
+  rebuilds what each request sent as the release that made it did,
+  guessed from the creating release and the request's time and
+  reported: V1's `filterCompacted` and
   `toModelMessages`, an assistant message split into one response per
   step as the AI SDK's `convertToModelMessages` splits it, failed turns
-  left out by `omit`, compactions with and without a tail and with the
-  tail moved after the summary (1.14.19, 1.14.40; the gap
+  left out by `omit`, compaction cuts left out by `omit` and a tail
+  moved after the summary (1.14.40) as a compaction (the gap
   `agentimport/fold-head` now names OpenCode), pruned outputs and
   another model's reasoning (the gap `agentimport/context-replace`);
   V2's history from the latest compaction, its rows rendered as
   `toLLMMessages` does. Usage folds cache reads and writes into input,
-  output counting reasoning up to 1.3.15. Anthropic, OpenAI and Gemini
+  output counting reasoning up to 1.3.15, each step's rule read from its
+  total where that settles it. Anthropic, OpenAI and Gemini
   reasoning metadata map as the provider packages read them. Task and
   subagent calls link their child sessions, a subsession for the one
   foreground call that ran a child and a peer otherwise; refused calls

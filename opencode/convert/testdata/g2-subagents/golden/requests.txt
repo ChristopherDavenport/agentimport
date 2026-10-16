@@ -75,5 +75,8 @@ session 6 ses_kid5
   request of msg_kid5v0:1:
     user: orphan run
 session 7 ses_fork
+  request of msg_fk1b:1:
+    user: delegate the work
   request of msg_fk2:1:
     user: delegate the work
+    assistant: the origin answer, copied

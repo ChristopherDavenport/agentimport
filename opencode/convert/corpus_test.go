@@ -31,16 +31,28 @@ func TestCorpus(t *testing.T) {
 	total.Unit = Unit
 	failed, sessions := 0, 0
 	for _, p := range paths {
-		res, err := ConvertFile(p, Options{OpenDatabase: sqlite.OpenStore})
+		opts := Options{OpenDatabase: sqlite.OpenStore}
+		st, err := OpenStores(p, opts)
 		if err != nil {
 			t.Errorf("%s: %v", p, err)
 			failed++
 			continue
 		}
+		res, err := Convert(opts, st.Stores...)
+		if err != nil {
+			st.Close()
+			t.Errorf("%s: %v", p, err)
+			failed++
+			continue
+		}
+		st.notes(res.Report)
 		sessions += len(res.Sessions)
-		if got, want := res.Report.Lines(), storeUnits(t, p); got != want {
+		// The records are counted on the copy the conversion read, so
+		// a running OpenCode cannot change them between the two.
+		if got, want := res.Report.Lines(), units(t, st); got != want {
 			t.Errorf("%s: report accounts for %d records, the store holds %d", p, got, want)
 		}
+		st.Close()
 		doccheck.Check(t, Source, res.Report)
 		// Only the tally and the codes are aggregated: details name the
 		// corpus's sessions.
@@ -61,31 +73,4 @@ func TestCorpus(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-}
-
-// storeUnits counts the records of the store a path names: a data
-// directory's storage files and database rows, or a database's rows.
-func storeUnits(t testing.TB, path string) int {
-	t.Helper()
-	root, ok := opencode.StoreOf(path)
-	if !ok {
-		t.Fatalf("%s is no store", path)
-	}
-	info, err := os.Stat(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if info.IsDir() {
-		return units(t, root)
-	}
-	db, err := sqlite.Open(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	n, err := db.Units()
-	if err != nil {
-		t.Fatal(err)
-	}
-	return n
 }

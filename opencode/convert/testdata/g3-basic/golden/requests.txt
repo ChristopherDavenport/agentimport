@@ -7,6 +7,7 @@ session 0 ses_v2main
     call toolu_v1 read
     call toolu_v2 shell
     call toolu_v3 edit
+    call toolu_v3b edit
     call toolu_v4 write
     call toolu_v5 subagent
     call toolu_v6 subagent
@@ -15,6 +16,7 @@ session 0 ses_v2main
     output toolu_v1 file body
     output toolu_v2 {"error":{"type":"aborted","message":"The user dec
     output toolu_v3 {"error":{"type":"permission.rejected","message":"
+    output toolu_v3b {"error":{"type":"permission.rejected","message":"
     output toolu_v5 <subagent sessionID="ses_v2kid" state="completed">
     output toolu_v6 The subagent is working in the background (session
     output toolu_v8 an image

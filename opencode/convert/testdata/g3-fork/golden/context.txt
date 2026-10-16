@@ -5,7 +5,7 @@ session 0 ses_orig
   user: origin carries on
   assistant: origin later
 session 1 ses_forked
-  model: claude-x
+  model: gpt-x
   opencode.native_checkpoint
   user: after the checkpoint
   assistant: kept answer

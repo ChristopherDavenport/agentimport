@@ -40,8 +40,9 @@ INSERT INTO part VALUES ('prt_b05a', 'msg_b05', 'ses_g2reason', 1760000220000, 1
 INSERT INTO message VALUES ('msg_b06', 'ses_g2reason', 1760000221000, 1760000229000,
   '{"role":"assistant","parentID":"msg_b05","providerID":"google","modelID":"gemini-x","mode":"plan","agent":"plan","path":{"cwd":"/work/r","root":"/work/r"},"cost":0.001,"tokens":{"input":7,"output":9,"reasoning":0,"cache":{"read":0,"write":0}},"time":{"created":1760000221000,"completed":1760000229000},"finish":"stop"}');
 INSERT INTO part VALUES ('prt_b06a', 'msg_b06', 'ses_g2reason', 1760000221000, 1760000221000, '{"type":"step-start"}');
+INSERT INTO part VALUES ('prt_b06aa', 'msg_b06', 'ses_g2reason', 1760000221000, 1760000221000, '{"type":"reasoning","text":"a plan with no metadata"}');
 INSERT INTO part VALUES ('prt_b06b', 'msg_b06', 'ses_g2reason', 1760000221000, 1760000221000, '{"type":"text","text":"Taking one.","metadata":{"google":{"thoughtSignature":"ts-TEXT"}}}');
-INSERT INTO part VALUES ('prt_b06c', 'msg_b06', 'ses_g2reason', 1760000221000, 1760000221000, '{"type":"tool","callID":"call_s1","tool":"screenshot","metadata":{"google":{"thoughtSignature":"ts-CALL"}},"state":{"status":"completed","input":{},"output":"","title":"screen","metadata":{},"time":{"start":1760000222000,"end":1760000223000},"attachments":[{"id":"prt_att","sessionID":"ses_g2reason","messageID":"msg_b06","type":"file","mime":"image/png","filename":"screen.png","url":"data:image/png;base64,iVBORw0KGgo="}]}}');
+INSERT INTO part VALUES ('prt_b06c', 'msg_b06', 'ses_g2reason', 1760000221000, 1760000221000, '{"type":"tool","callID":"call_s1","tool":"screenshot","metadata":{"google":{"thoughtSignature":"ts-CALL"}},"state":{"status":"completed","input":{},"output":"","title":"screen","metadata":{},"time":{"start":1760000222000,"end":1760000223000},"attachments":[{"id":"prt_att","sessionID":"ses_g2reason","messageID":"msg_b06","type":"file","mime":"image/png","filename":"screen.png","url":"data:image/png;base64,iVBORw0KGgo="},{"id":"prt_att2","sessionID":"ses_g2reason","messageID":"msg_b06","type":"file","mime":"image/png","filename":"remote.png","url":"https://example.com/remote.png"}]}}');
 INSERT INTO part VALUES ('prt_b06d', 'msg_b06', 'ses_g2reason', 1760000221000, 1760000221000, '{"type":"step-finish","reason":"tool-calls","cost":0.001,"tokens":{"input":7,"output":9,"reasoning":0,"cache":{"read":0,"write":0}}}');
 
 INSERT INTO message VALUES ('msg_b07', 'ses_g2reason', 1760000230000, 1760000230000,
@@ -55,3 +56,16 @@ INSERT INTO part VALUES ('prt_b08aa', 'msg_b08', 'ses_g2reason', 1760000231000, 
 INSERT INTO part VALUES ('prt_b08b', 'msg_b08', 'ses_g2reason', 1760000231000, 1760000231000, '{"type":"tool","callID":"srvtoolu_1","tool":"web_search","metadata":{"providerExecuted":true},"state":{"status":"completed","input":{"query":"cache"},"output":"[results]","title":"web","metadata":{},"time":{"start":1760000232000,"end":1760000233000}}}');
 INSERT INTO part VALUES ('prt_b08c', 'msg_b08', 'ses_g2reason', 1760000231000, 1760000231000, '{"type":"text","text":"Found it."}');
 INSERT INTO part VALUES ('prt_b08d', 'msg_b08', 'ses_g2reason', 1760000231000, 1760000231000, '{"type":"step-finish","reason":"stop","cost":0.01,"tokens":{"input":5,"output":5,"reasoning":0,"cache":{"read":0,"write":0}}}');
+
+-- A step OpenCode 1.3.16 or later wrote, its output tokens leaving out
+-- reasoning, as its total shows: the session was resumed by a later
+-- release than the one that created it.
+INSERT INTO message VALUES ('msg_b09', 'ses_g2reason', 1760000240000, 1760000240000,
+  '{"role":"user","time":{"created":1760000240000},"agent":"build","model":{"providerID":"anthropic","modelID":"claude-x"}}');
+INSERT INTO part VALUES ('prt_b09a', 'msg_b09', 'ses_g2reason', 1760000240000, 1760000240000, '{"type":"text","text":"once more"}');
+INSERT INTO message VALUES ('msg_b10', 'ses_g2reason', 1760000241000, 1760000249000,
+  '{"role":"assistant","parentID":"msg_b09","providerID":"anthropic","modelID":"claude-x","mode":"build","agent":"build","path":{"cwd":"/work/r","root":"/work/r"},"cost":0.01,"tokens":{"total":19,"input":5,"output":10,"reasoning":4,"cache":{"read":0,"write":0}},"time":{"created":1760000241000,"completed":1760000249000},"finish":"stop"}');
+INSERT INTO part VALUES ('prt_b10a', 'msg_b10', 'ses_g2reason', 1760000241000, 1760000241000, '{"type":"step-start"}');
+INSERT INTO part VALUES ('prt_b10b', 'msg_b10', 'ses_g2reason', 1760000241000, 1760000241000, '{"type":"reasoning","text":"again","metadata":{"anthropic":{"signature":"sig-D"}}}');
+INSERT INTO part VALUES ('prt_b10c', 'msg_b10', 'ses_g2reason', 1760000241000, 1760000241000, '{"type":"text","text":"Once more."}');
+INSERT INTO part VALUES ('prt_b10d', 'msg_b10', 'ses_g2reason', 1760000241000, 1760000241000, '{"type":"step-finish","reason":"stop","cost":0.01,"tokens":{"total":19,"input":5,"output":10,"reasoning":4,"cache":{"read":0,"write":0}}}');

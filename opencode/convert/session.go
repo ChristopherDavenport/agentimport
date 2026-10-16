@@ -2,9 +2,14 @@ package convert
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
+	"math/big"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -39,11 +44,11 @@ type sconv struct {
 	msgs  []*opencode.MessageRecord
 	rows  []*opencode.Row2
 	queue []*opencode.QueueRow
-	// native is where the V2 rows OpenCode 2 wrote itself start, past
-	// the copy its migration made of the V1 tables; notice is the
-	// migration's system row, when it wrote one.
-	native int
-	notice *opencode.Row2
+	// copyEnd is where the V2 rows OpenCode 2 wrote itself start, past
+	// the copy its migration made of the V1 record of the session;
+	// notice is the migration's system row, when it wrote one.
+	copyEnd int
+	notice  *opencode.Row2
 
 	// The walk: the entry the next one follows, and the settings in
 	// force.
@@ -142,22 +147,26 @@ func (sc *sconv) tally() {
 	sc.into.Merge(sc.report)
 }
 
-// abandon counts every unit the session and its sub-agents read as
-// dropped, when the session could not be converted, and merges the
-// findings that say why.
+// abandon counts every unit the session read as dropped, when the
+// session could not be converted, and merges the findings that say why.
+// Its sub-agents' sessions, converted with it, are let go: each is
+// converted again on its own, after the roots.
 func (sc *sconv) abandon() {
 	r := agentimport.NewReport(Source)
 	r.Unit = Unit
-	var walk func(s *sconv)
-	walk = func(s *sconv) {
-		for range s.units {
-			r.Line(agentimport.LineDropped)
-		}
+	for range sc.units {
+		r.Line(agentimport.LineDropped)
+	}
+	var release func(s *sconv)
+	release = func(s *sconv) {
 		for _, ch := range s.children {
-			walk(ch)
+			delete(sc.fam.done, ch.rec.key)
+			delete(sc.fam.ids, ch.tgt.id)
+			ch.rec.sid = ""
+			release(ch)
 		}
 	}
-	walk(sc)
+	release(sc)
 	for _, f := range sc.report.Findings {
 		if f.Code == "opencode/session-failed" {
 			r.Add(f)
@@ -165,6 +174,22 @@ func (sc *sconv) abandon() {
 	}
 	sc.into.Merge(r)
 }
+
+// skip counts every unit a record read as dropped when it converts to
+// no session, and merges its findings.
+func (sc *sconv) skip() {
+	for range sc.units {
+		sc.report.Line(agentimport.LineDropped)
+	}
+	sc.into.Merge(sc.report)
+}
+
+// errSkip says a record converts to no session.
+var errSkip = errors.New("no session")
+
+// testHookRun, when set, runs at the end of each session's walk; a
+// test makes a session fail with it.
+var testHookRun func(sc *sconv) error
 
 // ms is an OpenCode time, epoch milliseconds, as a time.
 func ms(n int64) time.Time {
@@ -192,11 +217,8 @@ func (sc *sconv) run() error {
 		if err := sc.walkV1(); err != nil {
 			return err
 		}
-	}
-	if sc.rec.v2 != nil && sc.native < len(sc.rows) || sc.rec.v1 == nil {
-		if err := sc.walkV2(); err != nil {
-			return err
-		}
+	} else if err := sc.walkV2(); err != nil {
+		return err
 	}
 	if err := sc.queued(); err != nil {
 		return err
@@ -213,6 +235,9 @@ func (sc *sconv) run() error {
 			return err
 		}
 	}
+	if testHookRun != nil {
+		return testHookRun(sc)
+	}
 	return nil
 }
 
@@ -228,7 +253,14 @@ func (sc *sconv) load() error {
 		}
 		sc.msgs = msgs
 		sc.strays(strays)
+		rec.msgIDs = map[string]bool{}
+		for _, s := range strays {
+			if s.Kind == "message" && s.ID != "" {
+				rec.msgIDs[s.ID] = true
+			}
+		}
 		for _, m := range msgs {
+			rec.msgIDs[m.ID] = true
 			sc.read(m.Unit)
 			for _, p := range m.Parts {
 				sc.read(p.Unit)
@@ -247,9 +279,10 @@ func (sc *sconv) load() error {
 		for _, q := range queue {
 			sc.read(q.Unit)
 		}
-		if rec.v1 != nil {
-			sc.mark(rec.v2.Unit, agentimport.LineDropped)
-			sc.splitMigrated()
+		if rec.twinOf != nil {
+			if err := sc.migratedCopy(); err != nil {
+				return err
+			}
 		}
 	}
 	for _, x := range rec.extra {
@@ -267,7 +300,7 @@ func (sc *sconv) strays(strays []*opencode.Stray) {
 			sc.addf(agentimport.Dropped, "opencode/unreadable", s.Unit, "%s", s.Why)
 		case s.Malformed:
 			sc.mark(s.Unit, agentimport.LineMalformed)
-			sc.addf(agentimport.Repaired, "opencode/malformed", s.Unit, "a %s record that cannot be read is skipped: %s", s.Kind, s.Why)
+			sc.addf(agentimport.Repaired, "opencode/malformed", s.Unit, "a %s record that cannot be read is skipped: %s", s.Kind, strayWhy(s))
 		default:
 			sc.mark(s.Unit, agentimport.LineDropped)
 			sc.addf(agentimport.Dropped, "opencode/orphan", s.Unit, "a %s record that belongs to no message of the session is left out: %s", s.Kind, s.Why)
@@ -314,49 +347,102 @@ func (sc *sconv) passOver(x copyOf) {
 	sc.addf(agentimport.Dropped, "opencode/duplicate-store", x.s.Unit, "%s", what)
 }
 
-// splitMigrated tells, for a session both the V1 and the V2 tables
-// hold, the V2 rows OpenCode 2's migration copied from the V1 tables
-// from those it wrote after: the copy is the rows up to the last whose
-// ID is a V1 message's, every row the migration writes taking its seq
-// from its place, and the system row it appends telling the model of
-// renamed tools.
-func (sc *sconv) splitMigrated() {
-	ids := map[string]bool{}
-	for _, m := range sc.msgs {
-		ids[m.ID] = true
+// migratedCopy finds, in OpenCode 2's rows of a session it migrated
+// from the V1 tables, the copy its migration wrote, by the migration's
+// own marks: the rows from seq 0 on, each at the seq of its place, whose
+// IDs are the V1 messages' or minted from the row before by
+// syntheticID, then the system row it appends, its ID minted from the
+// copy's last. A revert OpenCode 2 committed deletes the copy from a row
+// on, and leaves a prefix of it. When OpenCode 2 wrote nothing after
+// the copy, the record converts to no session: the V1 record holds all
+// of it.
+func (sc *sconv) migratedCopy() error {
+	v1 := sc.rec.twinOf
+	ids := v1.msgIDs
+	if ids == nil {
+		msgs, strays, err := v1.v1Store.Messages(v1.v1)
+		if err != nil {
+			return fmt.Errorf("read the V1 messages: %w", err)
+		}
+		ids = map[string]bool{}
+		for _, m := range msgs {
+			ids[m.ID] = true
+		}
+		for _, s := range strays {
+			if s.Kind == "message" && s.ID != "" {
+				ids[s.ID] = true
+			}
+		}
 	}
-	last := -1
-	for i, r := range sc.rows {
+	used := map[string]bool{}
+	for id := range ids {
+		used[id] = true
+	}
+	k, last := 0, ""
+	for k < len(sc.rows) {
+		r := sc.rows[k]
+		if r.Seq != int64(k) {
+			break
+		}
 		if ids[r.ID] {
-			last = i
+			last = r.ID
+			k++
+			continue
 		}
+		if last != "" && r.Type == opencode.TypeSynthetic && r.ID == syntheticID(last, used) {
+			used[r.ID] = true
+			last = r.ID
+			k++
+			continue
+		}
+		break
 	}
-	sc.native = last + 1
-	if last < 0 && len(sc.msgs) > 0 {
-		sc.native = 0
-	}
-	if sc.native < len(sc.rows) {
-		r := sc.rows[sc.native]
-		if r.Err == nil && r.Type == opencode.TypeSystem && strings.HasPrefix(r.Data.Text, "The available tools have changed.") {
+	sc.copyEnd = k
+	if k < len(sc.rows) && last != "" {
+		r := sc.rows[k]
+		if r.Type == opencode.TypeSystem && r.Seq == int64(k) && (r.ID == syntheticID(last, used) || r.Err == nil && strings.HasPrefix(r.Data.Text, "The available tools have changed.")) {
 			sc.notice = r
-			sc.native++
+			sc.copyEnd = k + 1
 		}
 	}
-	if sc.native == len(sc.rows) && sc.notice != nil {
-		// OpenCode 2 never sent the notice: nothing came after it.
-		sc.mark(sc.notice.Unit, agentimport.LineDropped)
-		sc.notice = nil
+	if sc.copyEnd == len(sc.rows) {
+		sc.addf(agentimport.Dropped, "opencode/duplicate-store", sc.rec.v2.Unit, "OpenCode 2's migration copied the session from the V1 tables, and OpenCode 2 wrote nothing after the copy; the session is the V1 record's, and the copy (%d rows) is left out", len(sc.rows))
+		return errSkip
 	}
-	copied := 0
-	for _, r := range sc.rows[:sc.native] {
-		if r != sc.notice {
-			sc.mark(r.Unit, agentimport.LineDropped)
-			copied++
+	return nil
+}
+
+// base62 is the alphabet OpenCode 2's migration mints IDs in.
+const base62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+
+// syntheticID is the ID OpenCode 2's migration mints for a row it adds
+// after the row of ID source (v1-migration.bun.ts): the source's first
+// 16 characters and 14 base-62 digits of SHA-256 over
+// "v1-synthetic:<source>", salted until it is unused.
+func syntheticID(source string, used map[string]bool) string {
+	prefix := source
+	if len(prefix) > 16 {
+		prefix = prefix[:16]
+	}
+	sixtyTwo := big.NewInt(62)
+	for salt := 0; salt < 100; salt++ {
+		in := "v1-synthetic:" + source
+		if salt > 0 {
+			in += ":" + strconv.Itoa(salt)
+		}
+		sum := sha256.Sum256([]byte(in))
+		v := new(big.Int).SetBytes(sum[:])
+		var suffix [14]byte
+		r := new(big.Int)
+		for i := len(suffix) - 1; i >= 0; i-- {
+			v.DivMod(v, sixtyTwo, r)
+			suffix[i] = base62[r.Int64()]
+		}
+		if id := prefix + string(suffix[:]); !used[id] {
+			return id
 		}
 	}
-	if copied > 0 {
-		sc.addf(agentimport.Dropped, "opencode/duplicate-store", sc.rec.v2.Unit, "OpenCode 2's migration copied the session's first %d messages into its own tables, a rendering that keeps one assistant message per V1 message and drops step boundaries, retries and snapshots; they are converted from the V1 tables, and the copy is left out", copied)
-	}
+	return ""
 }
 
 // header writes the session's header.
@@ -377,6 +463,8 @@ func (sc *sconv) header() (agentsession.Header, error) {
 		if sc.tgt.spawnedBy != "" {
 			h.SpawnedBy = sc.tgt.spawnedBy
 		}
+	} else if v1 := sc.rec.twinOf; v1 != nil {
+		h.ParentSession = v1.sidOrID()
 	} else if sc.rec.v2 != nil && sc.rec.v2.ForkSessionID != "" {
 		h.ParentSession = sc.rec.v2.ForkSessionID
 	}
@@ -386,6 +474,12 @@ func (sc *sconv) header() (agentsession.Header, error) {
 	}
 	if sc.tgt.derived != "" {
 		sc.addf(agentimport.Lossy, "opencode/session-id", "", "%s", sc.tgt.derived)
+	}
+	if native != "" {
+		if h.Extra == nil {
+			h.Extra = map[string]json.RawMessage{}
+		}
+		h.Extra[Source+":session_id"] = rawJSON(native)
 	}
 	if err := agentimport.SetSource(&h, agentimport.Source{Format: Source, NativeID: native}); err != nil {
 		return h, err
@@ -458,7 +552,18 @@ func (sc *sconv) firstTime() time.Time {
 // its origin, the first settings, the title and the project.
 func (sc *sconv) start() error {
 	p := sc.rec.primary()
-	if v2 := sc.rec.v2; v2 != nil && v2.ForkSessionID != "" && sc.tgt.parent == "" {
+	if v1 := sc.rec.twinOf; v1 != nil {
+		link := agentsession.NewLinkEntry(agentsession.RelForkOf, v1.sidOrID())
+		link.Timestamp = ms(p.Created)
+		if err := sc.b.Member(link, "migrated_from", v1.id); err != nil {
+			return err
+		}
+		id, err := sc.b.Append("", link)
+		if err != nil {
+			return err
+		}
+		sc.at = id
+	} else if v2 := sc.rec.v2; v2 != nil && v2.ForkSessionID != "" && sc.tgt.parent == "" {
 		link := agentsession.NewLinkEntry(agentsession.RelForkOf, v2.ForkSessionID)
 		link.Timestamp = ms(p.Created)
 		if err := sc.member(link, "fork", v2.ForkBoundary, v2.Unit); err != nil {
@@ -750,4 +855,23 @@ func (sc *sconv) keepNote(code, unit, member, format string, args ...any) {
 		return
 	}
 	sc.addf(agentimport.Kept, code, unit, "%s; it is kept in %s:%s", what, Source, member)
+}
+
+// sidOrID is the session ID a record converted to, else its native ID.
+func (rec *record) sidOrID() string {
+	if rec.sid != "" {
+		return rec.sid
+	}
+	return rec.id
+}
+
+// strayWhy is why a record is a stray, an error in it rendered so it
+// reads the same on every Go release; the format package has already
+// taken the machine's paths out of it.
+func strayWhy(s *opencode.Stray) string {
+	var pe *fs.PathError
+	if s.Err == nil || errors.As(s.Err, &pe) {
+		return s.Why
+	}
+	return agentimport.ErrorText(s.Err)
 }

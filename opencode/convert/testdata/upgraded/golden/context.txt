@@ -8,17 +8,64 @@ session 1 ses_up
   call toolu_up bash
   output toolu_up a.go
   assistant: listed
+session 2 8aa0b33a-a87d-5187-bf2f-de8e75db2129
+  model: claude-x
+  user: first ask
+  reasoning plan [encrypted]
+  call toolu_up bash
+  assistant: listed
+  output toolu_up a.go
   system: The available tools have changed. …
   user: after the migration
   reasoning again [encrypted]
   assistant: still here
-session 2 ses_done
+session 3 ses_done
   model: claude-x
   user: first ask
   reasoning plan [encrypted]
   call toolu_done bash
   output toolu_done a.go
   assistant: listed
-session 3 ses_new
+session 4 ses_syn
+  model: claude-x
+  user: first
+  call toolu_sy read
+  output toolu_sy a
+  user: fix it | Called the Read tool with the following input: {"f
+session 5 422e4bc1-fb6c-5a00-b3d6-1b8a6b4d4271
+  model: claude-x
+  user: first
+  call toolu_sy read
+  output toolu_sy a
+  user: fix it
+  user: Called the Read tool with the following input: {"f
+  system: The available tools have changed. …
+  assistant: fixed in OpenCode 2
+session 6 ses_rev
+  model: claude-x
+  user: one
+  assistant: one done
+  user: two
+  assistant: two done
+session 7 155c580f-cac9-5adc-9869-50187f7c230e
+  model: claude-x
+  user: one
+  assistant: one done
+  user: three instead
+  assistant: three done
+session 8 ses_late
+  model: claude-x
+  user: one
+  assistant: one done
+  user: later in V1
+  assistant: V1 answer
+session 9 ses_vrev
+  model: claude-x
+  user: one
+  assistant: one done
+session 10 5fe5424b-f2e6-5150-8e0c-a6e3e2046a2d
+  model: claude-x
+  user: one
+session 11 ses_new
   model: claude-x
   user: fresh

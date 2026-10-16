@@ -51,24 +51,45 @@ type Options struct {
 
 // ConvertFile converts every session of the OpenCode store path names:
 // a data directory, such as ~/.local/share/opencode, with its storage/
-// tree and its opencode.db, a file in one, or a database file.
+// tree and its opencode.db, a file in one, or a database file. The
+// database is read once, from one copy, removed when the conversion
+// returns.
 func ConvertFile(path string, opts Options) (*agentimport.Result, error) {
+	st, err := OpenStores(path, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer st.Close()
+	res, err := Convert(opts, st.Stores...)
+	if err != nil {
+		return nil, err
+	}
+	st.notes(res.Report)
+	return res, nil
+}
+
+// Stores are the stores of one OpenCode store path: a data directory's
+// storage tree and database, or a database alone.
+type Stores struct {
+	Root   string
+	Stores []opencode.Store
+	// DB is the database, when there is one.
+	DB opencode.Database
+}
+
+// OpenStores opens the stores path names, its database through
+// opts.OpenDatabase. Close releases them.
+func OpenStores(path string, opts Options) (*Stores, error) {
 	root, ok := opencode.StoreOf(path)
 	if !ok {
 		return nil, fmt.Errorf("%s is not an OpenCode data directory or database", path)
 	}
-	var stores []opencode.Store
-	var closers []func() error
-	defer func() {
-		for _, c := range closers {
-			c()
-		}
-	}()
+	st := &Stores{Root: root}
 	dbPath := root
 	if info, err := os.Stat(root); err == nil && info.IsDir() {
 		dbPath = filepath.Join(root, opencode.DatabaseName)
 		if t, err := opencode.OpenTree(root); err == nil {
-			stores = append(stores, t)
+			st.Stores = append(st.Stores, t)
 		}
 	}
 	if info, err := os.Stat(dbPath); err == nil && info.Mode().IsRegular() {
@@ -79,13 +100,39 @@ func ConvertFile(path string, opts Options) (*agentimport.Result, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", filepath.Base(dbPath), err)
 		}
-		closers = append(closers, db.Close)
-		stores = append(stores, db)
+		st.DB = db
+		st.Stores = append(st.Stores, db)
 	}
-	if len(stores) == 0 {
+	if len(st.Stores) == 0 {
 		return nil, fmt.Errorf("%s holds no OpenCode sessions", path)
 	}
-	return Convert(opts, stores...)
+	return st, nil
+}
+
+// Close closes the database, removing its copy.
+func (st *Stores) Close() error {
+	if st.DB == nil {
+		return nil
+	}
+	return st.DB.Close()
+}
+
+// notes reports what a data directory holds that is not converted:
+// OpenCode 2's preview database, which its migration imports into the
+// V2 tables, while that migration has not completed.
+func (st *Stores) notes(r *agentimport.Report) {
+	info, err := os.Stat(st.Root)
+	if err != nil || !info.IsDir() {
+		return
+	}
+	next := filepath.Join(st.Root, "opencode-next.db")
+	if _, err := os.Stat(next); err != nil {
+		return
+	}
+	if st.DB != nil && st.DB.MigrationDone() {
+		return
+	}
+	r.Addf(agentimport.Dropped, "opencode/next-db", "opencode-next.db", 0, "OpenCode 2's preview database is not read; OpenCode 2's migration imports its sessions into the V2 tables, and has not run here")
 }
 
 // Convert converts every session the stores hold: a data directory's
@@ -118,6 +165,9 @@ func Convert(opts Options, stores ...opencode.Store) (*agentimport.Result, error
 			continue
 		}
 		rec := fam.recs[id]
+		if rec.skipped {
+			continue
+		}
 		if fam.cycle(id) {
 			rec.addf(r, agentimport.Repaired, "opencode/parent-cycle", "the session's parents form a cycle; it is converted with no parent")
 			rec.noParent = true
@@ -132,15 +182,17 @@ func Convert(opts Options, stores ...opencode.Store) (*agentimport.Result, error
 	return &agentimport.Result{Report: r, Sessions: out}, nil
 }
 
-// family is one conversion: the sessions of the stores, by ID.
+// family is one conversion: the sessions of the stores, by key.
 type family struct {
 	opts   Options
 	report *agentimport.Report
 	stores []opencode.Store
-	// recs holds every session's copies, by ID; order lists the IDs.
+	// recs holds every session's copies, by key: the native ID, or,
+	// for OpenCode 2's continuation of a migrated session, twinKey of
+	// it; order lists the keys.
 	recs  map[string]*record
 	order []string
-	// children lists each session's children, by parent ID.
+	// children lists each session's children, by parent key.
 	children map[string][]string
 	// ids are the session IDs given out; active the sessions being
 	// converted; done those converted.
@@ -151,7 +203,20 @@ type family struct {
 
 // record is one session's copies.
 type record struct {
-	id string
+	// key is the record's in recs; id the native session ID.
+	key, id string
+	// twinOf, on the record of OpenCode 2's rows of a session OpenCode
+	// 2 migrated from the V1 tables, is the V1 record, which converts
+	// as a session of its own.
+	twinOf *record
+	// sid is the session ID the record converted to, once it has.
+	sid string
+	// msgIDs are the IDs of a V1 record's message rows read, malformed
+	// ones included.
+	msgIDs map[string]bool
+	// skipped says the record converted to no session: a migration's
+	// copy OpenCode 2 never carried on.
+	skipped bool
 	// v1 is the copy converted as the V1 model: the database's V1 row,
 	// else the storage file; v1Store is its store. v2 is the V2 row.
 	v1, v2           *opencode.Session
@@ -176,9 +241,33 @@ func (rec *record) primary() *opencode.Session {
 	return rec.v2
 }
 
-func (rec *record) parentID() string {
+// twinKey is the key of OpenCode 2's continuation of the session id.
+func twinKey(id string) string { return "opencode2/" + id }
+
+// parentKey is the key of a record's parent: the V1 record of a V1
+// session's parent, the OpenCode 2 record of a V2 session's.
+func (fam *family) parentKey(rec *record) string {
 	if rec.noParent {
 		return ""
+	}
+	p := rec.primary().ParentID
+	if p == "" {
+		return ""
+	}
+	if rec.v1 == nil {
+		if _, ok := fam.recs[twinKey(p)]; ok {
+			return twinKey(p)
+		}
+	}
+	return p
+}
+
+// parentSID is the session ID of a record's parent: the one it
+// converted to, else its native ID.
+func (fam *family) parentSID(rec *record) string {
+	k := fam.parentKey(rec)
+	if p := fam.recs[k]; p != nil && p.sid != "" {
+		return p.sid
 	}
 	return rec.primary().ParentID
 }
@@ -210,7 +299,7 @@ func (fam *family) index(stores []opencode.Store) error {
 		for _, s := range sessions {
 			rec := fam.recs[s.ID]
 			if rec == nil {
-				rec = &record{id: s.ID}
+				rec = &record{key: s.ID, id: s.ID}
 				fam.recs[s.ID] = rec
 				fam.order = append(fam.order, s.ID)
 			}
@@ -229,16 +318,33 @@ func (fam *family) index(stores []opencode.Store) error {
 			}
 		}
 	}
+	// A session in the V1 tables and the V2 tables both is two: the V1
+	// record, and OpenCode 2's, which starts from its migration's copy
+	// of the V1 record and carries it on.
+	for _, id := range append([]string(nil), fam.order...) {
+		rec := fam.recs[id]
+		if rec.v1 == nil || rec.v2 == nil {
+			continue
+		}
+		twin := &record{key: twinKey(id), id: id, v2: rec.v2, v2Store: rec.v2Store, twinOf: rec}
+		rec.v2, rec.v2Store = nil, nil
+		fam.recs[twin.key] = twin
+		fam.order = append(fam.order, twin.key)
+	}
 	sort.SliceStable(fam.order, func(i, j int) bool {
 		a, b := fam.recs[fam.order[i]].primary(), fam.recs[fam.order[j]].primary()
 		if a.Created != b.Created {
 			return a.Created < b.Created
 		}
-		return a.ID < b.ID
+		if a.ID != b.ID {
+			return a.ID < b.ID
+		}
+		// A V1 record converts before OpenCode 2's carrying it on.
+		return fam.recs[fam.order[i]].twinOf == nil && fam.recs[fam.order[j]].twinOf != nil
 	})
-	for _, id := range fam.order {
-		if p := fam.recs[id].parentID(); p != "" && fam.recs[p] != nil && p != id {
-			fam.children[p] = append(fam.children[p], id)
+	for _, k := range fam.order {
+		if p := fam.parentKey(fam.recs[k]); p != "" && fam.recs[p] != nil && p != k {
+			fam.children[p] = append(fam.children[p], k)
 		}
 	}
 	return nil
@@ -247,10 +353,10 @@ func (fam *family) index(stores []opencode.Store) error {
 // roots lists the sessions no session in the stores is the parent of.
 func (fam *family) roots() []string {
 	var out []string
-	for _, id := range fam.order {
-		p := fam.recs[id].parentID()
-		if p == "" || p == id || fam.recs[p] == nil {
-			out = append(out, id)
+	for _, k := range fam.order {
+		p := fam.parentKey(fam.recs[k])
+		if p == "" || p == k || fam.recs[p] == nil {
+			out = append(out, k)
 		}
 	}
 	return out
@@ -262,9 +368,11 @@ func (fam *family) strays(strays []*opencode.Stray) {
 		switch {
 		case s.Kind == "directory":
 			fam.report.Addf(agentimport.Dropped, "opencode/unreadable", s.Unit, 0, "%s", s.Why)
+		case s.Kind == "table":
+			fam.report.Addf(agentimport.Dropped, "opencode/v1-projection", s.Unit, 0, "%s", s.Why)
 		case s.Malformed:
 			fam.report.Line(agentimport.LineMalformed)
-			fam.report.Addf(agentimport.Repaired, "opencode/malformed", s.Unit, 0, "a %s record that cannot be read is skipped: %s", s.Kind, s.Why)
+			fam.report.Addf(agentimport.Repaired, "opencode/malformed", s.Unit, 0, "a %s record that cannot be read is skipped: %s", s.Kind, strayWhy(s))
 		default:
 			fam.report.Line(agentimport.LineDropped)
 			fam.report.Addf(agentimport.Dropped, "opencode/orphan", s.Unit, 0, "a %s record that belongs to no session it can be converted with is left out: %s", s.Kind, s.Why)
@@ -275,8 +383,8 @@ func (fam *family) strays(strays []*opencode.Stray) {
 // orphans tallies the records of every store that no session read.
 func (fam *family) orphans() error {
 	known := map[string]bool{}
-	for id := range fam.recs {
-		known[id] = true
+	for _, rec := range fam.recs {
+		known[rec.id] = true
 	}
 	for _, st := range fam.stores {
 		strays, err := st.Orphans(known)
@@ -306,8 +414,8 @@ type target struct {
 func (fam *family) convertRoot(id string, alone bool) []*agentsession.Session {
 	rec := fam.recs[id]
 	tgt := fam.ownTarget(rec)
-	if p := rec.parentID(); p != "" && p != id {
-		tgt.parent = p
+	if p := fam.parentKey(rec); p != "" && p != id {
+		tgt.parent = fam.parentSID(rec)
 	}
 	if alone {
 		why := "its parent's conversion did not convert it"
@@ -317,7 +425,7 @@ func (fam *family) convertRoot(id string, alone bool) []*agentsession.Session {
 		case fam.depthOf(id) >= maxDepth:
 			why = fmt.Sprintf("it is nested past %d sessions", maxDepth)
 		}
-		rec.addf(fam.report, agentimport.Lossy, "opencode/subagent-alone", "the session is a sub-agent of %s converted on its own (%s): parent_session names the parent, and no link in the parent's session names this one", rec.parentID(), why)
+		rec.addf(fam.report, agentimport.Lossy, "opencode/subagent-alone", "the session is a sub-agent of %s converted on its own (%s): parent_session names the parent, and no link in the parent's session names this one", rec.primary().ParentID, why)
 	}
 	sc := fam.convertInto(rec, tgt, 0, fam.report)
 	if sc == nil {
@@ -338,7 +446,7 @@ func (fam *family) cycle(id string) bool {
 		if rec == nil {
 			return false
 		}
-		cur = rec.parentID()
+		cur = fam.parentKey(rec)
 	}
 	return false
 }
@@ -347,7 +455,7 @@ func (fam *family) cycle(id string) bool {
 func (fam *family) depthOf(id string) int {
 	n := 0
 	seen := map[string]bool{id: true}
-	for cur := fam.recs[id].parentID(); cur != "" && fam.recs[cur] != nil && !seen[cur]; cur = fam.recs[cur].parentID() {
+	for cur := fam.parentKey(fam.recs[id]); cur != "" && fam.recs[cur] != nil && !seen[cur]; cur = fam.parentKey(fam.recs[cur]) {
 		seen[cur] = true
 		n++
 	}
@@ -356,6 +464,14 @@ func (fam *family) depthOf(id string) int {
 
 // ownTarget is the session a session becomes under its own ID.
 func (fam *family) ownTarget(rec *record) target {
+	if rec.twinOf != nil {
+		id := agentsession.SubsessionID(rec.id, "opencode2")
+		for n := 2; fam.ids[id]; n++ {
+			id = agentsession.SubsessionID(rec.id, fmt.Sprintf("opencode2/%d", n))
+		}
+		fam.ids[id] = true
+		return target{id: id, derived: "OpenCode 2 carried on a session it migrated from the V1 tables, which converts under the native ID; this one's ID is derived from it, as SubsessionID(native ID, \"opencode2\")"}
+	}
 	if storeName(rec.id) && !fam.ids[rec.id] {
 		fam.ids[rec.id] = true
 		return target{id: rec.id}

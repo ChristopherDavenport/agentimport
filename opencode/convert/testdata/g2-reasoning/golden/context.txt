@@ -13,3 +13,6 @@ session 0 ses_g2reason
   user: search the web
   opencode.hosted_tool
   assistant: Found it.
+  user: once more
+  reasoning again [encrypted]
+  assistant: Once more.

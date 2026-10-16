@@ -2,6 +2,7 @@ package convert
 
 import (
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/ChristopherDavenport/agentimport"
@@ -85,13 +86,12 @@ func (sc *sconv) findKids() *kids {
 	return k
 }
 
-// v2Rows are the V2 rows the walk converts: those OpenCode 2 wrote
-// itself.
+// v2Rows are the V2 rows the walk converts.
 func (sc *sconv) v2Rows() []*opencode.Row2 {
 	if sc.rec.v2 == nil {
 		return nil
 	}
-	return sc.rows[sc.native:]
+	return sc.rows
 }
 
 func inputString(raw json.RawMessage, name string) string {
@@ -137,6 +137,11 @@ func (sc *sconv) childOf(native, unit string) (*record, bool) {
 		return nil, false
 	}
 	rec := sc.fam.recs[id]
+	if sc.rec.v1 == nil {
+		if twin := sc.fam.recs[twinKey(id)]; twin != nil {
+			rec = twin
+		}
+	}
 	first := !sc.kids.reported[native]
 	sc.kids.reported[native] = true
 	switch {
@@ -146,7 +151,7 @@ func (sc *sconv) childOf(native, unit string) (*record, bool) {
 		}
 		sc.addf(agentimport.Lossy, "opencode/subagent-missing", unit, "the call ran sub-agent session %s, which the store does not hold", id)
 		return nil, false
-	case rec.parentID() != sc.rec.id:
+	case sc.fam.parentKey(rec) != sc.rec.key:
 		if !first {
 			return nil, false
 		}
@@ -168,7 +173,7 @@ func (sc *sconv) linkBefore(native, callID, unit string, ts time.Time) ([]agents
 	if !ok || sc.kids.peer(rec.id) {
 		return nil, nil
 	}
-	if sc.fam.active[rec.id] || sc.fam.done[rec.id] {
+	if sc.fam.active[rec.key] || sc.fam.done[rec.key] {
 		sc.addf(agentimport.Dropped, "opencode/subagent-cycle", unit, "sub-agent session %s is being converted or was converted already; it is not converted again", rec.id)
 		return nil, nil
 	}
@@ -201,7 +206,7 @@ func (sc *sconv) linkAfter(native, callID, unit string, ts time.Time) error {
 	}
 	ch := sc.kids.sc[rec.id]
 	if ch == nil {
-		if sc.fam.active[rec.id] || sc.fam.done[rec.id] {
+		if sc.fam.active[rec.key] || sc.fam.done[rec.key] {
 			sc.addf(agentimport.Dropped, "opencode/subagent-cycle", unit, "sub-agent session %s is being converted or was converted already; it is not converted again", rec.id)
 			return nil
 		}
@@ -241,11 +246,11 @@ func (sc *sconv) convertChild(rec *record, tgt target) *sconv {
 // linked: their parent is this session, and no call ran them, or the
 // call that did is on no path converted.
 func (sc *sconv) unlinkedKids() error {
-	for _, id := range sc.fam.children[sc.rec.id] {
-		if sc.fam.done[id] || sc.kids.failed[id] {
+	for _, key := range sc.fam.children[sc.rec.key] {
+		rec := sc.fam.recs[key]
+		if sc.fam.done[key] || sc.kids.failed[rec.id] || rec.skipped {
 			continue
 		}
-		rec := sc.fam.recs[id]
 		if sc.fam.opts.Alone || sc.depth+1 >= maxDepth {
 			continue
 		}
@@ -255,7 +260,7 @@ func (sc *sconv) unlinkedKids() error {
 			continue
 		}
 		why := "no call of the parent names it"
-		if len(sc.kids.calls[id]) > 0 {
+		if len(sc.kids.calls[rec.id]) > 0 {
 			why = "the call that ran it has no output in the parent"
 		}
 		sc.addf(agentimport.Lossy, "opencode/subagent-unlinked", rec.primary().Unit, "the session is a child of %s, linked to no call (%s); its session names the parent in parent_session alone", sc.rec.id, why)
@@ -266,12 +271,16 @@ func (sc *sconv) unlinkedKids() error {
 // convertInto converts a session into tgt as a child, its tally and
 // findings merged into into rather than the family's report.
 func (fam *family) convertInto(rec *record, tgt target, depth int, into *agentimport.Report) *sconv {
-	fam.done[rec.id] = true
-	fam.active[rec.id] = true
-	defer delete(fam.active, rec.id)
+	fam.done[rec.key] = true
+	fam.active[rec.key] = true
+	defer delete(fam.active, rec.key)
 	sc := newSconv(fam, rec, tgt, depth)
 	sc.into = into
-	if err := sc.run(); err != nil {
+	if err := sc.run(); errors.Is(err, errSkip) {
+		rec.skipped = true
+		sc.skip()
+		return nil
+	} else if err != nil {
 		sc.report.Addf(agentimport.Dropped, "opencode/session-failed", rec.primary().Unit, 0, "the session could not be converted: %s", agentimport.ErrorText(err))
 		sc.abandon()
 		return nil
@@ -284,6 +293,7 @@ func (fam *family) convertInto(rec *record, tgt target, depth int, into *agentim
 		return nil
 	}
 	sc.out = read
+	rec.sid = tgt.id
 	sc.tally()
 	return sc
 }

@@ -1,15 +1,18 @@
-opencode: 114 records: mapped 114 kept 0 dropped 0 malformed 0
+opencode: 174 records: mapped 174 kept 0 dropped 0 malformed 0
   gap      agentimport/context-replace                       1  1 tool outputs were replaced in place by OpenCode's prune; the outputs stay in context and the replacement is a custom entry
-  gap      agentimport/fold-head                             4  OpenCode's compacted context starts with a message it sent verbatim, not a summary: the compaction's summary is that message, and the summary the assistant wrote follows it
-  gap      agentimport/provenance                            4  the import is recorded in the header's agentimport:source member
-  dropped  opencode/system-prompt                            4  OpenCode builds the system prompt and the tool list for each request and does not store them; the settings carry the model alone
-  lossy    opencode/compaction                               4  a compaction: OpenCode's requests from here send the messages from the compaction's request on, by the rules of release 1.4.2; 1 items are kept from first_kept and 0 pinned
-  lossy    opencode/compaction-incomplete                    1  the compaction's summary did not complete; OpenCode cuts nothing, and the request stays in context
-  lossy    opencode/compaction-request                       5  the summary's request sent the compaction agent one user message holding the instructions and the conversation serialized as text, not the context the path rebuilds
-  lossy    opencode/error-turn                               1  the message ended in APIError; OpenCode leaves it out of every later request, so its 1 items are left out by omit
+  gap      agentimport/fold-head                             4  OpenCode's compacted context starts with a message it sent verbatim, not a summary: the compaction's summary is that item, and the summary the assistant wrote follows it
+  gap      agentimport/provenance                            6  the import is recorded in the header's agentimport:source member
+  gap      agentimport/reasoning-provider                    1  the reasoning's signature or encrypted content is anthropic's, which encrypted_content does not say; the item entry carries opencode:provider
+  dropped  opencode/system-prompt                            6  OpenCode builds the system prompt and the tool list for each request and does not store them; the settings carry the model alone
+  lossy    opencode/compaction                               7  a compaction: OpenCode's requests from here leave out the 5 items before the messages it keeps, which omit leaves out where they stand
+  lossy    opencode/compaction-incomplete                    2  the compaction's summary did not complete: it cuts nothing before 1.14.40, and from 1.14.40 a tail it wrote still moves after the request
+  lossy    opencode/compaction-request                       8  the summary's request sent the compaction agent one user message holding the instructions and the conversation serialized as text, not the context the path rebuilds
+  lossy    opencode/error-turn                               2  the message ended in APIError; OpenCode leaves it out of every later request, so its 1 items are left out by omit
   lossy    opencode/tool-output-pruned                       1  OpenCode pruned the output of call toolu_rder: requests before the prune sent it, and every request after it sent "[Old tool result content cleared]"; the output stays in context as it was sent first
-  lossy    opencode/version-resumed                          1  the session was created by 1.10.0, which keeps no tail after a compaction, but a compaction names one, so a later release resumed it; the compaction is read as 1.14.40 and later read it, the tail after the summary
-  kept     opencode/members                                 62  kept in opencode:message
-  kept     opencode/session-record                           4  the session record's members the header has no place for are in the header's opencode:session member
+  lossy    opencode/version-guess                            1  the session was created by 1.10.0, and a request was made after 1.14.40's release: it is read by 1.14.40's rule (a compaction's tail moves after its summary), as OpenCode updates itself; an older release would not have
+  lossy    opencode/version-resumed                          1  the session was created by 1.10.0, which writes no compaction tail, but a compaction names one, so a later release resumed it; each request is read by the rules of the release its time allows
+  kept     opencode/compaction-marker                        4  the compaction keeps nothing after its summary, so a custom marker written before it is its first_kept, which puts nothing in context
+  kept     opencode/members                                 91  kept in opencode:message
+  kept     opencode/session-record                           6  the session record's members the header has no place for are in the header's opencode:session member
   kept     opencode/synthetic-text                           1  text OpenCode wrote into the user's message, which it sends with it; the item entry carries opencode:synthetic
-  kept     opencode/usage-member                            17  the cost and the total OpenCode records with the usage are in opencode:usage
+  kept     opencode/usage-member                            26  the cost and the total OpenCode records with the usage are in opencode:usage

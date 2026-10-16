@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -39,17 +40,23 @@ type v1walk struct {
 	sc   *sconv
 	msgs []*opencode.MessageRecord
 	idx  map[string]int
-	// ver is the release that created the session, which decides the
-	// version-dependent rules; tail and reorder are the compaction rules
-	// in force, reasoningOut the usage rule.
-	ver          version
-	tail         bool
-	reorder      bool
-	reasoningOut bool
+	// ver is the release that created the session, verOK whether it
+	// reads; the rules of a request are those of the release that made
+	// it, which ruleAt guesses from ver and the request's time. guessed
+	// marks the rules a guess was reported for.
+	ver     version
+	verOK   bool
+	guessed map[string]bool
 	// items lists, per message, the item entries it wrote; omitted the
-	// item entries left out of context.
+	// item entries no request sends: a failed turn's, reasoning the
+	// provider does not take back. ctx is the item entries the path's
+	// context holds, in order, as this walk wrote it.
 	items   [][]string
 	omitted map[string]bool
+	ctx     []string
+	// forked says the session is an OpenCode 1 fork, told by its title,
+	// whose messages created before it are copies.
+	forked bool
 	// hidden is the first message a staged revert hides, len(msgs) when
 	// none does; hiddenPart the part of the message before it from which
 	// the revert hides the rest of that message.
@@ -74,7 +81,7 @@ type prune struct {
 // walkV1 converts the session's V1 messages.
 func (sc *sconv) walkV1() error {
 	v := &v1walk{sc: sc, msgs: sc.msgs, idx: map[string]int{}, items: make([][]string, len(sc.msgs)), omitted: map[string]bool{}, hidden: len(sc.msgs),
-		callOf: map[*opencode.PartRecord]callCtx{}, modelOf: map[string]string{}}
+		callOf: map[*opencode.PartRecord]callCtx{}, modelOf: map[string]string{}, guessed: map[string]bool{}}
 	for i, m := range sc.msgs {
 		if _, ok := v.idx[m.ID]; !ok {
 			v.idx[m.ID] = i
@@ -84,10 +91,18 @@ func (sc *sconv) walkV1() error {
 	v.revert()
 	for i, m := range v.msgs {
 		if i == v.hidden {
+			if err := v.sync(i - 1); err != nil {
+				return err
+			}
 			sc.leaf = sc.at
 		}
 		if err := v.prunesDue(m.Created, m.Unit); err != nil {
 			return err
+		}
+		if m.Info.Role == opencode.RoleAssistant && !m.Info.IsSummary() && !v.harnessRun(i) {
+			if err := v.sync(i - 1); err != nil {
+				return err
+			}
 		}
 		sc.mistyped(m.Unit, m.Info)
 		for _, p := range m.Parts {
@@ -109,39 +124,56 @@ func (sc *sconv) walkV1() error {
 	if err := v.prunesDue(math.MaxInt64, ""); err != nil {
 		return err
 	}
+	if v.hidden == len(v.msgs) {
+		if err := v.sync(len(v.msgs) - 1); err != nil {
+			return err
+		}
+	}
 	v.notes()
 	return nil
 }
 
-// rules chooses the version-dependent rules from the release that
-// created the session, the only version OpenCode records.
+// rules reads the release that created the session, the only version
+// OpenCode records, and the evidence that a later one resumed it.
 func (v *v1walk) rules() {
 	sc := v.sc
-	raw := sc.rec.v1.Version
-	ver, ok := parseVersion(raw)
-	if !ok {
-		ver = latest
-		sc.addf(agentimport.Lossy, "opencode/version-unknown", "", "the session records no release that can be read (%q); the rules of %d.%d.%d, the newest read, are applied: reasoning not in output tokens, a compaction's tail kept after its summary", raw, latest[0], latest[1], latest[2])
+	v.ver, v.verOK = parseVersion(sc.rec.v1.Version)
+	v.forked = forkTitle.MatchString(sc.rec.v1.Title)
+	if !v.verOK || v.ver.atLeast(v11419) {
+		return
 	}
-	v.ver = ver
-	v.tail = ver.atLeast(v11419)
-	v.reorder = ver.atLeast(v11440)
-	v.reasoningOut = !ver.atLeast(v1316)
-	if !v.tail {
-		for _, m := range v.msgs {
-			for _, p := range m.Parts {
-				if p.Part.Type == opencode.PartCompaction && p.Part.TailStartID != "" {
-					v.tail, v.reorder = true, true
-					note := ""
-					if v.reasoningOut {
-						note = "; usage is still read by the creating release's rule, output tokens counting reasoning, which the messages the later release wrote do not"
-					}
-					sc.addf(agentimport.Lossy, "opencode/version-resumed", p.Unit, "the session was created by %s, which keeps no tail after a compaction, but a compaction names one, so a later release resumed it; the compaction is read as 1.14.40 and later read it, the tail after the summary%s", raw, note)
-					return
-				}
+	for _, m := range v.msgs {
+		for _, p := range m.Parts {
+			if p.Part.Type == opencode.PartCompaction && p.Part.TailStartID != "" {
+				sc.addf(agentimport.Lossy, "opencode/version-resumed", p.Unit, "the session was created by %s, which writes no compaction tail, but a compaction names one, so a later release resumed it; each request is read by the rules of the release its time allows", v.ver)
+				return
 			}
 		}
 	}
+}
+
+// ruleAt reports whether the request made at t, in milliseconds,
+// follows the rule release r introduced: certainly when the session was
+// created by r or later, certainly not when the request predates r's
+// release, and otherwise by guess, yes, as OpenCode updates itself; a
+// guess is reported once per rule. what names the rule.
+func (v *v1walk) ruleAt(r release, t int64, unit, what string) bool {
+	if v.verOK && v.ver.atLeast(r.v) {
+		return true
+	}
+	if t > 0 && t < r.date {
+		return false
+	}
+	if v.guessed[what] {
+		return true
+	}
+	v.guessed[what] = true
+	if !v.verOK {
+		v.sc.addf(agentimport.Lossy, "opencode/version-unknown", unit, "the session records no release that can be read (%q), and a request was made after %s's release; it is read by %s's rule (%s)", v.sc.rec.v1.Version, r.v, r.v, what)
+		return true
+	}
+	v.sc.addf(agentimport.Lossy, "opencode/version-guess", unit, "the session was created by %s, and a request was made after %s's release: it is read by %s's rule (%s), as OpenCode updates itself; an older release would not have", v.ver, r.v, r.v, what)
+	return true
 }
 
 // revert finds what a staged revert hides: the message it names and
@@ -158,10 +190,6 @@ func (v *v1walk) revert() {
 	i, found := v.idx[r.MessageID]
 	if !found {
 		sc.addf(agentimport.Lossy, "opencode/revert-staged", "", "the session stages a revert to message %s, which it does not hold; nothing is hidden", r.MessageID)
-		return
-	}
-	if sc.rec.v2 != nil && sc.native < len(sc.rows) {
-		sc.addf(agentimport.Lossy, "opencode/revert-staged", "", "the session staged a revert to message %s before OpenCode 2 migrated it, and the migration dropped the revert, so the messages it hid were in OpenCode 2's history; they stay on the path", r.MessageID)
 		return
 	}
 	if r.PartID != "" {
@@ -225,9 +253,6 @@ func (v *v1walk) prunesDue(t int64, unit string) error {
 	}
 	e := &agentsession.CustomEntry{NS: Source, Data: raw}
 	e.Timestamp = ms(due[0].at)
-	if t == math.MaxInt64 && unit == "" {
-		e.Timestamp = time.Time{}
-	}
 	_, err = sc.append(e)
 	return err
 }
@@ -251,8 +276,8 @@ func (v *v1walk) notes() {
 	if system {
 		sc.addf(agentimport.Lossy, "opencode/user-system", "", "a user message carries system text OpenCode added to the system prompt of its requests, which the session does not hold; it is kept in the message's %s:message member", Source)
 	}
-	if forkTitle.MatchString(sc.rec.v1.Title) {
-		sc.addf(agentimport.Lossy, "opencode/fork-unlinked", "", "the session's title is a fork's; OpenCode 1 records no link from a fork to its origin, so parent_session is empty, and the messages it copied, with their usage, are converted as its own")
+	if v.forked {
+		sc.addf(agentimport.Lossy, "opencode/fork-unlinked", "", "the session's title is a fork's; OpenCode 1 records no link from a fork to its origin, so parent_session is empty, and the messages it copied are converted as its own, those created before the fork their usage kept off the responses")
 	}
 }
 
@@ -291,9 +316,9 @@ func (v *v1walk) user(i int) error {
 				sc.mark(p.Unit, sc.keepDisp())
 				sc.keepNote("opencode/ignored-text", p.Unit, "unsent", "an ignored text part, which OpenCode does not send")
 				continue
-			case pt.Text == "":
+			case pt.Text == "" && v.ruleAt(r11442, m.Created, p.Unit, "an empty user text is not sent"):
 				sc.mark(p.Unit, agentimport.LineDropped)
-				sc.addf(agentimport.Dropped, "opencode/empty-text", p.Unit, "an empty text part, which OpenCode does not send, is left out")
+				sc.addf(agentimport.Dropped, "opencode/empty-text", p.Unit, "an empty text part, which OpenCode does not send from 1.14.42, is left out")
 				continue
 			}
 			content = append(content, &openresponses.InputText{Text: pt.Text})
@@ -347,7 +372,7 @@ func (v *v1walk) user(i int) error {
 		r["id"] = rawJSON(p.ID)
 		sent = append(sent, r)
 	}
-	info := rest(m.Raw, "id", "sessionID", "role", "time")
+	info := rest(m.Raw, "id", "sessionID", "role")
 	if len(content) == 0 {
 		sc.addf(sc.keepKind(), "opencode/message-empty", m.Unit, "a user message with no part OpenCode sends is not in context")
 		return sc.custom(ts, m.Unit, "a user message with nothing sent", map[string]any{"id": m.ID, "message": json.RawMessage(m.Raw), "unsent": unsent})
@@ -384,9 +409,26 @@ func (v *v1walk) user(i int) error {
 	if err != nil {
 		return err
 	}
-	v.items[i] = append(v.items[i], id)
+	v.add(i, id)
 	sc.mark(m.Unit, agentimport.LineMapped)
 	return nil
+}
+
+// add records that message i wrote item entry id, which the context
+// now holds.
+func (v *v1walk) add(i int, id string) {
+	v.items[i] = append(v.items[i], id)
+	v.ctx = append(v.ctx, id)
+}
+
+// leaveOut records that no request sends the item entries ids.
+func (v *v1walk) leaveOut(ids []string) {
+	gone := map[string]bool{}
+	for _, id := range ids {
+		v.omitted[id] = true
+		gone[id] = true
+	}
+	v.ctx = slices.DeleteFunc(v.ctx, func(id string) bool { return gone[id] })
 }
 
 // taskResult returns the child session a background task's result
@@ -549,7 +591,7 @@ func (v *v1walk) assistant(i int) error {
 		}
 	}
 	if info.IsSummary() {
-		return v.summary(i)
+		v.summaryEnded(i)
 	}
 	return nil
 }
@@ -563,10 +605,12 @@ func (v *v1walk) omit(i int) error {
 	if len(v.items[i]) == 0 {
 		return nil
 	}
-	for _, id := range v.items[i] {
-		v.omitted[id] = true
+	ids := slices.DeleteFunc(append([]string(nil), v.items[i]...), func(id string) bool { return v.omitted[id] })
+	if len(ids) == 0 {
+		return nil
 	}
-	cfg := &agentsession.ConfigEntry{Omit: &agentsession.Omit{Items: append([]string(nil), v.items[i]...)}}
+	v.leaveOut(ids)
+	cfg := &agentsession.ConfigEntry{Omit: &agentsession.Omit{Items: ids}}
 	if t, ok := m.Info.Completed(); ok {
 		cfg.Timestamp = ms(t)
 	}
@@ -622,7 +666,7 @@ func (v *v1walk) step(i, k int, blk *block, last, harness, signed bool) (*agents
 			md := readMetadata(pt.Metadata)
 			text := pt.Text
 			if text == "" {
-				if !signed {
+				if !signed || !v.ruleAt(r11440, m.Created, p.Unit, "an empty text beside signed reasoning is sent as a space") {
 					kept = append(kept, p.Raw)
 					sc.mark(p.Unit, sc.keepDisp())
 					sc.keepNote("opencode/empty-text", p.Unit, "parts", "an empty text part, which the provider is not sent, is no item")
@@ -652,9 +696,14 @@ func (v *v1walk) step(i, k int, blk *block, last, harness, signed bool) (*agents
 			}
 			it := reasoningItems(pt.Text, md)
 			e := push(it, pts, p.Unit)
-			if !harness && !providerTakes(info.ProviderID, md) {
+			switch takes := providerTakes(info.ProviderID, md); {
+			case harness:
+			case takes == "no":
 				unsigned = append(unsigned, e)
 				sc.addf(agentimport.Lossy, "opencode/reasoning-unsent", p.Unit, "reasoning with no %s metadata, which the AI SDK's %s provider does not send back; it is left out of the requests after its own by omit", info.ProviderID, info.ProviderID)
+			case takes == "unknown" && md.signature == "" && md.encrypted == "" && md.thought == "" && md.redacted == "" && md.itemID == "" && !v.guessed["reasoning-unverified"]:
+				v.guessed["reasoning-unverified"] = true
+				sc.addf(agentimport.Lossy, "opencode/reasoning-unverified", p.Unit, "reasoning with no provider metadata from provider %s, whose AI SDK package OpenCode does not record and this converter cannot tell; it is taken as sent back, which @ai-sdk/anthropic and @ai-sdk/openai would not do", info.ProviderID)
 			}
 			if r, ok := it.(*openresponses.ReasoningItem); ok && md.itemID != "" {
 				pending, pendID = r, md.itemID
@@ -733,7 +782,7 @@ func (v *v1walk) step(i, k int, blk *block, last, harness, signed bool) (*agents
 		if err != nil {
 			return nil, err
 		}
-		v.items[i] = append(v.items[i], id)
+		v.add(i, id)
 		if _, ok := e.Item.(*openresponses.ReasoningItem); ok {
 			v.modelOf[id] = sc.model
 		}
@@ -753,8 +802,8 @@ func (v *v1walk) step(i, k int, blk *block, last, harness, signed bool) (*agents
 		ids := make([]string, len(unsigned))
 		for k, e := range unsigned {
 			ids[k] = e.ID
-			v.omitted[e.ID] = true
 		}
+		v.leaveOut(ids)
 		cfg := &agentsession.ConfigEntry{Omit: &agentsession.Omit{Items: ids}}
 		cfg.Timestamp = lastAt
 		if _, err := sc.append(cfg); err != nil {
@@ -775,14 +824,20 @@ func (v *v1walk) step(i, k int, blk *block, last, harness, signed bool) (*agents
 // with neither; @ai-sdk/openai sends a reasoning item only with its
 // item ID or its encrypted content. Other providers' packages are not
 // read, and their reasoning is taken as sent.
-func providerTakes(provider string, md provided) bool {
+func providerTakes(provider string, md provided) string {
+	yes := func(b bool) string {
+		if b {
+			return "yes"
+		}
+		return "no"
+	}
 	switch provider {
 	case "anthropic":
-		return md.signature != "" || md.redacted != ""
+		return yes(md.signature != "" || md.redacted != "")
 	case "openai":
-		return md.itemID != "" || md.encrypted != ""
+		return yes(md.itemID != "" || md.encrypted != "")
 	}
-	return true
+	return "unknown"
 }
 
 // callCtx is a call written: its call ID and its item entry.
@@ -854,8 +909,20 @@ func (v *v1walk) response(i, k int, blk *block, last bool, respID string, kept [
 		fin := blk.finish.Part
 		unit = blk.finish.Unit
 		sc.mark(blk.finish.Unit, agentimport.LineMapped)
-		u, extra := usage(fin.Tokens, fin.Cost, v.reasoningOut)
-		resp.Usage = u
+		u, extra := usage(fin.Tokens, fin.Cost, v.outputHasReasoning(fin.Tokens, m.Created, blk.finish.Unit))
+		if v.copied(i) {
+			copied := map[string]any{"usage": u}
+			for k, x := range extra {
+				copied[k] = x
+			}
+			extra = nil
+			if err := sc.b.Member(resp, "copied_usage", copied); err != nil {
+				return nil, err
+			}
+			sc.addf(agentimport.Kept, "opencode/fork-usage", blk.finish.Unit, "the step is a copy an OpenCode 1 fork made, created before the fork, and its usage, the origin's, is kept in %s:copied_usage", Source)
+		} else {
+			resp.Usage = u
+		}
 		switch fin.Reason {
 		case "length":
 			resp.Status = openresponses.ResponseStatusIncomplete
@@ -911,7 +978,7 @@ func (v *v1walk) response(i, k int, blk *block, last bool, respID string, kept [
 		if err := sc.b.Member(resp, "message_id", m.ID); err != nil {
 			return nil, err
 		}
-		if r := rest(m.Raw, "id", "sessionID", "role", "time", "modelID", "error"); len(r) > 0 {
+		if r := rest(m.Raw, "id", "sessionID", "role", "modelID", "error"); len(r) > 0 {
 			if err := sc.member(resp, "message", r, m.Unit); err != nil {
 				return nil, err
 			}
@@ -979,7 +1046,7 @@ func (v *v1walk) output(i int, p *opencode.PartRecord, info *opencode.Message) e
 			v.prunes = append(v.prunes, prune{at: at, callID: cc.id, unit: p.Unit})
 		}
 	case opencode.ToolError:
-		if out, ok := st.Interrupted(); ok {
+		if out, ok := st.Interrupted(); ok && v.ruleAt(r142, v.msgs[i].Created, p.Unit, "an interrupted call sends the output it had") {
 			data = openresponses.FunctionCallOutputData{Text: out}
 			sc.addf(agentimport.Lossy, "opencode/call-interrupted", p.Unit, "the call was cleaned up after an abort, and OpenCode sends the output it had as the call's output")
 			break
@@ -1027,7 +1094,14 @@ func (v *v1walk) output(i int, p *opencode.PartRecord, info *opencode.Message) e
 			return err
 		}
 	}
-	if r := rest(stateRaw(st), "status", "input", "output", "error", "attachments"); len(r) > 0 {
+	r := rest(stateRaw(st), "status", "input", "output", "error", "attachments")
+	if unsent := unsentAttachments(st.Attachments); len(unsent) > 0 {
+		if r == nil {
+			r = map[string]json.RawMessage{}
+		}
+		r["attachments"] = rawJSON(unsent)
+	}
+	if len(r) > 0 {
 		if err := sc.member(out, "state", r, p.Unit); err != nil {
 			return err
 		}
@@ -1036,7 +1110,7 @@ func (v *v1walk) output(i int, p *opencode.PartRecord, info *opencode.Message) e
 	if err != nil {
 		return err
 	}
-	v.items[i] = append(v.items[i], id)
+	v.add(i, id)
 	return sc.linkAfter(pt.CallID, cc.id, p.Unit, ts)
 }
 
@@ -1060,4 +1134,69 @@ func permissionText(text string) (verdict, by string) {
 		return agentsession.VerdictReject, "policy"
 	}
 	return "", ""
+}
+
+// copied reports whether message i is a copy an OpenCode 1 fork made:
+// Session.fork copies each message whole, its creation time with it, so
+// in a fork a message created before the fork itself is the origin's.
+func (v *v1walk) copied(i int) bool {
+	if !v.forked || !v.sc.rec.v1.HasCreated {
+		return false
+	}
+	t, ok := v.msgs[i].Info.Created()
+	return ok && t < v.sc.rec.v1.Created
+}
+
+// outputHasReasoning tells whether a step's output tokens count its
+// reasoning tokens, which OpenCode's did up to 1.3.15. The step's total,
+// the AI SDK's, settles it when there is reasoning: input with the
+// cache plus output, or plus reasoning too. Without one the rule is the
+// release's that made the request.
+func (v *v1walk) outputHasReasoning(t *opencode.Tokens, at int64, unit string) bool {
+	if t == nil {
+		return false
+	}
+	reasoning := opencode.Count(t.Reasoning)
+	byRelease := func() bool {
+		return !v.ruleAt(r1316, at, unit, "output tokens leave out reasoning")
+	}
+	if reasoning == 0 {
+		return byRelease()
+	}
+	total, ok := opencode.Int(t.Total)
+	if !ok {
+		return byRelease()
+	}
+	read, write := 0, 0
+	if t.Cache != nil {
+		read, write = opencode.Count(t.Cache.Read), opencode.Count(t.Cache.Write)
+	}
+	base := int64(opencode.Count(t.Input) + read + write + opencode.Count(t.Output))
+	var has bool
+	switch total {
+	case base:
+		has = true
+	case base + int64(reasoning):
+		has = false
+	default:
+		return byRelease()
+	}
+	if want := !(v.verOK && v.ver.atLeast(r1316.v)); has != want && !v.guessed["usage-total"] {
+		v.guessed["usage-total"] = true
+		v.sc.addf(agentimport.Lossy, "opencode/usage-version", unit, "a step's total says its output tokens %s reasoning, against the rule of the release that created the session, %s; each step's usage is read by its total where it settles it", map[bool]string{true: "count", false: "leave out"}[has], v.ver)
+	}
+	return has
+}
+
+// unsentAttachments are a completed call's attachments OpenCode does not
+// send: those whose URL is not a data URL.
+func unsentAttachments(attachments []json.RawMessage) []json.RawMessage {
+	var out []json.RawMessage
+	for _, raw := range attachments {
+		a, ok := opencode.Attachment(raw)
+		if !ok || !strings.HasPrefix(a.URL, "data:") || !strings.Contains(a.URL, ",") {
+			out = append(out, raw)
+		}
+	}
+	return out
 }

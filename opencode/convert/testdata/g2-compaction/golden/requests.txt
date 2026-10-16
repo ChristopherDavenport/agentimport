@@ -29,30 +29,7 @@ session 0 ses_cmpold
     assistant: continuing
     user: What did we do so far?
     user: and now
-session 1 ses_cmptail
-  request of msg_tail02:1:
-    user: first ask
-  request of msg_tail04:1:
-    user: first ask
-    assistant: first answer
-    user: keep me
-  request of msg_tail06:1:
-    user: first ask
-    assistant: first answer
-    user: keep me
-    call toolu_tail read
-    assistant: kept answer
-    output toolu_tail y body
-    user: What did we do so far?
-  request of msg_tail08:1:
-    user: keep me
-    call toolu_tail read
-    assistant: kept answer
-    output toolu_tail y body
-    user: What did we do so far?
-    assistant: Summary: asked and answered.
-    user: next ask
-session 2 ses_cmpreorder
+session 1 ses_cmpreorder
   request of msg_rder02:1:
     user: first ask
   request of msg_rder04:1:
@@ -75,7 +52,80 @@ session 2 ses_cmpreorder
     assistant: kept answer
     output toolu_rder y body
     user: next ask
-session 3 ses_cmpresumed
+session 2 ses_cmpfailtail
+  request of msg_f02:1:
+    user: u1
+  request of msg_f04:1:
+    user: u1
+    assistant: a1
+    user: u2
+  request of msg_f06:1:
+    user: u1
+    assistant: a1
+    user: u2
+    assistant: a2
+    user: What did we do so far?
+  request of msg_f08:1:
+    user: What did we do so far?
+    assistant: Summary one.
+    user: u2
+    assistant: a2
+    user: u3
+  request of msg_f10:1:
+    user: What did we do so far?
+    assistant: Summary one.
+    user: u2
+    assistant: a2
+    user: u3
+    assistant: a3
+    user: What did we do so far?
+  request of msg_f12:1:
+    user: What did we do so far?
+    user: u3
+    assistant: a3
+    user: u4
+session 3 ses_cmptail
+  request of msg_tail02:1:
+    user: first ask
+  request of msg_tail04:1:
+    user: first ask
+    assistant: first answer
+    user: keep me
+  request of msg_tail06:1:
+    user: first ask
+    assistant: first answer
+    user: keep me
+    call toolu_tail read
+    assistant: kept answer
+    output toolu_tail y body
+    user: What did we do so far?
+  request of msg_tail08:1:
+    user: keep me
+    call toolu_tail read
+    assistant: kept answer
+    output toolu_tail y body
+    user: What did we do so far?
+    assistant: Summary: asked and answered.
+    user: next ask
+session 4 ses_cmpsplit
+  request of msg_s02:1:
+    user: long task
+  request of msg_s03:1:
+    user: long task
+    assistant: step one done
+  request of msg_s05:1:
+    user: long task
+    assistant: step one done
+    reasoning next [encrypted]
+    assistant: step two done
+    user: What did we do so far?
+  request of msg_s07:1:
+    reasoning next [encrypted]
+    assistant: step two done
+    user: What did we do so far?
+    assistant: Summary: two steps.
+    user: go on
+session 5 ses_cmpresumed
   request of msg_umed02:1:
     user: first ask
   request of msg_umed04:1:

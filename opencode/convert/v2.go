@@ -30,29 +30,47 @@ type v2walk struct {
 	hidden int
 	// copied marks the rows a fork copied from its origin.
 	copied map[*opencode.Row2]bool
+	// native is the provenance of the latest provider's own compaction
+	// checkpoint, which OpenCode 2 replays to that provider and model
+	// alone.
+	native *provenance
 }
 
-// walkV2 converts the session's V2 rows: all of them, or, for a session
-// whose V1 record was converted, those OpenCode 2 wrote after its
-// migration copied the V1 tables.
+// provenance is the provider and model a native checkpoint replays to.
+type provenance struct {
+	provider, model string
+	unit            string
+	reported        bool
+}
+
+// walkV2 converts the session's V2 rows: for OpenCode 2's carrying on
+// of a session it migrated from the V1 tables, the copy its migration
+// wrote first, which is what OpenCode 2 sent from then on, the copied
+// responses' usage kept off them.
 func (sc *sconv) walkV2() error {
-	w := &v2walk{sc: sc, rows: sc.v2Rows(), copied: map[*opencode.Row2]bool{}}
+	w := &v2walk{sc: sc, rows: sc.rows, copied: map[*opencode.Row2]bool{}}
 	w.hidden = len(w.rows)
-	if sc.rec.v1 != nil {
-		if err := w.join(); err != nil {
-			return err
-		}
-	}
 	w.revert()
 	w.forkCopies()
+	for _, r := range sc.rows[:sc.copyEnd] {
+		if r != sc.notice {
+			w.copied[r] = true
+		}
+	}
+	if sc.rec.twinOf != nil {
+		sc.addf(agentimport.Lossy, "opencode/migration-copy", sc.rec.v2.Unit, "OpenCode 2 carried on a session it migrated from the V1 tables: this session is OpenCode 2's, its first %d rows the migration's copy of the V1 record, %s, which is a session of its own named in parent_session and by a fork_of link; the copy, one assistant message per V1 message, is what OpenCode 2 sent, converted as this session's own entries, the copied responses' usage kept off them", sc.copyEnd, sc.rec.twinOf.sidOrID())
+	}
 	for i, r := range w.rows {
 		if i == w.hidden {
 			sc.leaf = sc.at
 		}
 		if r.Err != nil {
 			sc.mark(r.Unit, agentimport.LineMalformed)
-			sc.addf(agentimport.Repaired, "opencode/malformed", r.Unit, "a row that cannot be read is skipped: %s", r.Err.Error())
+			sc.addf(agentimport.Repaired, "opencode/malformed", r.Unit, "a row that cannot be read is skipped: %s", agentimport.ErrorText(r.Err))
 			continue
+		}
+		if r == sc.notice {
+			sc.addf(agentimport.Lossy, "opencode/migration-notice", r.Unit, "OpenCode 2's migration told the model which tools were renamed in a system message, which every later request sent")
 		}
 		if err := w.row(r); err != nil {
 			return fmt.Errorf("%s: %w", r.Unit, err)
@@ -61,33 +79,6 @@ func (sc *sconv) walkV2() error {
 	if fork := sc.rec.v2.ForkSessionID; fork != "" {
 		sc.addf(agentimport.Lossy, "opencode/fork-copied", "", "the session is a fork of %s, named in parent_session and by a fork_of link; its first %d rows are copies of the origin's, converted as its own, their usage kept off the responses", fork, len(w.copied))
 	}
-	return nil
-}
-
-// join starts the rows OpenCode 2 wrote after migrating a session: its
-// migration appended a system row telling the model which tools were
-// renamed, which every later request sent.
-func (w *v2walk) join() error {
-	sc := w.sc
-	sc.addf(agentimport.Lossy, "opencode/generation-join", sc.rec.v2.Unit, "OpenCode 2 carried on the session after migrating it: the session is its V1 record, then the %d rows OpenCode 2 wrote; the requests after the migration sent OpenCode 2's rendering of the earlier history, one assistant message per V1 message, which the path does not rebuild", len(w.rows))
-	n := sc.notice
-	if n == nil {
-		return nil
-	}
-	e := agentsession.NewItemEntry(openresponses.SystemText(n.Data.Text))
-	e.Timestamp = ms(n.Created)
-	e.Visible = visible(false)
-	if err := sc.b.Member(e, "id", n.ID); err != nil {
-		return err
-	}
-	if err := sc.b.Member(e, "migration", true); err != nil {
-		return err
-	}
-	if _, err := sc.append(e); err != nil {
-		return err
-	}
-	sc.mark(n.Unit, agentimport.LineMapped)
-	sc.addf(agentimport.Lossy, "opencode/migration-notice", n.Unit, "OpenCode 2's migration told the model which tools were renamed in a system message, which every later request sent")
 	return nil
 }
 
@@ -212,7 +203,7 @@ func (w *v2walk) item(r *opencode.Row2, e *agentsession.ItemEntry, ts time.Time,
 	if err := sc.b.Member(e, "type", r.Type); err != nil {
 		return err
 	}
-	if err := sc.member(e, "row", rest(r.Raw, append([]string{"time"}, mapped...)...), r.Unit); err != nil {
+	if err := sc.member(e, "row", rest(r.Raw, mapped...), r.Unit); err != nil {
 		return err
 	}
 	if _, err := sc.append(e); err != nil {
@@ -361,6 +352,10 @@ func (w *v2walk) assistant(r *opencode.Row2, ts time.Time) error {
 	}
 	if err := sc.settings(ts, r.Unit, model, provider, d.Agent, variant); err != nil {
 		return err
+	}
+	if n := w.native; n != nil && !n.reported && (n.provider != provider || n.model != model) {
+		n.reported = true
+		sc.addf(agentimport.Lossy, "opencode/native-checkpoint-skipped", r.Unit, "the request is to %s/%s, which cannot replay the native checkpoint of %s/%s at %s: OpenCode 2 sent the history from the compaction before it instead, which the path does not rebuild", provider, model, n.provider, n.model, n.unit)
 	}
 	errored := d.Error != nil
 	interrupted := false
@@ -555,7 +550,7 @@ func (w *v2walk) response(r *opencode.Row2, ts time.Time, kept []json.RawMessage
 			if err := sc.b.Member(resp, "copied_usage", copied); err != nil {
 				return err
 			}
-			sc.addf(agentimport.Kept, "opencode/fork-usage", r.Unit, "the response is a copy a fork made, and its usage, the origin's, is kept in %s:copied_usage", Source)
+			sc.addf(agentimport.Kept, "opencode/fork-usage", r.Unit, "the response is a copy, a fork's or a migration's, and its usage, the origin's, is kept in %s:copied_usage", Source)
 		}
 	} else {
 		resp.Usage = u
@@ -566,7 +561,7 @@ func (w *v2walk) response(r *opencode.Row2, ts time.Time, kept []json.RawMessage
 	if err := sc.b.Member(resp, "id", r.ID); err != nil {
 		return err
 	}
-	if err := sc.member(resp, "row", rest(r.Raw, "time", "content", "model", "tokens", "cost", "agent"), r.Unit); err != nil {
+	if err := sc.member(resp, "row", rest(r.Raw, "content", "model", "tokens", "cost", "agent"), r.Unit); err != nil {
 		return err
 	}
 	if len(kept) > 0 && !sc.slim {
@@ -600,12 +595,23 @@ func (w *v2walk) output(r *opencode.Row2, c *opencode.Content2, st *opencode.Too
 			if reason == "" {
 				reason = st.Error.Type
 			}
-			d := agentsession.NewDecision(callID, call.ID, agentsession.VerdictReject, "human").WithReason(reason)
+			// permission.rejected is the user's feedback (CorrectedError)
+			// or a rule's denial (BlockedError), whose message is the
+			// rule's reason or "Permission denied: <permission>".
+			by, why := "human", "the user declined the call"
+			switch {
+			case st.Error.Type == "aborted":
+			case strings.HasPrefix(st.Error.Message, "Permission denied: "):
+				by, why = "policy", "a rule denied the call"
+			default:
+				why = "the user declined the call with feedback, or a rule denied it with a reason of its own, which OpenCode 2 records alike; it is taken as the user's"
+			}
+			d := agentsession.NewDecision(callID, call.ID, agentsession.VerdictReject, by).WithReason(reason)
 			d.Timestamp = ts
 			if _, err := sc.append(d); err != nil {
 				return err
 			}
-			sc.addf(agentimport.Lossy, "opencode/permission-rejected", r.Unit, "the user declined the call; it is a reject decision, and the output is the error OpenCode 2 sends")
+			sc.addf(agentimport.Lossy, "opencode/permission-rejected", r.Unit, "%s: a reject decision by %s, and the output is the error OpenCode 2 sends", why, by)
 		}
 	default:
 		sc.addf(agentimport.Lossy, "opencode/call-unfinished", r.Unit, "call %s was %s when the step ended; OpenCode 2 sends it with no output", c.ID, st.Status)
@@ -716,6 +722,14 @@ func (w *v2walk) compaction(r *opencode.Row2, ts time.Time) error {
 			return err
 		}
 		summary = &openresponses.UnknownItem{Type: "opencode.native_checkpoint", Raw: raw}
+		var pc struct {
+			Provenance struct {
+				ProviderID string `json:"providerID"`
+				ModelID    string `json:"modelID"`
+			} `json:"provenance"`
+		}
+		_ = json.Unmarshal(d.ProviderContext, &pc)
+		w.native = &provenance{provider: pc.Provenance.ProviderID, model: pc.Provenance.ModelID, unit: r.Unit}
 		sc.addf(agentimport.Kept, "opencode/native-checkpoint", r.Unit, "a provider's own compaction checkpoint, the provider's messages, is the compaction's summary as an opencode.native_checkpoint item; OpenCode 2 replays it only to a model of that provider")
 	} else {
 		lines := []string{
@@ -729,6 +743,7 @@ func (w *v2walk) compaction(r *opencode.Row2, ts time.Time) error {
 		}
 		lines = append(lines, "</conversation-checkpoint>")
 		summary = userText(strings.Join(lines, "\n"))
+		w.native = nil
 	}
 	first, err := sc.keepNone(ts, r.Unit)
 	if err != nil {
@@ -748,11 +763,20 @@ func (w *v2walk) compaction(r *opencode.Row2, ts time.Time) error {
 				return err
 			}
 		}
+	} else if u != nil {
+		copied := map[string]any{"usage": u}
+		for k, x := range extra {
+			copied[k] = x
+		}
+		if err := sc.b.Member(e, "copied_usage", copied); err != nil {
+			return err
+		}
+		sc.addf(agentimport.Kept, "opencode/fork-usage", r.Unit, "the compaction is a copy, and its usage, the origin's, is kept in %s:copied_usage", Source)
 	}
 	if err := sc.b.Member(e, "id", r.ID); err != nil {
 		return err
 	}
-	if err := sc.member(e, "row", rest(r.Raw, "time", "summary", "recent", "providerContext", "tokens", "cost"), r.Unit); err != nil {
+	if err := sc.member(e, "row", rest(r.Raw, "summary", "recent", "providerContext", "tokens", "cost"), r.Unit); err != nil {
 		return err
 	}
 	if _, err := sc.append(e); err != nil {

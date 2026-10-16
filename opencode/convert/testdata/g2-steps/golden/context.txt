@@ -2,7 +2,6 @@ session 0 ses_g2steps
   model: claude-x
   user: fix the tests | Called the Read tool with the following input: {"f | <input_image> | <input_file>
   reasoning [encrypted]
-  assistant:  
   call toolu_r1 read
   call toolu_b1 bash
   call toolu_g1 glob
@@ -20,4 +19,5 @@ session 0 ses_g2steps
   user: and again
   assistant: half an answer
   call toolu_x1 bash
-  output toolu_x1 ok  demo/a 0.1s
+  output toolu_x1 Tool execution aborted
+  user: 

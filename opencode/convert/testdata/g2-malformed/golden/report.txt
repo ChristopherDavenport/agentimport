@@ -1,6 +1,6 @@
-opencode: 32 records: mapped 16 kept 5 dropped 5 malformed 6
+opencode: 33 records: mapped 17 kept 5 dropped 5 malformed 6
   gap      agentimport/provenance                            3  the import is recorded in the header's agentimport:source member
-  dropped  opencode/empty-text                               1  an empty text part, which OpenCode does not send, is left out
+  dropped  opencode/empty-text                               1  an empty text part, which OpenCode does not send from 1.14.42, is left out
   dropped  opencode/orphan                                   4  a part record that belongs to no message of the session is left out: its message cannot be read
   dropped  opencode/system-prompt                            3  OpenCode builds the system prompt and the tool list for each request and does not store them; the settings carry the model alone
   lossy    opencode/step-unfinished                          1  step 1 of the message has no step-finish part: the call did not finish, and its usage is not recorded
