@@ -6,7 +6,7 @@ openhands: 6 files: mapped 6 kept 0 dropped 0 malformed 0
   lossy    openhands/timestamp-zone                          1  OpenHands writes local time with no zone; the timestamps are read in UTC
   lossy    openhands/tools-unrecorded                        1  2 tools are recorded without the parameter schema the model was sent, as OpenHands records them from 1.7; the config carries their names and descriptions, and the definitions are kept in openhands:event (at events:1)
   kept     openhands/cost-unplaced                           1  per-call costs name no response, so they cannot be placed on one; they are in the header member openhands:stats with the metrics' totals
-  kept     openhands/event-members                           5  members tools are kept in openhands:event (at events:1, events:2, events:3, events:4, events:5)
+  kept     openhands/event-members                           3  members tools are kept in openhands:event (at events:1, events:3, events:4)
   kept     openhands/observation                             1  the structured FileEditorObservation is kept in openhands:observation beside the output rendered from it (at events:4)
-  kept     openhands/state                                   1  the conversation's state beyond its working directory, leaf and metrics: the agent's configuration, policies, skills, tags and secrets as OpenHands stored them
+  kept     openhands/state                                   1  the conversation's state but its metrics, as OpenHands stored it: the agent's configuration, policies, skills, tags and secret registry
   kept     openhands/usage-member                            2  the context window and the per-turn tokens OpenHands records with the usage are in openhands:usage (at events:3, events:5)

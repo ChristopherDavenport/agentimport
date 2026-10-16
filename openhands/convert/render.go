@@ -192,13 +192,32 @@ func imageMime(b64 string) string {
 // file the tool saved the whole text to when it had a directory to
 // save it in.
 func (c *conv) truncate(i int, s string, limit int, saveDir, prefix string) string {
+	out, cut, named := truncate(s, limit, saveDir, prefix)
+	if named {
+		c.at(agentimport.Lossy, "openhands/output-path", i, "the output names the file OpenHands saved the whole text to, rebuilt from its directory and the text's hash, as it would be had the save succeeded")
+	}
+	if cut {
+		c.at(agentimport.Lossy, "openhands/output-truncation", i, "the output is cut to %d characters, as the tool cut it before sending; the observation member holds it whole", limit)
+	}
+	return out
+}
+
+// truncateQuiet is truncate with no findings, for tests.
+func (c *conv) truncateQuiet(s string, limit int, saveDir string) string {
+	out, _, _ := truncate(s, limit, saveDir, "terminal")
+	return out
+}
+
+// truncate is the SDK's maybe_truncate; cut says it cut the text, named
+// that the notice names a saved file.
+func truncate(s string, limit int, saveDir, prefix string) (out string, cut, named bool) {
 	r := []rune(s)
 	if len(r) <= limit {
-		return s
+		return s, false, false
 	}
 	notice := []rune(truncateNotice)
 	if len(notice) >= limit {
-		return string(notice[:limit])
+		return string(notice[:limit]), true, false
 	}
 	available := limit - len(notice)
 	head := available/2 + available%2
@@ -206,20 +225,19 @@ func (c *conv) truncate(i int, s string, limit int, saveDir, prefix string) stri
 	if saveDir != "" {
 		path := pyJoin(saveDir, prefix+"_output_"+shortHash(s)+".txt")
 		final = []rune(fmt.Sprintf(truncatePersist, path, splitLines(string(r[:head]))+1))
-		c.at(agentimport.Lossy, "openhands/output-path", i, "the output names the file OpenHands saved the whole text to, rebuilt from its directory and the text's hash, as it would be had the save succeeded")
+		named = true
 	}
 	if len(final) >= limit {
-		return string(final[:limit])
+		return string(final[:limit]), true, named
 	}
 	remaining := limit - len(final)
 	head = min(head, remaining)
 	tail := remaining - head
-	c.at(agentimport.Lossy, "openhands/output-truncation", i, "the output is cut to %d characters, as the tool cut it before sending; the observation member holds it whole", limit)
-	out := string(r[:head]) + string(final)
+	out = string(r[:head]) + string(final)
 	if tail > 0 {
 		out += string(r[len(r)-tail:])
 	}
-	return out
+	return out, true, named
 }
 
 // sendCut is the cut OpenHands makes to a tool result's text at send

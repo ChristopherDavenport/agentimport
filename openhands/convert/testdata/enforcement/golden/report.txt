@@ -10,7 +10,7 @@ openhands: 12 files: mapped 11 kept 1 dropped 0 malformed 0
   lossy    openhands/view-enforced                           5  OpenHands leaves this event out of the context from event 8: part of a tool loop another part of which left the context; an omit config entry leaves out its items (at events:3, events:4, events:5, events:6, events:8)
   kept     openhands/cost-unplaced                           1  per-call costs name no response, so they cannot be placed on one; they are in the header member openhands:stats with the metrics' totals
   kept     openhands/duplicate-output                        1  a second answer to call call_l2; OpenHands sends the first alone, and this one is a custom entry (at events:7)
-  kept     openhands/event-members                          10  members tools are kept in openhands:event (at events:1, events:2, events:3, events:4, events:5)
+  kept     openhands/event-members                           7  members tools are kept in openhands:event (at events:1, events:3, events:4, events:5, events:6)
   kept     openhands/observation                             2  the structured TerminalObservation is kept in openhands:observation beside the output rendered from it (at events:4, events:6)
-  kept     openhands/state                                   1  the conversation's state beyond its working directory, leaf and metrics: the agent's configuration, policies, skills, tags and secrets as OpenHands stored them
+  kept     openhands/state                                   1  the conversation's state but its metrics, as OpenHands stored it: the agent's configuration, policies, skills, tags and secret registry
   kept     openhands/usage-member                            4  the context window and the per-turn tokens OpenHands records with the usage are in openhands:usage (at events:3, events:5, events:8, events:11)

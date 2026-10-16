@@ -30,6 +30,8 @@ type child struct {
 	why string
 	cv  *conv
 	sid string
+	// failed says the conversion failed and was reported.
+	failed bool
 }
 
 // answer is one call a sub-agent answered: the call's prompt was its
@@ -219,6 +221,7 @@ func (c *conv) convertChild(ch *child, tgt target) bool {
 	cv, err := c.fam.convert(ch.conv, tgt, c.prefix+file+"/", c.depth+1, sub)
 	delete(c.fam.active, ch.real)
 	if err != nil {
+		ch.failed = true
 		c.addf(agentimport.Dropped, "openhands/subagent-failed", file, 0, "the sub-agent could not be converted: %s", agentimport.ErrorText(err))
 		return false
 	}
@@ -240,6 +243,9 @@ func (c *conv) linkChildren(i int, at string, cl *call) ([]agentsession.EntryRef
 			continue
 		}
 		ch := a.child
+		if ch.failed {
+			continue
+		}
 		key := cl.id
 		if a.n > 0 {
 			key = cl.id + "/" + ch.name
@@ -293,6 +299,9 @@ func (c *conv) peerChildren(i int, at string, cl *call) (string, error) {
 			continue
 		}
 		ch := a.child
+		if ch.failed {
+			continue
+		}
 		if ch.cv == nil {
 			if !c.convertChild(ch, c.unlinkedTarget(ch)) {
 				continue
@@ -321,7 +330,7 @@ func (c *conv) unlinkedTarget(ch *child) target {
 // unlinkedChildren converts the sub-agents the walk linked to no call.
 func (c *conv) unlinkedChildren() error {
 	for _, ch := range c.kids.list {
-		if ch.cv != nil {
+		if ch.cv != nil || ch.failed {
 			continue
 		}
 		why := ch.why

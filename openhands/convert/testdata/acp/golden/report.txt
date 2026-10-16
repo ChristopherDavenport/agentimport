@@ -6,8 +6,8 @@ openhands: 6 files: mapped 5 kept 1 dropped 0 malformed 0
   lossy    openhands/timestamp-zone                          1  OpenHands writes local time with no zone; the timestamps are read in UTC
   lossy    openhands/usage-joined                            1  base_state records no usage for response "a1b2c3d4-0000-4000-8000-000000000001"; the response has none (at events:4)
   kept     openhands/cost-unplaced                           1  per-call costs name no response, so they cannot be placed on one; they are in the header member openhands:stats with the metrics' totals
-  kept     openhands/event-members                           3  members activated_skills, llm_message are kept in openhands:event (at events:2, events:4, events:5)
+  kept     openhands/event-members                           2  members action, security_risk, summary, tool_call are kept in openhands:event (at events:4, events:5)
   kept     openhands/observation                             1  the structured FinishObservation is kept in openhands:observation beside the output rendered from it (at events:5)
   kept     openhands/record                                  1  the ACPToolCallEvent, which never enters the context, is a custom entry (at events:3)
-  kept     openhands/state                                   1  the conversation's state beyond its working directory, leaf and metrics: the agent's configuration, policies, skills, tags and secrets as OpenHands stored them
+  kept     openhands/state                                   1  the conversation's state but its metrics, as OpenHands stored it: the agent's configuration, policies, skills, tags and secret registry
   kept     openhands/unmatched-usage                         1  a call of "agent" that no event names (a title, a refused condensation, an ACP turn) is a custom entry with its usage at the end of the leaf's path

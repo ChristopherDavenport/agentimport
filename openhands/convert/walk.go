@@ -459,7 +459,7 @@ func (c *conv) stateMembers(h *agentsession.Header) error {
 				return err
 			}
 		}
-		c.addf(kind, "openhands/state", openhands.FileBaseState, 0, "the conversation's state beyond its working directory, leaf and metrics: the agent's configuration, policies, skills, tags and secrets as OpenHands stored them")
+		c.addf(kind, "openhands/state", openhands.FileBaseState, 0, "the conversation's state but its metrics, as OpenHands stored it: the agent's configuration, policies, skills, tags and secret registry")
 		if !openhands.IsNull(stats) {
 			raw, err := c.statsMember(s)
 			if err != nil {
@@ -650,9 +650,8 @@ func (c *conv) event(i int) error {
 	if c.done[i] {
 		// An action its batch wrote with the first: it writes nothing
 		// more.
-		c.tail[i] = c.tail[c.parent[i]]
-		if c.parent[i] < 0 {
-			c.tail[i] = ""
+		if p := c.parent[i]; p >= 0 {
+			c.tail[i] = c.tail[p]
 		}
 		c.mark(i, agentimport.LineMapped)
 		c.viewApply(i)

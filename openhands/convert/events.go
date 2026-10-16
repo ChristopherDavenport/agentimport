@@ -43,11 +43,11 @@ func (c *conv) systemPrompt(i int) error {
 		}
 		c.at(agentimport.Lossy, "openhands/instructions-join", i, "OpenHands sends the system prompt and the dynamic context as two blocks of one system message, joined with a newline for the Responses API; the config carries them as two parts, which the session joins with a blank line")
 	}
-	tools, legacy, dumps := c.tools(i, sp.Tools)
+	tools, legacy := c.tools(i, sp.Tools)
 	if legacy > 0 {
 		c.at(agentimport.Lossy, "openhands/version-guess", i, "the tools are chat tool params, as SDK 1.0 to 1.6 wrote them, with the schema the model saw")
 	}
-	if dumps > 0 && !c.slim {
+	if len(sp.Tools) > 0 && !c.slim {
 		raw, err := json.Marshal(sp.Tools)
 		if err != nil {
 			return err
@@ -381,7 +381,11 @@ func (c *conv) response(i int, at, native, id string) (string, error) {
 
 // critic writes an event's critic_result as an eval outcome on target.
 func (c *conv) critic(i int, at string, raw json.RawMessage, target string) (string, error) {
-	if openhands.IsNull(raw) || target == "" {
+	if openhands.IsNull(raw) {
+		return at, nil
+	}
+	if target == "" {
+		c.at(agentimport.Dropped, "openhands/critic", i, "a critic_result on an event that wrote no entry to judge is left out")
 		return at, nil
 	}
 	var cr struct {

@@ -1,6 +1,7 @@
 package convert
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -19,7 +20,8 @@ var envelope = []string{"kind", "id", "timestamp", "source", "parent_id"}
 
 // rest returns the members of v, an object this package's types encode,
 // other than the envelope and mapped: what the conversion has no place
-// for.
+// for. A member that is null, an empty list or an empty object, the
+// defaults OpenHands writes, says nothing and is left out.
 func rest(v any, mapped ...string) (map[string]json.RawMessage, error) {
 	raw, err := json.Marshal(v)
 	if err != nil {
@@ -34,6 +36,12 @@ func rest(v any, mapped ...string) (map[string]json.RawMessage, error) {
 	}
 	for _, k := range mapped {
 		delete(all, k)
+	}
+	for k, v := range all {
+		switch string(bytes.TrimSpace(v)) {
+		case "null", "[]", "{}":
+			delete(all, k)
+		}
 	}
 	if len(all) == 0 {
 		return nil, nil
@@ -254,8 +262,9 @@ func anthropicItem(typ string, block json.RawMessage) (*openresponses.UnknownIte
 // tools maps a system prompt's tools: SDK 1.0 to 1.6 wrote chat tool
 // params, the schema the model saw; 1.7 and later write ToolDefinition
 // dumps, which hold a name and a description but no parameter schema,
-// except an MCP tool's input schema. legacy says which shape was seen.
-func (c *conv) tools(i int, raws []json.RawMessage) (out openresponses.Tools, legacy, dumps int) {
+// except an MCP tool's input schema. legacy counts the chat tool
+// params.
+func (c *conv) tools(i int, raws []json.RawMessage) (out openresponses.Tools, legacy int) {
 	unrecorded := 0
 	for _, raw := range raws {
 		var obj map[string]json.RawMessage
@@ -308,7 +317,6 @@ func (c *conv) tools(i int, raws []json.RawMessage) (out openresponses.Tools, le
 				unrecorded++
 			}
 			out = append(out, &openresponses.FunctionTool{Name: name, Description: desc, Parameters: params})
-			dumps++
 		default:
 			c.at(agentimport.Dropped, "openhands/bad-tool", i, "a tool that is neither chat tool params nor a tool definition is left out")
 		}
@@ -316,7 +324,7 @@ func (c *conv) tools(i int, raws []json.RawMessage) (out openresponses.Tools, le
 	if unrecorded > 0 {
 		c.at(agentimport.Lossy, "openhands/tools-unrecorded", i, "%d tools are recorded without the parameter schema the model was sent, as OpenHands records them from 1.7; the config carries their names and descriptions, and the definitions are kept in %s:event", unrecorded, Source)
 	}
-	return out, legacy, dumps
+	return out, legacy
 }
 
 var (
