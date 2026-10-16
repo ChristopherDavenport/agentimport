@@ -1,0 +1,7 @@
+{
+  "id": "prt_0001",
+  "sessionID": "ses_g1demo",
+  "messageID": "msg_0001",
+  "type": "text",
+  "text": "rename foo to bar"
+}

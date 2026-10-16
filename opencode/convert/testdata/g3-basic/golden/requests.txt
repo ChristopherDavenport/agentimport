@@ -1,0 +1,35 @@
+session 0 ses_v2main
+  request of msg_v02:
+    user: Skill: lint rules | hello | <input_image> | Attached file: notes.txt … | Attached directory: /work/v/src
+  request of msg_v09:
+    user: Skill: lint rules | hello | <input_image> | Attached file: notes.txt … | Attached directory: /work/v/src
+    assistant: Reading.
+    call toolu_v1 read
+    call toolu_v2 shell
+    call toolu_v3 edit
+    call toolu_v3b edit
+    call toolu_v4 write
+    call toolu_v5 subagent
+    call toolu_v6 subagent
+    opencode.hosted_tool
+    call toolu_v8 view
+    output toolu_v1 file body
+    output toolu_v2 {"error":{"type":"aborted","message":"The user dec
+    output toolu_v3 {"error":{"type":"permission.rejected","message":"
+    output toolu_v3b {"error":{"type":"permission.rejected","message":"
+    output toolu_v5 <subagent sessionID="ses_v2kid" state="completed">
+    output toolu_v6 The subagent is working in the background (session
+    output toolu_v8 an image
+    user: <subagent sessionID="ses_v2bg" state="completed" d
+    system: Instructions changed: use tabs.
+    user: The following shell command was executed by the us
+    user: The working directory has been changed to /work/v/
+  request of msg_v15:
+    user: <conversation-checkpoint> …
+    user: after compaction
+session 1 b72a7864-47de-526c-941c-768d96e4954a
+  request of msg_v2kida:
+    user: You are a subagent spawned by another session. …
+session 2 ses_v2bg
+  request of msg_v2bga:
+    user: You are a subagent spawned by another session. …

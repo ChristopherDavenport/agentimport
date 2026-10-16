@@ -1,0 +1,52 @@
+session 0 ses_par
+  model: claude-x
+  user: delegate the work
+  call call_t1 task
+  call call_t2 task
+  output call_t1 <task id="ses_kid1" state="completed"> …
+  output call_t2 <task id="ses_kid2" state="completed"> …
+  call call_t3 task
+  call call_t4 task
+  call call_t5 task
+  output call_t3 <task id="ses_kid2" state="completed"> …
+  output call_t4 <task id="ses_kid3" state="running"> …
+  output call_t5 <task id="ses_missing" state="completed"> …
+  assistant: waiting for the scan
+  user: <task id="ses_kid3" state="completed"> …
+  assistant: all done
+  user: The following tool was executed by the user
+  call call_t6 task
+  output call_t6 <task id="ses_kid4" state="completed"> …
+  user: Summarize the task tool output above and continue 
+  assistant: lint is clean
+session 1 1886b09f-7997-50b8-b54d-c6adb8cb09f9
+  model: claude-x
+  user: do one
+  assistant: kid one done
+session 2 ses_grand
+  model: claude-x
+  user: nested
+  assistant: nested done
+session 3 ses_kid2
+  model: claude-x
+  user: do two
+  assistant: two
+  user: more
+  assistant: more two
+session 4 ses_kid3
+  model: claude-x
+  user: scan
+  assistant: scan done
+session 5 d6448aea-c8bb-54de-b9f9-bf28e7f01441
+  model: claude-x
+  user: run lint
+  assistant: lint is clean
+session 6 ses_kid5
+  model: claude-x
+  user: orphan run
+  assistant: ok
+session 7 ses_fork
+  model: claude-x
+  user: delegate the work
+  assistant: the origin answer, copied
+  assistant: forked answer

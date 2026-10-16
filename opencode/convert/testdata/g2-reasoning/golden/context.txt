@@ -1,0 +1,18 @@
+session 0 ses_g2reason
+  model: claude-x
+  user: explain the cache
+  anthropic.redacted_thinking
+  reasoning The cache is keyed by path. [encrypted]
+  assistant: It is keyed by path.
+  user: ask the other model
+  assistant: The other answer.
+  user: plan a screenshot
+  assistant: Taking one.
+  call call_s1 screenshot
+  output call_s1 
+  user: search the web
+  opencode.hosted_tool
+  assistant: Found it.
+  user: once more
+  reasoning again [encrypted]
+  assistant: Once more.

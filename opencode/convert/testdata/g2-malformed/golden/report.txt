@@ -1,0 +1,18 @@
+opencode: 33 records: mapped 17 kept 5 dropped 5 malformed 6
+  gap      agentimport/provenance                            3  the import is recorded in the header's agentimport:source member
+  dropped  opencode/empty-text                               1  an empty text part, which OpenCode does not send from 1.14.42, is left out
+  dropped  opencode/orphan                                   4  a part record that belongs to no message of the session is left out: its message cannot be read
+  dropped  opencode/system-prompt                            3  OpenCode builds the system prompt and the tool list for each request and does not store them; the settings carry the model alone
+  lossy    opencode/step-unfinished                          1  step 1 of the message has no step-finish part: the call did not finish, and its usage is not recorded
+  lossy    opencode/subagent-unlinked                        1  the session is a child of ses_cyc1, linked to no call (no call of the parent names it); its session names the parent in parent_session alone
+  kept     opencode/custom                                   1  an assistant message with no parts, which is not context, is a custom entry
+  kept     opencode/members                                  9  kept in opencode:message
+  kept     opencode/message-empty                            1  an assistant message with no parts is not in context
+  kept     opencode/session-record                           3  the session record's members the header has no place for are in the header's opencode:session member
+  kept     opencode/tool-unsent                              2  a tool part with no state OpenCode knows is not sent; it is kept in opencode:parts
+  kept     opencode/unknown-part                             2  a part of type "foo", which this converter does not know; it is kept in opencode:unsent
+  kept     opencode/usage-member                             1  the cost and the total OpenCode records with the usage are in opencode:usage
+  repaired opencode/call-id                                  1  call ID "dup" is empty, malformed or used before; the call is dup_1
+  repaired opencode/malformed                                6  a session record that cannot be read is skipped: the row has no id
+  repaired opencode/mistyped                                 1  members text hold another JSON type than OpenCode writes; they are kept as written and read as absent
+  repaired opencode/parent-cycle                             1  the session's parents form a cycle; it is converted with no parent

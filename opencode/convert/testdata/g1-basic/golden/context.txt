@@ -1,0 +1,7 @@
+session 0 ses_g1demo
+  model: claude-x
+  user: rename foo to bar
+  reasoning Find the definition. [encrypted]
+  call toolu_01 edit
+  output toolu_01 Edit applied.
+  assistant: Renamed.

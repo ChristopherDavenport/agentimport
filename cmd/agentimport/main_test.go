@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/ChristopherDavenport/agentimport"
+	"github.com/ChristopherDavenport/agentimport/opencode/sqlite"
 	"github.com/ChristopherDavenport/agentsession"
 )
 
@@ -23,6 +24,7 @@ var fixtureRoots = []string{
 	"../../atif/convert/testdata",
 	"../../cline/convert/testdata",
 	"../../openhands/convert/testdata",
+	"../../opencode/convert/testdata",
 }
 
 func runCmd(t *testing.T, args ...string) (int, string, string) {
@@ -89,6 +91,8 @@ func TestDetect(t *testing.T) {
 		{"../../openhands/convert/testdata/linear-chat/conversations/00000001000040009000000000000001/base_state.json", "openhands", ""},
 		{"../../openhands/convert/testdata/linear-chat/conversations/00000001000040009000000000000001/events/event-00001-00000001-0001-4000-8000-000000000002.json", "openhands", ""},
 		{write("base_state.json", "{}"), "", "-from"},
+		{"../../opencode/convert/testdata/g1-basic", "opencode", ""},
+		{"../../opencode/convert/testdata/g1-basic/storage/message/ses_g1demo/msg_0001.json", "opencode", ""},
 		{"../../openhands/convert/testdata/linear-chat", "", "-from"},
 	} {
 		s, err := detect(tc.path)
@@ -172,7 +176,7 @@ func TestConvertFixtures(t *testing.T) {
 			sameSession(t, w.File, got, want.Sessions[i])
 		}
 	}
-	for _, name := range []string{"claudecode", "pi", "codex", "atif", "cline", "openhands"} {
+	for _, name := range []string{"claudecode", "pi", "codex", "atif", "cline", "openhands", "opencode"} {
 		if bySource[name] == 0 {
 			t.Errorf("no %s fixture was converted", name)
 		}
@@ -585,5 +589,87 @@ func TestOpenHandsFamily(t *testing.T) {
 	ev := filepath.Join(parent, "events/event-00000-0000000b-0001-4000-8000-000000000001.json")
 	if got, _ := run(ev, parent); len(got) != 1 {
 		t.Errorf("an event file and its directory: converted %v", got)
+	}
+}
+
+// TestOpenCodeStore detects an OpenCode database and its data
+// directory, refuses Crush's database of the same name, and converts a
+// store once whichever of its paths name it.
+func TestOpenCodeStore(t *testing.T) {
+	root := t.TempDir()
+	data := filepath.Join(root, "opencode")
+	crush := filepath.Join(root, "project", ".opencode")
+	for _, d := range []string{data, crush} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	schema := func(names ...string) string {
+		var out string
+		for _, n := range names {
+			b, err := os.ReadFile("../../opencode/testdata/schema-" + n + ".sql")
+			if err != nil {
+				t.Fatal(err)
+			}
+			out += string(b)
+		}
+		return out
+	}
+	db := filepath.Join(data, "opencode.db")
+	w, err := sqlite.Fixture(db, schema("project", "v1")+`
+INSERT INTO project VALUES ('p', '/w', NULL, NULL, NULL, NULL, 1, 1, NULL, '[]', NULL);
+INSERT INTO session (id, project_id, slug, directory, title, version, time_created, time_updated) VALUES ('ses_a', 'p', 's', '/w', 't', '1.4.0', 1760000000000, 1760000000000);
+INSERT INTO message VALUES ('msg_a', 'ses_a', 1760000000001, 1760000000001, '{"role":"user","time":{"created":1760000000001},"agent":"build","model":{"providerID":"x","modelID":"y"}}');
+INSERT INTO part VALUES ('prt_a', 'msg_a', 'ses_a', 1, 1, '{"type":"text","text":"hi"}');`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Close()
+	cw, err := sqlite.Fixture(filepath.Join(crush, "opencode.db"), "CREATE TABLE sessions (id TEXT PRIMARY KEY); CREATE TABLE messages (id TEXT PRIMARY KEY, parts TEXT);")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cw.Close()
+	for _, p := range []string{data, db} {
+		if s, err := detect(p); err != nil || s.name != "opencode" {
+			t.Errorf("detect(%s) = %s, %v", p, s.name, err)
+		}
+	}
+	if s, err := detect(filepath.Join(crush, "opencode.db")); err == nil {
+		t.Errorf("Crush's database is detected as %s", s.name)
+	}
+	// A database whose schema is still in its write-ahead log, as a
+	// running OpenCode's may be, is read from a copy to tell.
+	live := filepath.Join(root, "live", "opencode")
+	if err := os.MkdirAll(live, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	lw, err := sqlite.Fixture(filepath.Join(live, "opencode.db"), schema("project", "v1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lw.Close()
+	if s, err := detect(live); err != nil || s.name != "opencode" {
+		t.Errorf("a database with its schema in the log: %s, %v", s.name, err)
+	}
+	ins, skip, err := collect([]string{data, db, filepath.Join(root, "project")}, "auto")
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, in := range ins {
+		if in.source.name == "opencode" {
+			n++
+			if in.path != data {
+				t.Errorf("input %s, want the data directory", in.path)
+			}
+		}
+	}
+	if n != 1 {
+		t.Errorf("%d OpenCode inputs, want 1; skipped %v", n, skip)
+	}
+	store := t.TempDir()
+	if code, out, errOut := runCmd(t, "convert", "-o", store, db); code != 0 {
+		t.Fatalf("exit %d: %s\n%s", code, errOut, out)
 	}
 }

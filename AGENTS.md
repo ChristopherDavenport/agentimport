@@ -1,7 +1,8 @@
 # agentimport
 
 Converters from other coding agents' session logs into the Agent
-Session Format: Claude Code, pi and Codex today. Each source is a
+Session Format: Claude Code, pi, Codex, ATIF, Cline and Roo, OpenHands
+and OpenCode today. Each source is a
 format package that reads the native log as it is, and a `convert`
 package that turns it into `agentsession` sessions and reports every
 difference. The design is `docs/plans/agentimport.md`; read it before
@@ -17,11 +18,20 @@ decisions they settled, and what is known of the candidates.
   root; per source, `<source>` (the native format) and
   `<source>/convert`; `cmd/agentimport`.
 - The module imports `agentsession`, `openresponses` and the standard
-  library alone; `make deps` enforces it. A format package imports the
-  standard library alone, or a package of this module's `internal`
-  tree that does, at any depth (`internal/jsonline`, the codec that
-  keeps undeclared members); `TestImportBoundary` enforces it, and it
-  lists the format packages, so a new source adds itself there.
+  library alone, with one exception: `opencode/sqlite` imports
+  `modernc.org/sqlite` (SQLite in Go, no cgo), and what it imports, to
+  read OpenCode's database, which keeps its sessions in SQLite since
+  1.2 and is in WAL mode while OpenCode runs; a hand-written reader of
+  pages, records and the log would be a second SQLite to get right. No
+  other package may import a driver, `opencode/convert` included (it
+  takes the opener in its Options). `make deps` (`scripts/check-deps.sh`)
+  enforces both: any other non-allowed dependency fails, and so does any
+  package but a `*/sqlite` one importing modernc. A format package
+  imports the standard library alone, or a package of this module's
+  `internal` tree that does, at any depth (`internal/jsonline`, the
+  codec that keeps undeclared members); `TestImportBoundary` enforces
+  it, and it lists the format packages, so a new source adds itself
+  there.
 
 ## Rules every converter keeps
 

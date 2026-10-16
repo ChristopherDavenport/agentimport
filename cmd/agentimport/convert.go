@@ -12,7 +12,7 @@ import (
 	"github.com/ChristopherDavenport/agentsession/jsonl"
 )
 
-const convertUsage = `usage: agentimport convert -o <store> [-from auto|claudecode|pi|codex|atif|cline|openhands] [-strict] [-slim] [-force] [-report text|json] <file|dir>...
+const convertUsage = `usage: agentimport convert -o <store> [-from auto|claudecode|pi|codex|atif|cline|openhands|opencode] [-strict] [-slim] [-force] [-report text|json] <file|dir>...
 
 Converts each session and writes every session the conversion makes,
 the main session and its subsessions, into the agentsession jsonl store

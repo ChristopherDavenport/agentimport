@@ -1,0 +1,29 @@
+{
+  "id": "msg_0002",
+  "sessionID": "ses_g1demo",
+  "role": "assistant",
+  "parentID": "msg_0001",
+  "providerID": "anthropic",
+  "modelID": "claude-x",
+  "mode": "build",
+  "agent": "build",
+  "path": {
+    "cwd": "/work/demo",
+    "root": "/work/demo"
+  },
+  "cost": 0.01,
+  "tokens": {
+    "input": 12,
+    "output": 40,
+    "reasoning": 5,
+    "cache": {
+      "read": 900,
+      "write": 0
+    }
+  },
+  "time": {
+    "created": 1760000002000,
+    "completed": 1760000009000
+  },
+  "finish": "stop"
+}

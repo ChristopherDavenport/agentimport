@@ -1,0 +1,8 @@
+opencode: 32 records: mapped 28 kept 0 dropped 4 malformed 0
+  gap      agentimport/provenance                            2  the import is recorded in the header's agentimport:source member
+  dropped  opencode/system-prompt                            2  OpenCode builds the system prompt and the tool list for each request and does not store them; the settings carry the model alone
+  lossy    opencode/revert-staged                            2  the session stages a revert from this message: it and the 1 messages after it are on a branch the session does not resume, as OpenCode deletes them before its next request
+  lossy    opencode/step-unfinished                          1  step 1 of the message has no step-finish part: the call did not finish, and its usage is not recorded
+  kept     opencode/members                                 12  kept in opencode:message
+  kept     opencode/session-record                           2  the session record's members the header has no place for are in the header's opencode:session member
+  kept     opencode/usage-member                             4  the cost and the total OpenCode records with the usage are in opencode:usage

@@ -1,0 +1,6 @@
+opencode: 7 records: mapped 7 kept 0 dropped 0 malformed 0
+  gap      agentimport/provenance                            1  the import is recorded in the header's agentimport:source member
+  dropped  opencode/system-prompt                            1  OpenCode builds the system prompt and the tool list for each request and does not store them; the settings carry the model alone
+  kept     opencode/members                                  3  kept in opencode:message
+  kept     opencode/session-record                           1  the session record's members the header has no place for are in the header's opencode:session member
+  kept     opencode/usage-member                             1  the cost and the total OpenCode records with the usage are in opencode:usage

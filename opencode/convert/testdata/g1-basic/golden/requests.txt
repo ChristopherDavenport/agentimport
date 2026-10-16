@@ -1,0 +1,8 @@
+session 0 ses_g1demo
+  request of msg_0002:1:
+    user: rename foo to bar
+  request of msg_0002:2:
+    user: rename foo to bar
+    reasoning Find the definition. [encrypted]
+    call toolu_01 edit
+    output toolu_01 Edit applied.

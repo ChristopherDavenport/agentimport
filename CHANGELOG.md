@@ -7,6 +7,43 @@ versions may break the API.
 
 ## Unreleased
 
+- Added: OpenCode (`anomalyco/opencode`), all three ways it has stored
+  sessions under its data directory: the `storage/` files (up to
+  1.1.65), the V1 tables of `opencode.db` (1.2 to 1.19) and its V2
+  tables (2.0 on). `opencode` reads the files and decodes every record,
+  keeping the members it does not declare; `opencode/sqlite` opens the
+  database, a copy of it and its write-ahead log so the original is
+  never written and committed frames not yet checkpointed are read, and
+  retries a copy a running OpenCode changed under it. It is the one
+  package that imports a database driver, `modernc.org/sqlite`
+  (v1.59.0, Go 1.25), which `make deps` now enforces through
+  `scripts/check-deps.sh`; the module's go line reads `go 1.25.0`.
+  `opencode/convert` converts each session once, from its most faithful
+  copy: the V1 tables over the storage files they were imported from;
+  a session OpenCode 2 migrated and carried on is two, the V1 record
+  and OpenCode 2's own, which starts from the migration's copy (told by
+  the migration's own marks) and names the V1 session as its parent. It
+  rebuilds what each request sent as the release that made it did,
+  guessed from the creating release and the request's time and
+  reported: V1's `filterCompacted` and
+  `toModelMessages`, an assistant message split into one response per
+  step as the AI SDK's `convertToModelMessages` splits it, failed turns
+  left out by `omit`, compaction cuts left out by `omit` and a tail
+  moved after the summary (1.14.40) as a compaction (the gap
+  `agentimport/fold-head` now names OpenCode), pruned outputs and
+  another model's reasoning (the gap `agentimport/context-replace`);
+  V2's history from the latest compaction, its rows rendered as
+  `toLLMMessages` does. Usage folds cache reads and writes into input,
+  output counting reasoning up to 1.3.15, each step's rule read from its
+  total where that settles it. Anthropic, OpenAI and Gemini
+  reasoning metadata map as the provider packages read them. Task and
+  subagent calls link their child sessions, a subsession for the one
+  foreground call that ran a child and a peer otherwise; refused calls
+  are reject decisions, calls that never finished reject or answer
+  decisions; an OpenCode 2 fork names its origin. The command detects a
+  data directory, a file in one or a database (not Crush's
+  `.opencode/opencode.db`), converts a store whole, and `-from opencode`
+  names it.
 - Added: OpenHands, the software agent SDK's conversation directories
   (SDK 1.0 to 1.55: the OpenHands CLI, the agent server, Agent
   Canvas). `openhands` reads a conversation as OpenHands does, events

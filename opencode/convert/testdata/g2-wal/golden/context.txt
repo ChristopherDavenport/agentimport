@@ -1,0 +1,4 @@
+session 0 ses_wal
+  model: claude-x
+  user: only in the log
+  assistant: read from the log

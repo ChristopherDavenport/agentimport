@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/ChristopherDavenport/agentimport"
 	"github.com/ChristopherDavenport/agentimport/atif"
@@ -20,6 +21,9 @@ import (
 	clineconvert "github.com/ChristopherDavenport/agentimport/cline/convert"
 	"github.com/ChristopherDavenport/agentimport/codex"
 	codexconvert "github.com/ChristopherDavenport/agentimport/codex/convert"
+	"github.com/ChristopherDavenport/agentimport/opencode"
+	occonvert "github.com/ChristopherDavenport/agentimport/opencode/convert"
+	"github.com/ChristopherDavenport/agentimport/opencode/sqlite"
 	"github.com/ChristopherDavenport/agentimport/openhands"
 	ohconvert "github.com/ChristopherDavenport/agentimport/openhands/convert"
 	"github.com/ChristopherDavenport/agentimport/pi"
@@ -77,6 +81,13 @@ var sources = []source{
 			return ohconvert.ConvertFile(path, ohconvert.Options{Slim: r.slim, Converted: r.openhandsDone})
 		},
 	},
+	{
+		name: occonvert.Source,
+		find: opencode.FindSessions,
+		convert: func(path string, r *runner) (*agentimport.Result, error) {
+			return occonvert.ConvertFile(path, occonvert.Options{Slim: r.slim, OpenDatabase: sqlite.OpenStore})
+		},
+	},
 }
 
 func sourceNamed(name string) (source, bool) {
@@ -125,6 +136,13 @@ func collect(args []string, from string) ([]input, []skipped, error) {
 		seen = map[string]bool{}
 	)
 	add := func(path string, s source) {
+		if s.name == occonvert.Source {
+			// An OpenCode store is converted whole, whichever of its
+			// files names it.
+			if root, ok := opencode.StoreOf(path); ok {
+				path = root
+			}
+		}
 		if s.name == ohconvert.Source {
 			// An OpenHands conversation is a directory, whichever of
 			// its files names it.
@@ -218,10 +236,18 @@ const (
 //   - a classic Cline or Roo Code task by the name of its API history
 //     or UI messages in a task directory, tasks/<id>/;
 //   - an OpenHands conversation by its directory, holding a
-//     base_state.json or an event file, or by one of those files.
+//     base_state.json or an event file, or by one of those files;
+//   - an OpenCode store by its data directory, holding opencode.db or a
+//     storage/ tree of sessions, by a file in one, or by a database
+//     file, each holding OpenCode's tables: Crush's .opencode/opencode.db
+//     is another program's.
 //
 // An agentsession file, which is already converted, is an error.
 func detect(path string) (source, error) {
+	if root, ok := opencode.StoreOf(path); ok && isOpenCode(root) {
+		s, _ := sourceNamed(occonvert.Source)
+		return s, nil
+	}
 	if info, err := os.Stat(path); err == nil && info.IsDir() {
 		if openhands.IsConversationDir(path) {
 			s, _ := sourceNamed(ohconvert.Source)
@@ -287,6 +313,60 @@ func detect(path string) (source, error) {
 		}
 	}
 	return source{}, errUnknown
+}
+
+// isOpenCode reports whether a store StoreOf names holds OpenCode's
+// sessions: a database of its tables, or a data directory holding one
+// or a storage/ tree of sessions. The answer is kept per store, since a
+// directory search detects every storage file of one.
+func isOpenCode(root string) bool {
+	openCodeStores.Lock()
+	defer openCodeStores.Unlock()
+	if ok, seen := openCodeStores.m[root]; seen {
+		return ok
+	}
+	ok := probeOpenCode(root)
+	openCodeStores.m[root] = ok
+	return ok
+}
+
+var openCodeStores = struct {
+	sync.Mutex
+	m map[string]bool
+}{m: map[string]bool{}}
+
+func probeOpenCode(root string) bool {
+	info, err := os.Stat(root)
+	if err != nil {
+		return false
+	}
+	if !info.IsDir() {
+		return probeDatabase(root)
+	}
+	db := filepath.Join(root, opencode.DatabaseName)
+	if _, err := os.Stat(db); err == nil && probeDatabase(db) {
+		return true
+	}
+	info, err = os.Stat(filepath.Join(root, opencode.DirStorage, opencode.DirSession))
+	return err == nil && info.IsDir()
+}
+
+// probeDatabase reads a database's schema from the checkpointed file;
+// a database whose schema is still in its write-ahead log, as one a
+// running OpenCode created may be, is read from a copy instead.
+func probeDatabase(path string) bool {
+	if sqlite.Probe(path) {
+		return true
+	}
+	if info, err := os.Stat(path + "-wal"); err != nil || info.Size() == 0 {
+		return false
+	}
+	db, err := sqlite.Open(path)
+	if err != nil {
+		return false
+	}
+	db.Close()
+	return true
 }
 
 // readProbe reads one line, giving nil for a line over probeLineSize.

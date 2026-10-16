@@ -1,0 +1,11 @@
+opencode: 15 records: mapped 11 kept 0 dropped 3 malformed 1
+  gap      agentimport/provenance                            1  the import is recorded in the header's agentimport:source member
+  gap      agentimport/reasoning-provider                    1  the reasoning's signature or encrypted content is anthropic's, which encrypted_content does not say; the item entry carries opencode:provider
+  gap      agentimport/usage-detail                          1  cache writes have no place in Responses usage; they are folded into input tokens, and the count, with the cost, is in opencode:usage
+  dropped  opencode/legacy-layout                            1  a directory of the layout OpenCode wrote before its MessageV2 model, which this converter does not read; OpenCode 1.1 moved such sessions to storage/ when it started
+  dropped  opencode/orphan                                   3  a message record that belongs to no session it can be converted with is left out: its session has no session file
+  dropped  opencode/system-prompt                            1  OpenCode builds the system prompt and the tool list for each request and does not store them; the settings carry the model alone
+  kept     opencode/members                                  8  kept in opencode:message
+  kept     opencode/session-record                           1  the session record's members the header has no place for are in the header's opencode:session member
+  kept     opencode/usage-member                             1  the cost and the total OpenCode records with the usage are in opencode:usage
+  repaired opencode/malformed                                1  a message record that cannot be read is skipped: not JSON

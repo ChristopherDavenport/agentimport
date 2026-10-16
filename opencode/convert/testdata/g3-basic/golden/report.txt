@@ -1,0 +1,25 @@
+opencode: 27 records: mapped 19 kept 6 dropped 1 malformed 1
+  gap      agentimport/context-replace                       2  the model changes from claude-x to gpt-x: OpenCode sends the reasoning an earlier model wrote without its provider's metadata, as plain text in later releases, which replaces the item in place; the session leaves it out instead, by omit other_models
+  gap      agentimport/provenance                            3  the import is recorded in the header's agentimport:source member
+  gap      agentimport/reasoning-provider                    2  the reasoning's signature or encrypted content is anthropic's, which encrypted_content does not say; the item entry carries opencode:provider
+  gap      agentimport/tool-error                            3  a function_call_output has no error flag; OpenCode 2 sends the error as JSON text, and the item entry carries opencode:is_error
+  gap      agentimport/usage-detail                          1  cache writes have no place in Responses usage; they are folded into input tokens, and the count, with the cost, is in opencode:usage
+  dropped  opencode/attachment-mime                          1  an attachment of type "application/zip", which OpenCode 2 does not send, is left out
+  dropped  opencode/orphan                                   1  a row record that belongs to no session it can be converted with is left out: its session has no row in session_v2
+  dropped  opencode/system-prompt                            3  OpenCode builds the system prompt and the tool list for each request and does not store them; the settings carry the model alone
+  lossy    opencode/attachment-repeated                      1  an image attached twice under one mention is sent once, as OpenCode 2 sends it
+  lossy    opencode/call-unfinished                          1  call toolu_v4 was running when the step ended; OpenCode 2 sends it with no output
+  lossy    opencode/compaction                               1  a compaction: OpenCode 2's requests from here start with it, and nothing before it is kept
+  lossy    opencode/compaction-incomplete                    1  a failed compaction cuts nothing
+  lossy    opencode/permission-rejected                      3  the user declined the call: a reject decision by human, and the output is the error OpenCode 2 sends
+  lossy    opencode/subagent-peer                            1  sub-agent session ses_v2bg outlives the call (the call ran it in the background); it is a peer, linked after the call's output, which is OpenCode's acknowledgement
+  kept     opencode/custom                                   6  a background shell command, which is not context, is a custom entry
+  kept     opencode/hosted-tool                              1  a tool the provider ran, its call and result in the response, is an opencode.hosted_tool item holding the content
+  kept     opencode/members                                 33  kept in opencode:row
+  kept     opencode/pending-input                            2  input OpenCode 2 queued in session_pending and has not put in the history is not context
+  kept     opencode/session-record                           3  the session record's members the header has no place for are in the header's opencode:session member
+  kept     opencode/shell-background                         1  a shell command run in the background enters context through its result, not here
+  kept     opencode/subagent                                 1  the call ran sub-agent session ses_v2kid in the foreground and alone; it is a subsession, linked before the call's output
+  kept     opencode/unknown-type                             1  a row of type "future-thing", which this converter does not know, is not context
+  kept     opencode/usage-member                             4  the cost and the total OpenCode records with the usage are in opencode:usage
+  repaired opencode/malformed                                1  a row that cannot be read is skipped: its data is not JSON

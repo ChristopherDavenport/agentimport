@@ -1,0 +1,17 @@
+{
+  "id": "prt_0002g",
+  "sessionID": "ses_g1demo",
+  "messageID": "msg_0002",
+  "type": "step-finish",
+  "reason": "stop",
+  "cost": 0.004,
+  "tokens": {
+    "input": 12,
+    "output": 40,
+    "reasoning": 0,
+    "cache": {
+      "read": 920,
+      "write": 30
+    }
+  }
+}

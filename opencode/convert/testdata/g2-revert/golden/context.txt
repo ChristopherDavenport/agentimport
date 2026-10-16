@@ -1,0 +1,9 @@
+session 0 ses_revmsg
+  model: claude-x
+  user: first
+  assistant: answer one
+  assistant: answer two
+session 1 ses_revpart
+  model: claude-x
+  user: first
+  assistant: answer one

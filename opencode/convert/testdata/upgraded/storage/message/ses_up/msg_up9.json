@@ -1,0 +1,13 @@
+{
+  "role": "user",
+  "time": {
+    "created": 1760001000500
+  },
+  "agent": "build",
+  "model": {
+    "providerID": "anthropic",
+    "modelID": "claude-x"
+  },
+  "id": "msg_up9",
+  "sessionID": "ses_up"
+}
