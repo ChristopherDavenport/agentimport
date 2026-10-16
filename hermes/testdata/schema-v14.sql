@@ -1,4 +1,7 @@
--- An older Hermes state.db, at schema version 14: before the
+-- An older Hermes state.db, at schema version 14, its columns a subset
+-- of SCHEMA_SQL in hermes_state_common.py (NousResearch/hermes-agent
+-- 848fc0ad8b, MIT License, Copyright (c) 2025 Nous Research; see
+-- THIRD_PARTY_NOTICES.md): before the
 -- delegate marker (v16), per-model usage (v20), system_prompts (v25),
 -- async_delegations and in-place compaction's flags. Written by hand
 -- from the migrations in hermes_state_schema.py, which add columns by

@@ -1,8 +1,10 @@
 package sqlite
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -37,6 +39,7 @@ func fixture(t *testing.T, name string, keepOpen bool) string {
 func TestRead(t *testing.T) {
 	for _, open := range []bool{false, true} {
 		path := fixture(t, "subagents", open)
+		before := listing(t, filepath.Dir(path))
 		if !Probe(path) {
 			t.Errorf("open %v: Probe does not take the database", open)
 		}
@@ -66,13 +69,34 @@ func TestRead(t *testing.T) {
 		if err := db.Close(); err != nil {
 			t.Fatal(err)
 		}
-		entries, _ := os.ReadDir(filepath.Dir(path))
-		for _, e := range entries {
-			if e.Name() != "state.db" && !open {
-				t.Errorf("%s beside the database", e.Name())
-			}
+		// Nothing is created, written or removed beside the database,
+		// its write-ahead log and index included while the writer holds
+		// them open.
+		if after := listing(t, filepath.Dir(path)); after != before {
+			t.Errorf("open %v: the directory changed:\n before %s\n after  %s", open, before, after)
+		}
+		if !open && !strings.Contains(before, "state.db ") || open && !strings.Contains(before, "state.db-wal ") {
+			t.Errorf("open %v: unexpected files %s", open, before)
 		}
 	}
+}
+
+// listing writes a directory's files with their sizes and times.
+func listing(t *testing.T, dir string) string {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var b strings.Builder
+	for _, e := range entries {
+		info, err := e.Info()
+		if err != nil {
+			t.Fatal(err)
+		}
+		fmt.Fprintf(&b, "%s %d %d; ", e.Name(), info.Size(), info.ModTime().UnixNano())
+	}
+	return b.String()
 }
 
 func TestTables(t *testing.T) {

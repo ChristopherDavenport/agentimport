@@ -225,6 +225,7 @@ SOFTWARE.
 | `hermes/lineage.go` | translated | the session-lineage predicates: `_is_explicit_fork_child_row` (`hermes_state_messages.py`), `_is_compression_child_row` (`hermes_state_compression.py`), `_BRANCH_CHILD_SQL`, `_legacy_reset_child_sql`, `_ephemeral_child_sql` and `_RESET_END_REASONS` (`hermes_state_common.py`) |
 | `hermes/calls.go` | translated | `coalesce_tool_call_id`, `_expand_tool_id_variants`, `tool_call_id_variants` and `tool_result_id_variants` (`agent/message_sanitization.py`) |
 | `hermes/convert/text.go` | translated | `sanitize_context` and its patterns (`agent/memory_manager.py`), `_is_background_review_harness_message`, `_REVIEW_HARNESS_PREFIXES` and `_STALE_TOOL_CALL_MARKER_RE` (`hermes_state.py`), the openings of `SUMMARY_PREFIX` and `LEGACY_SUMMARY_PREFIX` (`agent/context_compressor.py`) and a sentence of the approval gate's refusals (`tools/approval.py`) |
+| `hermes/testdata/schema-v14.sql` | strings only | a subset of the column definitions of `SCHEMA_SQL`'s `sessions` and `messages` (`hermes_state_common.py`) |
 | `hermes/testdata/schema-v31.sql` | strings only | the `CREATE TABLE` statements of `SCHEMA_SQL` (`hermes_state_common.py`) for the tables a conversion reads |
 
 The MIT License, as in the LICENSE at `848fc0ad8b`.
