@@ -1,0 +1,109 @@
+{
+  "version": 2,
+  "updated_at": "2025-10-01T19:00:00.000Z",
+  "agent": "lead",
+  "sessionId": "1759345200000_bad01",
+  "origin": {
+    "source": "cli",
+    "mode": "user",
+    "sessionId": "1759345200000_bad01"
+  },
+  "futureMember": {
+    "x": 1
+  },
+  "messages": [
+    null,
+    42,
+    {
+      "role": "user",
+      "content": 7,
+      "ts": 1759345200000
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "<user_input mode=\"act\">Go</user_input>"
+        },
+        null
+      ],
+      "ts": 1759345200001
+    },
+    {
+      "role": "assistant",
+      "content": [
+        null,
+        {
+          "type": "tool_use",
+          "id": "c1",
+          "name": "shell",
+          "input": "not an object"
+        },
+        {
+          "type": "weird",
+          "foo": 1
+        },
+        {
+          "type": "text",
+          "text": "x",
+          "extra": true
+        }
+      ],
+      "ts": 1759345200002,
+      "modelInfo": {
+        "id": "claude-x",
+        "provider": "anthropic"
+      }
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "zz",
+          "name": "shell",
+          "content": "orphan"
+        }
+      ],
+      "ts": 1759345200003
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "c1",
+          "name": "shell",
+          "content": [
+            {
+              "type": "text",
+              "text": "ok"
+            },
+            {
+              "type": "image",
+              "data": "aGk=",
+              "mediaType": "image/png"
+            }
+          ]
+        }
+      ],
+      "ts": 1759345200004
+    },
+    {
+      "role": "system",
+      "content": "hi",
+      "ts": 1759345200005
+    },
+    {
+      "role": "user",
+      "content": "",
+      "ts": "1759345200009"
+    },
+    {
+      "role": "assistant",
+      "content": [],
+      "ts": 1759345200010
+    }
+  ]
+}

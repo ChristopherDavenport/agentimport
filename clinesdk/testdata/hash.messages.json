@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "updated_at": "2026-10-01T10:00:00.000Z",
+  "agent": "lead",
+  "sessionId": "1759312800000_hash1",
+  "messages": [
+    {"id": "a", "role": "user", "content": "  <user_input mode=\"plan\">Plan it</user_input>\n<mode_notice>switched to plan</mode_notice> ", "ts": 1759312800000},
+    {"id": "b", "role": "user", "content": [{"text": "<user_command slash=\"team\">Spawn a team of agents for the following task: ship it</user_command>", "type": "text"}, {"type": "image", "mediaType": "image/png", "data": "aGk="}], "metadata": {"userRunSpan": 1, "10": "ten", "2": "two", "b": 1.5e300, "a": 1e21, "z": 0.0000001}},
+    {"id": "c", "role": "assistant", "agent": "lead", "sessionId": "1759312800000_hash1", "content": [{"type": "thinking", "thinking": "é   \u0007 😀", "signature": "s"}, {"type": "tool_use", "id": "t1", "name": "read_files", "input": {"files": [{"path": "/a\"b"}]}}], "modelInfo": {"id": "m", "provider": "p"}, "metrics": {"inputTokens": 12, "outputTokens": 3, "cacheReadTokens": 0, "cacheWriteTokens": 0, "cost": 0.0001}, "ts": 1759312800500},
+    {"id": "d", "role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1", "name": "read_files", "content": [{"query": "/a\"b", "result": "x", "success": true}]}], "ts": 1759312800600},
+    {"id": "e", "role": "user", "content": [{"type": "text", "text": "<user_command slash=\"compact\"></user_command>"}, {"type": "text"}], "ts": 1759312800700},
+    {"id": "f", "role": "assistant", "content": "plain", "metadata": {"displayOnly": true}},
+    {"id": "g", "role": "user", "content": "\ud800 lone"}
+  ]
+}

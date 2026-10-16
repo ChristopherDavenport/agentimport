@@ -1,0 +1,18 @@
+session 0 1759312800000_ab12c
+  model: gemini-x
+  user: Fix the failing test in a.go
+  reasoning The test is in a_test.go; read a.go first. [encrypted]
+  assistant: I'll read the file first.
+  call toolu_1 read_files
+  output toolu_1 [{"query":"/work/proj/a.go","result":"package a\n\
+  call toolu_2 run_commands
+  output toolu_2 FAIL TestTable (0.01s) …
+  call toolu_3 editor
+  output toolu_3 {"error":"This tool call was rejected by the user 
+  user: Use a table test instead, see the notes | <input_image> | <file_content path="/work/proj/notes.md"> …
+  anthropic.redacted_thinking
+  reasoning [encrypted]
+  assistant: Rewriting it as a table test.
+  call toolu_4 list_files
+  output toolu_4 Tool execution was interrupted before a result was
+  user: Thanks, stop there

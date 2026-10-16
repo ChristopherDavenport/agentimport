@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "updated_at": "2025-10-01T13:00:02.000Z",
+  "agent": "lead",
+  "sessionId": "1759323600000_cmp03",
+  "origin": {
+    "source": "cli",
+    "mode": "user",
+    "sessionId": "1759323600000_cmp03",
+    "version": "4.0.5"
+  },
+  "messages": [
+    {
+      "id": "s0",
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Context summary:\n\nThe user is porting the build to Bazel."
+        }
+      ],
+      "metadata": {
+        "kind": "compaction_summary",
+        "displayRole": "system",
+        "userRunSpan": 2,
+        "summary": "The user is porting the build to Bazel.",
+        "details": {
+          "readFiles": [],
+          "modifiedFiles": [
+            "/work/proj/BUILD"
+          ]
+        },
+        "tokensBefore": 120000,
+        "generatedAt": 1759323600000
+      },
+      "ts": 1759323600000
+    },
+    {
+      "id": "s1",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Continuing with the BUILD files."
+        }
+      ],
+      "ts": 1759323601000,
+      "modelInfo": {
+        "id": "claude-x",
+        "provider": "anthropic"
+      },
+      "metrics": {
+        "inputTokens": 5000,
+        "outputTokens": 20,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 5000,
+        "cost": 0.02
+      }
+    }
+  ],
+  "system_prompt": "You are Cline, a coding agent."
+}

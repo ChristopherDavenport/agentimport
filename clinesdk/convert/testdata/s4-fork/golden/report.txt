@@ -1,0 +1,20 @@
+clinesdk: 6 files and elements: mapped 6 kept 0 dropped 0 malformed 0
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  gap      agentimport/usage-detail                          2  inputTokens counts cache reads and writes already; cacheReadTokens is cached_tokens, and the metrics with the cache writes and the cost are clinesdk:usage (at 1759334400000_src01.messages.json:2, 1759334400000_src01.messages.json:4)
+  lossy    clinesdk/no-response-id                           2  Cline records no response ID; the response is resp_2 (at 1759334400000_src01.messages.json:2, 1759334400000_src01.messages.json:4)
+  lossy    clinesdk/no-stop-reason                           1  Cline records no stop reason; every response is completed
+  lossy    clinesdk/system-prompt-latest                     1  the system prompt is the one the file holds, the latest Cline sent; earlier requests may have sent another
+  lossy    clinesdk/user-input                               1  Cline sends a user's text trimmed and without its <user_input> or <user_command> wrapper, which names the mode; the item holds the text sent, the block as written is clinesdk:original (at 1759334400000_src01.messages.json:1)
+  kept     clinesdk/manifest                                 1  the manifest is the header member clinesdk:manifest
+  kept     clinesdk/members                                  4  the message's members the session has no place for are clinesdk:message (at 1759334400000_src01.messages.json:1, 1759334400000_src01.messages.json:2, 1759334400000_src01.messages.json:3, 1759334400000_src01.messages.json:4)
+clinesdk: 8 files and elements: mapped 8 kept 0 dropped 0 malformed 0
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  gap      agentimport/usage-detail                          1  inputTokens counts cache reads and writes already; cacheReadTokens is cached_tokens, and the metrics with the cache writes and the cost are clinesdk:usage (at 1759338000000_frk01.messages.json:6)
+  lossy    clinesdk/fork-copied                              1  the session is a fork of 1759334400000_src01, converted as 1759334400000_src01, named in parent_session and by a fork_of link; its first 4 messages are the source's, as its history beside it shows, converted as its own, their usage kept off the responses
+  lossy    clinesdk/no-response-id                           3  Cline records no response ID; the response is resp_2 (at 1759338000000_frk01.messages.json:2, 1759338000000_frk01.messages.json:4, 1759338000000_frk01.messages.json:6)
+  lossy    clinesdk/no-stop-reason                           1  Cline records no stop reason; every response is completed
+  lossy    clinesdk/system-prompt-latest                     1  the system prompt is the one the file holds, the latest Cline sent; earlier requests may have sent another
+  lossy    clinesdk/user-input                               2  Cline sends a user's text trimmed and without its <user_input> or <user_command> wrapper, which names the mode; the item holds the text sent, the block as written is clinesdk:original (at 1759338000000_frk01.messages.json:1, 1759338000000_frk01.messages.json:5)
+  kept     clinesdk/copied-usage                             2  the response is a copy of the forked session's history, whose usage is clinesdk:copied_usage, so it is not counted twice (at 1759338000000_frk01.messages.json:2, 1759338000000_frk01.messages.json:4)
+  kept     clinesdk/manifest                                 1  the manifest is the header member clinesdk:manifest
+  kept     clinesdk/members                                  6  the message's members the session has no place for are clinesdk:message (at 1759338000000_frk01.messages.json:1, 1759338000000_frk01.messages.json:2, 1759338000000_frk01.messages.json:3, 1759338000000_frk01.messages.json:4, 1759338000000_frk01.messages.json:5)

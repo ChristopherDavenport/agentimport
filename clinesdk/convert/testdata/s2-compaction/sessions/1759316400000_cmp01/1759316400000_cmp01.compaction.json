@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "updated_at": "2025-10-01T11:00:03.500Z",
+  "conversation_id": "1759316400000_cmp01",
+  "source_message_count": 6,
+  "source_prefix_hash": "sha256:dd4e4450cbc4c0bb31d0b34495e55d93c0a22ca28f975121a366cf53ec3b3f61",
+  "source_last_message_key": "id:m4",
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Context summary:\n\nThe user asked to refactor the parser. The lexer was split into lex.go."
+        }
+      ],
+      "metadata": {
+        "kind": "compaction_summary",
+        "displayRole": "system",
+        "userRunSpan": 1,
+        "summary": "The user asked to refactor the parser. The lexer was split into lex.go.",
+        "details": {
+          "readFiles": [
+            "/work/proj/parse.go"
+          ],
+          "modifiedFiles": [
+            "/work/proj/lex.go"
+          ]
+        },
+        "tokensBefore": 91000,
+        "generatedAt": 1759316403500
+      }
+    },
+    {
+      "id": "m3_tool_c2",
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "c2",
+          "name": "editor",
+          "content": "Created /work/proj/lex.go"
+        }
+      ],
+      "ts": 1759316402100
+    },
+    {
+      "id": "m4",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Lexer split; now the parser tests."
+        }
+      ],
+      "ts": 1759316403000,
+      "modelInfo": {
+        "id": "claude-x",
+        "provider": "anthropic"
+      },
+      "metrics": {
+        "inputTokens": 91000,
+        "outputTokens": 30,
+        "cacheReadTokens": 90000,
+        "cacheWriteTokens": 900,
+        "cost": 0.03
+      }
+    }
+  ],
+  "system_prompt": "You are Cline, a coding agent."
+}

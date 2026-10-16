@@ -1,0 +1,193 @@
+{
+  "version": 1,
+  "updated_at": "2025-10-01T22:00:09.500Z",
+  "agent": "lead",
+  "sessionId": "1759356000000_cmp04",
+  "origin": {
+    "source": "cli",
+    "mode": "user",
+    "sessionId": "1759356000000_cmp04",
+    "version": "4.1.20"
+  },
+  "messages": [
+    {
+      "id": "m0",
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "<user_input mode=\"act\">Refactor the parser</user_input>"
+        }
+      ],
+      "ts": 1759356000001
+    },
+    {
+      "id": "m1",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Reading the parser."
+        },
+        {
+          "type": "tool_use",
+          "id": "c1",
+          "name": "read_files",
+          "input": {
+            "files": [
+              {
+                "path": "/work/proj/parse.go"
+              }
+            ]
+          }
+        }
+      ],
+      "ts": 1759356001000,
+      "modelInfo": {
+        "id": "claude-x",
+        "provider": "anthropic"
+      },
+      "metrics": {
+        "inputTokens": 800,
+        "outputTokens": 20,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 800,
+        "cost": 0.003
+      }
+    },
+    {
+      "id": "m1_tool_c1",
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "c1",
+          "name": "read_files",
+          "content": [
+            {
+              "query": "/work/proj/parse.go",
+              "result": "package parse\n",
+              "success": true
+            }
+          ]
+        }
+      ],
+      "ts": 1759356001100
+    },
+    {
+      "id": "m2",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Context window nearly full."
+        }
+      ],
+      "metadata": {
+        "displayOnly": true,
+        "displayRole": "status"
+      },
+      "ts": 1759356001200
+    },
+    {
+      "id": "m3",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "I'll split the lexer out."
+        },
+        {
+          "type": "tool_use",
+          "id": "c2",
+          "name": "editor",
+          "input": {
+            "command": "create",
+            "path": "/work/proj/lex.go"
+          }
+        }
+      ],
+      "ts": 1759356002000,
+      "modelInfo": {
+        "id": "claude-x",
+        "provider": "anthropic"
+      },
+      "metrics": {
+        "inputTokens": 90000,
+        "outputTokens": 50,
+        "cacheReadTokens": 800,
+        "cacheWriteTokens": 89000,
+        "cost": 0.3
+      }
+    },
+    {
+      "id": "m3_tool_c2",
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "c2",
+          "name": "editor",
+          "content": "Created /work/proj/lex.go"
+        }
+      ],
+      "ts": 1759356002100
+    },
+    {
+      "id": "m4",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Lexer split; now the parser tests."
+        }
+      ],
+      "ts": 1759356003000,
+      "modelInfo": {
+        "id": "claude-x",
+        "provider": "anthropic"
+      },
+      "metrics": {
+        "inputTokens": 91000,
+        "outputTokens": 30,
+        "cacheReadTokens": 90000,
+        "cacheWriteTokens": 900,
+        "cost": 0.03
+      }
+    },
+    {
+      "id": "m7",
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "<user_input mode=\"act\">Continue after the compaction</user_input>"
+        }
+      ],
+      "ts": 1759356008000
+    },
+    {
+      "id": "m8",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Continuing."
+        }
+      ],
+      "ts": 1759356009000,
+      "modelInfo": {
+        "id": "claude-x",
+        "provider": "anthropic"
+      },
+      "metrics": {
+        "inputTokens": 900,
+        "outputTokens": 10,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 900,
+        "cost": 0.004
+      }
+    }
+  ],
+  "system_prompt": "You are Cline, a coding agent."
+}

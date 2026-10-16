@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "session_id": "1759338000000_frk01",
+  "source": "cli",
+  "pid": 4242,
+  "started_at": "2025-10-01T17:00:00.000Z",
+  "status": "completed",
+  "interactive": true,
+  "provider": "anthropic",
+  "model": "claude-x",
+  "cwd": "/work/proj",
+  "workspace_root": "/work/proj",
+  "enable_tools": true,
+  "enable_spawn": false,
+  "enable_teams": false,
+  "metadata": {
+    "title": "Write a README (fork)",
+    "fork": {
+      "forkedFromSessionId": "1759334400000_src01",
+      "forkedAt": "2025-10-01T17:00:00.000Z",
+      "source": "cli"
+    }
+  },
+  "messages_path": "/home/u/.cline/data/sessions/1759338000000_frk01/1759338000000_frk01.messages.json"
+}

@@ -1,0 +1,2 @@
+clinesdk: 7 files and elements: mapped 0 kept 0 dropped 7 malformed 0
+  dropped  clinesdk/duplicate-store                          1  the VS Code extension carried classic task 1759428000000 on as this session and nothing was written after its copy of the task's history; the session is the classic task's, which the cline source converts, and the copy (5 messages) is left out

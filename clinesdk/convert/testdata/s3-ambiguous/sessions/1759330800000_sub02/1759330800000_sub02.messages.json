@@ -1,0 +1,110 @@
+{
+  "version": 1,
+  "updated_at": "2025-10-01T15:00:12.000Z",
+  "agent": "lead",
+  "sessionId": "1759330800000_sub02",
+  "origin": {
+    "source": "cli",
+    "mode": "user",
+    "sessionId": "1759330800000_sub02",
+    "version": "4.1.20"
+  },
+  "messages": [
+    {
+      "id": "r0",
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "<user_input mode=\"act\">Plan the refactor with helpers</user_input>"
+        }
+      ],
+      "ts": 1759330800001
+    },
+    {
+      "id": "r1",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "call_s1",
+          "name": "spawn_agent",
+          "input": {
+            "systemPrompt": "You survey code and report.",
+            "task": "Check the build"
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_s2",
+          "name": "spawn_agent",
+          "input": {
+            "systemPrompt": "You survey code and report.",
+            "task": "Check the build"
+          }
+        }
+      ],
+      "ts": 1759330801000,
+      "modelInfo": {
+        "id": "claude-x",
+        "provider": "anthropic"
+      },
+      "metrics": {
+        "inputTokens": 2000,
+        "outputTokens": 60,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 2000,
+        "cost": 0.01
+      }
+    },
+    {
+      "id": "r1_tool_call_s1",
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_s1",
+          "name": "spawn_agent",
+          "content": "{\"text\":\"Lexer surveyed.\",\"iterations\":2,\"finishReason\":\"completed\",\"usage\":{\"inputTokens\":300,\"outputTokens\":20}}"
+        }
+      ],
+      "ts": 1759330809000
+    },
+    {
+      "id": "r1_tool_call_s2",
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_s2",
+          "name": "spawn_agent",
+          "content": "{\"text\":\"Parser surveyed.\",\"iterations\":2,\"finishReason\":\"completed\",\"usage\":{\"inputTokens\":300,\"outputTokens\":20}}"
+        }
+      ],
+      "ts": 1759330809001
+    },
+    {
+      "id": "r2",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Both checks are back."
+        }
+      ],
+      "ts": 1759330810000,
+      "modelInfo": {
+        "id": "claude-x",
+        "provider": "anthropic"
+      },
+      "metrics": {
+        "inputTokens": 2500,
+        "outputTokens": 20,
+        "cacheReadTokens": 2000,
+        "cacheWriteTokens": 400,
+        "cost": 0.004
+      }
+    }
+  ],
+  "system_prompt": "You are Cline, a coding agent."
+}

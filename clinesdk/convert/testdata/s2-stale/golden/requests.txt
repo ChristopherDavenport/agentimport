@@ -1,0 +1,26 @@
+session 0 1759320000000_cmp02
+  request of resp_2:
+    user: Refactor the parser
+  request of resp_5:
+    user: Refactor the parser
+    assistant: Reading the parser.
+    call c1 read_files
+    output c1 [{"query":"/work/proj/parse.go","result":"package 
+  request of resp_7:
+    user: Refactor the parser
+    assistant: Reading the parser.
+    call c1 read_files
+    output c1 [{"query":"/work/proj/parse.go","result":"package 
+    assistant: I'll split the lexer out.
+    call c2 editor
+    output c2 Created /work/proj/lex.go
+  request of resp_9:
+    user: Refactor the parser
+    assistant: Reading the parser.
+    call c1 read_files
+    output c1 [{"query":"/work/proj/parse.go","result":"package 
+    assistant: I'll split the lexer out.
+    call c2 editor
+    output c2 Created /work/proj/lex.go
+    assistant: Lexer split differently.
+    user: Go on

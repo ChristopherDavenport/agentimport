@@ -10,7 +10,8 @@ model and tool history, differing in the task index, compaction,
 reasoning shapes, usage and sub-tasks. The packages are `cline`, which
 reads a task directory as it is, and `cline/convert`, which converts
 it. Cline 4's SDK session store (`~/.cline/data/sessions`, a versioned
-messages file and SQLite) is another format and not read here.
+messages file and SQLite) is another format, the
+[clinesdk](clinesdk.md) source's.
 
 ## Where the format is specified
 

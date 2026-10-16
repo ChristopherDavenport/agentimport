@@ -91,7 +91,7 @@ func TestOpenReadsTheLog(t *testing.T) {
 	if after := files(t, dir); !slices.Equal(before, after) {
 		t.Errorf("the directory held %v and holds %v", before, after)
 	}
-	if _, err := os.Stat(db.tmp); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(db.c.Dir()); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("the copy was not removed: %v", err)
 	}
 	if !Probe(path) {
@@ -158,21 +158,6 @@ func TestNotOpenCode(t *testing.T) {
 	}
 	if _, err := Open(junk); err == nil {
 		t.Error("Open reads text as a database")
-	}
-}
-
-// TestBusy refuses a copy taken while the database keeps changing.
-func TestBusy(t *testing.T) {
-	a := state{size: 1}
-	b := state{size: 2}
-	if a.same(b) {
-		t.Error("states of two sizes are the same")
-	}
-	if !a.same(state{size: 1}) {
-		t.Error("a state is not itself")
-	}
-	if a.same(state{size: 1, wal: true, walHead: []byte{1}}) {
-		t.Error("a log appearing is no change")
 	}
 }
 
@@ -306,7 +291,7 @@ func TestRemoveCopies(t *testing.T) {
 		t.Fatal(err)
 	}
 	RemoveCopies()
-	if _, err := os.Stat(db.tmp); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(db.c.Dir()); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("the copy is still there: %v", err)
 	}
 	db.Close()

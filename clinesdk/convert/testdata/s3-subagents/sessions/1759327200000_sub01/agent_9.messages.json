@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "updated_at": "2025-10-01T14:00:06.700Z",
+  "agent": "subagent",
+  "sessionId": "1759327200000_sub01__agent_9",
+  "taskType": "subagent_task",
+  "origin": {
+    "source": "cli",
+    "mode": "subagent",
+    "sessionId": "1759327200000_sub01__agent_9",
+    "parentThreadId": "1759327200000_sub01",
+    "subagent": "agent_9",
+    "version": "4.1.20"
+  },
+  "messages": [
+    {
+      "id": "k0",
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Survey the grammar"
+        }
+      ],
+      "ts": 1759327202700
+    },
+    {
+      "id": "k9",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Grammar surveyed."
+        }
+      ],
+      "ts": 1759327205700,
+      "modelInfo": {
+        "id": "claude-x",
+        "provider": "anthropic"
+      },
+      "metrics": {
+        "inputTokens": 300,
+        "outputTokens": 20,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 300,
+        "cost": 0.001
+      }
+    }
+  ]
+}

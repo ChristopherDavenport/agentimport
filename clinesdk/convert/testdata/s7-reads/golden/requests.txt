@@ -1,0 +1,157 @@
+session 0 1759352400000_rd001
+  request of resp_2:
+    user: Keep re-reading a.go
+  request of resp_4:
+    user: Keep re-reading a.go
+    call rd_0 read_files
+    output rd_0 [{"query":"/work/proj/a.go","result":"line 0000 of
+  request of resp_6:
+    user: Keep re-reading a.go
+    call rd_0 read_files
+    output rd_0 [{"query":"/work/proj/a.go","result":"line 0000 of
+    call rd_1 read_files
+    output rd_1 [{"query":"/work/proj/b1.go","result":"line 0000 o
+  request of resp_8:
+    user: Keep re-reading a.go
+    call rd_0 read_files
+    output rd_0 [{"query":"/work/proj/a.go","result":"line 0000 of
+    call rd_1 read_files
+    output rd_1 [{"query":"/work/proj/b1.go","result":"line 0000 o
+    call rd_2 read_files
+    output rd_2 [{"query":"/work/proj/a.go","result":"line 0000 of
+  request of resp_10:
+    user: Keep re-reading a.go
+    call rd_0 read_files
+    output rd_0 [{"query":"/work/proj/a.go","result":"line 0000 of
+    call rd_1 read_files
+    output rd_1 [{"query":"/work/proj/b1.go","result":"line 0000 o
+    call rd_2 read_files
+    output rd_2 [{"query":"/work/proj/a.go","result":"line 0000 of
+    call rd_3 read_files
+    output rd_3 [{"query":"/work/proj/b3.go","result":"line 0000 o
+  request of resp_12:
+    user: Keep re-reading a.go
+    call rd_0 read_files
+    output rd_0 [{"query":"/work/proj/a.go","result":"line 0000 of
+    call rd_1 read_files
+    output rd_1 [{"query":"/work/proj/b1.go","result":"line 0000 o
+    call rd_2 read_files
+    output rd_2 [{"query":"/work/proj/a.go","result":"line 0000 of
+    call rd_3 read_files
+    output rd_3 [{"query":"/work/proj/b3.go","result":"line 0000 o
+    call rd_4 read_files
+    output rd_4 [{"query":"/work/proj/a.go","result":"line 0000 of
+  request of resp_14:
+    user: Keep re-reading a.go
+    call rd_0 read_files
+    output rd_0 [{"query":"/work/proj/a.go","result":"line 0000 of
+    call rd_1 read_files
+    output rd_1 [{"query":"/work/proj/b1.go","result":"line 0000 o
+    call rd_2 read_files
+    output rd_2 [{"query":"/work/proj/a.go","result":"line 0000 of
+    call rd_3 read_files
+    output rd_3 [{"query":"/work/proj/b3.go","result":"line 0000 o
+    call rd_4 read_files
+    output rd_4 [{"query":"/work/proj/a.go","result":"line 0000 of
+    call rd_5 read_files
+    output rd_5 [{"query":"/work/proj/b5.go","result":"line 0000 o
+  request of resp_16:
+    user: Keep re-reading a.go
+    call rd_0 read_files
+    output rd_0 [{"query":"/work/proj/a.go","result":"line 0000 of
+    call rd_1 read_files
+    output rd_1 [{"query":"/work/proj/b1.go","result":"line 0000 o
+    call rd_2 read_files
+    output rd_2 [{"query":"/work/proj/a.go","result":"line 0000 of
+    call rd_3 read_files
+    output rd_3 [{"query":"/work/proj/b3.go","result":"line 0000 o
+    call rd_4 read_files
+    output rd_4 [{"query":"/work/proj/a.go","result":"line 0000 of
+    call rd_5 read_files
+    output rd_5 [{"query":"/work/proj/b5.go","result":"line 0000 o
+    call rd_6 read_files
+    output rd_6 [{"query":"/work/proj/a.go","result":"line 0000 of
+  request of resp_18:
+    user: Keep re-reading a.go
+    call rd_0 read_files
+    output rd_0 [{"query":"/work/proj/a.go","result":"line 0000 of
+    call rd_1 read_files
+    output rd_1 [{"query":"/work/proj/b1.go","result":"line 0000 o
+    call rd_2 read_files
+    output rd_2 [{"query":"/work/proj/a.go","result":"line 0000 of
+    call rd_3 read_files
+    output rd_3 [{"query":"/work/proj/b3.go","result":"line 0000 o
+    call rd_4 read_files
+    output rd_4 [{"query":"/work/proj/a.go","result":"line 0000 of
+    call rd_5 read_files
+    output rd_5 [{"query":"/work/proj/b5.go","result":"line 0000 o
+    call rd_6 read_files
+    output rd_6 [{"query":"/work/proj/a.go","result":"line 0000 of
+    call rd_7 read_files
+    output rd_7 [{"query":"/work/proj/b7.go","result":"line 0000 o
+  request of resp_20:
+    user: Keep re-reading a.go
+    call rd_0 read_files
+    output rd_0 [{"query":"/work/proj/a.go","result":"line 0000 of
+    call rd_1 read_files
+    output rd_1 [{"query":"/work/proj/b1.go","result":"line 0000 o
+    call rd_2 read_files
+    output rd_2 [{"query":"/work/proj/a.go","result":"line 0000 of
+    call rd_3 read_files
+    output rd_3 [{"query":"/work/proj/b3.go","result":"line 0000 o
+    call rd_4 read_files
+    output rd_4 [{"query":"/work/proj/a.go","result":"line 0000 of
+    call rd_5 read_files
+    output rd_5 [{"query":"/work/proj/b5.go","result":"line 0000 o
+    call rd_6 read_files
+    output rd_6 [{"query":"/work/proj/a.go","result":"line 0000 of
+    call rd_7 read_files
+    output rd_7 [{"query":"/work/proj/b7.go","result":"line 0000 o
+    call rd_8 read_files
+    output rd_8 [{"query":"/work/proj/a.go","result":"line 0000 of
+  request of resp_22:
+    user: Keep re-reading a.go
+    call rd_0 read_files
+    output rd_0 [{"query":"/work/proj/a.go","result":"line 0000 of
+    call rd_1 read_files
+    output rd_1 [{"query":"/work/proj/b1.go","result":"line 0000 o
+    call rd_2 read_files
+    output rd_2 [{"query":"/work/proj/a.go","result":"line 0000 of
+    call rd_3 read_files
+    output rd_3 [{"query":"/work/proj/b3.go","result":"line 0000 o
+    call rd_4 read_files
+    output rd_4 [{"query":"/work/proj/a.go","result":"line 0000 of
+    call rd_5 read_files
+    output rd_5 [{"query":"/work/proj/b5.go","result":"line 0000 o
+    call rd_6 read_files
+    output rd_6 [{"query":"/work/proj/a.go","result":"line 0000 of
+    call rd_7 read_files
+    output rd_7 [{"query":"/work/proj/b7.go","result":"line 0000 o
+    call rd_8 read_files
+    output rd_8 [{"query":"/work/proj/a.go","result":"line 0000 of
+    call rd_9 read_files
+    output rd_9 [{"query":"/work/proj/b9.go","result":"line 0000 o
+  request of resp_24:
+    user: Keep re-reading a.go
+    call rd_0 read_files
+    output rd_0 [{"query":"/work/proj/a.go","result":"line 0000 of
+    call rd_1 read_files
+    output rd_1 [{"query":"/work/proj/b1.go","result":"line 0000 o
+    call rd_2 read_files
+    output rd_2 [{"query":"/work/proj/a.go","result":"line 0000 of
+    call rd_3 read_files
+    output rd_3 [{"query":"/work/proj/b3.go","result":"line 0000 o
+    call rd_4 read_files
+    output rd_4 [{"query":"/work/proj/a.go","result":"line 0000 of
+    call rd_5 read_files
+    output rd_5 [{"query":"/work/proj/b5.go","result":"line 0000 o
+    call rd_6 read_files
+    output rd_6 [{"query":"/work/proj/a.go","result":"line 0000 of
+    call rd_7 read_files
+    output rd_7 [{"query":"/work/proj/b7.go","result":"line 0000 o
+    call rd_8 read_files
+    output rd_8 [{"query":"/work/proj/a.go","result":"line 0000 of
+    call rd_9 read_files
+    output rd_9 [{"query":"/work/proj/b9.go","result":"line 0000 o
+    call rd_all read_files
+    output rd_all [{"query":"/work/proj/a.go","result":"short","succ

@@ -46,11 +46,15 @@ One module, `github.com/ChristopherDavenport/agentimport`.
 | `opencode` | OpenCode's storage files and the records of its database | stdlib |
 | `opencode/sqlite` | opens OpenCode's database, copied, and yields its rows as `opencode`'s types | the above, `modernc.org/sqlite` |
 | `opencode/convert` | OpenCode → agentsession; takes the database opener in its Options | `opencode`, agentsession, openresponses |
+| `clinesdk` | the Cline SDK's session directories (Cline 4) and the JSON index | stdlib |
+| `clinesdk/sqlite` | reads Cline's `sessions.db`, copied, as `clinesdk`'s index | the above, `internal/sqlite` |
+| `clinesdk/convert` | Cline SDK → agentsession; takes the index opener in its Options | `clinesdk`, agentsession, openresponses |
 | `cmd/agentimport` | the command-line program | all of the above |
 
 A format package never imports `agentsession`; a test enforces it.
-`opencode/sqlite` is the one package that imports a database driver,
-which `make deps` holds it to. The
+`opencode/sqlite`, `clinesdk/sqlite` and `internal/sqlite` are the
+packages that import a database driver, which `make deps` holds them
+to. The
 converter packages are all named `convert`, since a program almost
 always wants one source; `cmd/agentimport` imports them under aliases.
 
@@ -215,8 +219,8 @@ of each rollout) to find a thread's children.
 ## The command
 
 ```
-agentimport convert -o <store> [-from auto|claudecode|pi|codex|atif|cline|openhands|opencode] [-strict] [-slim] [-force] [-report text|json] <file|dir>...
-agentimport report [-from auto|claudecode|pi|codex|atif|cline|openhands|opencode] [-strict] [-slim] [-json] <file|dir>...
+agentimport convert -o <store> [-from auto|claudecode|pi|codex|atif|cline|clinesdk|openhands|opencode] [-strict] [-slim] [-force] [-report text|json] <file|dir>...
+agentimport report [-from auto|claudecode|pi|codex|atif|cline|clinesdk|openhands|opencode] [-strict] [-slim] [-json] <file|dir>...
 ```
 
 `convert` writes every session a conversion makes into the jsonl store

@@ -1,11 +1,9 @@
 package sqlite
 
 import (
-	"context"
-	"database/sql"
 	"io"
-	"net/url"
-	"path/filepath"
+
+	isqlite "github.com/ChristopherDavenport/agentimport/internal/sqlite"
 )
 
 // Fixture builds a database at path from SQL text, for tests: the
@@ -15,23 +13,4 @@ import (
 // write-ahead log, where a reader finds them only through the log, for
 // as long as the returned closer is not closed. Closing it checkpoints
 // the log into the database.
-func Fixture(path, script string) (io.Closer, error) {
-	abs, err := filepath.Abs(path)
-	if err != nil {
-		return nil, err
-	}
-	dsn := (&url.URL{Scheme: "file", Path: abs}).String()
-	db, err := sql.Open("sqlite", dsn)
-	if err != nil {
-		return nil, err
-	}
-	db.SetMaxOpenConns(1)
-	ctx := context.Background()
-	for _, q := range []string{"PRAGMA journal_mode=WAL", "PRAGMA wal_autocheckpoint=0", script} {
-		if _, err := db.ExecContext(ctx, q); err != nil {
-			db.Close()
-			return nil, err
-		}
-	}
-	return db, nil
-}
+func Fixture(path, script string) (io.Closer, error) { return isqlite.Fixture(path, script) }

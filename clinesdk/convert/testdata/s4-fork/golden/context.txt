@@ -1,0 +1,14 @@
+session 0 1759334400000_src01
+  model: claude-x
+  user: Write a README
+  call w1 editor
+  output w1 Created /work/proj/README.md
+  assistant: README written.
+session 1 1759338000000_frk01
+  model: claude-x
+  user: Write a README
+  call w1 editor
+  output w1 Created /work/proj/README.md
+  assistant: README written.
+  user: Now add a usage section
+  assistant: Usage section added.

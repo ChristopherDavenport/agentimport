@@ -7,6 +7,28 @@ versions may break the API.
 
 ## Unreleased
 
+- Added: the Cline SDK (Cline 4: its CLI, the VS Code extension from
+  4.0, JetBrains), which keeps each session in a directory under
+  `~/.cline/data/sessions` and indexes them in SQLite. `clinesdk` reads
+  a session directory, its manifest, its versioned messages file (or the
+  bare array from before the version), the latest compaction's sidecar
+  and its sub-agents' and team tasks' histories, keeping every member it
+  does not declare, and Cline's JSON index; it ports the sidecar's
+  source-prefix hash, which `internal/jsjson` makes reproducible by
+  holding values as JavaScript's JSON.parse does and writing them as
+  JSON.stringify does. `clinesdk/sqlite` reads `sessions.db`, which alone
+  records which agent spawned a sub-agent, from a copy made by
+  `internal/sqlite`. `clinesdk/convert` rebuilds what each request sent:
+  MessageBuilder's rewrites where the files determine them (user text
+  unwrapped, tool results cut to 8,000 characters, file blocks framed,
+  unanswered calls answered, outdated reads replaced from the request
+  its batching commits them, as context edits), the sidecar's compaction
+  where Cline applies it, sub-agents as subsessions of the
+  `spawn_agent` call matched to them and team tasks as peers of their
+  `team_run_task` calls, forks and classic tasks carried on by the VS
+  Code extension as copied history named in `parent_session`. The
+  command detects a session by its directory or its files
+  (`-from clinesdk`); `make corpus CLINESDK=~/.cline/data`.
 - Added: OpenCode (`anomalyco/opencode`), all three ways it has stored
   sessions under its data directory: the `storage/` files (up to
   1.1.65), the V1 tables of `opencode.db` (1.2 to 1.19) and its V2

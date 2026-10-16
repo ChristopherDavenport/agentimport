@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "session_id": "1759428000000",
+  "source": "vscode",
+  "pid": 4242,
+  "started_at": "2025-10-03T18:00:00.000Z",
+  "status": "completed",
+  "interactive": true,
+  "provider": "anthropic",
+  "model": "claude-x",
+  "cwd": "/work/proj",
+  "workspace_root": "/work/proj",
+  "enable_tools": true,
+  "enable_spawn": false,
+  "enable_teams": false,
+  "metadata": {
+    "title": "Add a test",
+    "legacyTask": true
+  },
+  "messages_path": "/home/u/.cline/data/sessions/1759428000000/1759428000000.messages.json"
+}

@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "updated_at": "2025-10-01T22:00:07.500Z",
+  "conversation_id": "x",
+  "source_message_count": 6,
+  "source_prefix_hash": "sha256:dd4e4450cbc4c0bb31d0b34495e55d93c0a22ca28f975121a366cf53ec3b3f61",
+  "source_last_message_key": "id:m4",
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Context summary:\n\nThe user asked to refactor the parser. The lexer was split into lex.go."
+        }
+      ],
+      "metadata": {
+        "kind": "compaction_summary",
+        "displayRole": "system",
+        "userRunSpan": 1,
+        "summary": "The user asked to refactor the parser. The lexer was split into lex.go.",
+        "details": {
+          "readFiles": [
+            "/work/proj/parse.go"
+          ],
+          "modifiedFiles": [
+            "/work/proj/lex.go"
+          ]
+        },
+        "tokensBefore": 91000,
+        "generatedAt": 1759356003500
+      }
+    }
+  ],
+  "system_prompt": "You are Cline, a coding agent."
+}

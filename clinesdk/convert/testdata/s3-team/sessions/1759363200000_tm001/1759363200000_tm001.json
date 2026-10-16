@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "session_id": "1759363200000_tm001",
+  "source": "cli",
+  "pid": 4242,
+  "started_at": "2025-10-02T00:00:00.000Z",
+  "status": "completed",
+  "interactive": true,
+  "provider": "anthropic",
+  "model": "claude-x",
+  "cwd": "/work/proj",
+  "workspace_root": "/work/proj",
+  "enable_tools": true,
+  "enable_spawn": false,
+  "enable_teams": true,
+  "metadata": {},
+  "messages_path": "/home/u/.cline/data/sessions/1759363200000_tm001/1759363200000_tm001.messages.json"
+}

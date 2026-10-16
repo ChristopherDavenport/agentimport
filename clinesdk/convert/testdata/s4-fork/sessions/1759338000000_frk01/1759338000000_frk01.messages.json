@@ -1,0 +1,121 @@
+{
+  "version": 1,
+  "updated_at": "2025-10-01T17:00:03.000Z",
+  "agent": "lead",
+  "sessionId": "1759338000000_frk01",
+  "origin": {
+    "source": "cli",
+    "mode": "user",
+    "sessionId": "1759338000000_frk01",
+    "version": "4.1.20"
+  },
+  "messages": [
+    {
+      "id": "f0",
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "<user_input mode=\"act\">Write a README</user_input>"
+        }
+      ],
+      "ts": 1759334400001
+    },
+    {
+      "id": "f1",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "w1",
+          "name": "editor",
+          "input": {
+            "command": "create",
+            "path": "/work/proj/README.md"
+          }
+        }
+      ],
+      "ts": 1759334401000,
+      "modelInfo": {
+        "id": "claude-x",
+        "provider": "anthropic"
+      },
+      "metrics": {
+        "inputTokens": 1000,
+        "outputTokens": 40,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 1000,
+        "cost": 0.004
+      }
+    },
+    {
+      "id": "f1_tool_w1",
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "w1",
+          "name": "editor",
+          "content": "Created /work/proj/README.md"
+        }
+      ],
+      "ts": 1759334401100
+    },
+    {
+      "id": "f2",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "README written."
+        }
+      ],
+      "ts": 1759334402000,
+      "modelInfo": {
+        "id": "claude-x",
+        "provider": "anthropic"
+      },
+      "metrics": {
+        "inputTokens": 1100,
+        "outputTokens": 10,
+        "cacheReadTokens": 1000,
+        "cacheWriteTokens": 100,
+        "cost": 0.001
+      }
+    },
+    {
+      "id": "g0",
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "<user_input mode=\"act\">Now add a usage section</user_input>"
+        }
+      ],
+      "ts": 1759338000010
+    },
+    {
+      "id": "g1",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Usage section added."
+        }
+      ],
+      "ts": 1759338002000,
+      "modelInfo": {
+        "id": "claude-x",
+        "provider": "anthropic"
+      },
+      "metrics": {
+        "inputTokens": 1300,
+        "outputTokens": 30,
+        "cacheReadTokens": 1100,
+        "cacheWriteTokens": 200,
+        "cost": 0.002
+      }
+    }
+  ],
+  "system_prompt": "You are Cline, a coding agent."
+}

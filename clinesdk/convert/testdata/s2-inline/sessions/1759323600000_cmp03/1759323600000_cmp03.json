@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "session_id": "1759323600000_cmp03",
+  "source": "cli",
+  "pid": 4242,
+  "started_at": "2025-10-01T13:00:00.000Z",
+  "status": "completed",
+  "interactive": true,
+  "provider": "anthropic",
+  "model": "claude-x",
+  "cwd": "/work/proj",
+  "workspace_root": "/work/proj",
+  "enable_tools": true,
+  "enable_spawn": false,
+  "enable_teams": false,
+  "metadata": {
+    "importedFrom": {
+      "tool": "claude-code",
+      "sourceSessionId": "0b1e5c2a-0000-4000-8000-000000000001",
+      "sourcePath": "/home/u/.claude/projects/p/0b1e5c2a.jsonl",
+      "importedAt": "2025-10-01T12:59:59.000Z"
+    }
+  },
+  "messages_path": "/home/u/.cline/data/sessions/1759323600000_cmp03/1759323600000_cmp03.messages.json"
+}

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/ChristopherDavenport/agentimport"
+	sdksqlite "github.com/ChristopherDavenport/agentimport/clinesdk/sqlite"
 	"github.com/ChristopherDavenport/agentimport/opencode/sqlite"
 	"github.com/ChristopherDavenport/agentsession"
 )
@@ -25,6 +26,7 @@ var fixtureRoots = []string{
 	"../../cline/convert/testdata",
 	"../../openhands/convert/testdata",
 	"../../opencode/convert/testdata",
+	"../../clinesdk/convert/testdata",
 }
 
 func runCmd(t *testing.T, args ...string) (int, string, string) {
@@ -94,6 +96,12 @@ func TestDetect(t *testing.T) {
 		{"../../opencode/convert/testdata/g1-basic", "opencode", ""},
 		{"../../opencode/convert/testdata/g1-basic/storage/message/ses_g1demo/msg_0001.json", "opencode", ""},
 		{"../../openhands/convert/testdata/linear-chat", "", "-from"},
+		{"../../clinesdk/convert/testdata/s1-basic/sessions/1759312800000_ab12c", "clinesdk", ""},
+		{"../../clinesdk/convert/testdata/s1-basic/sessions/1759312800000_ab12c/1759312800000_ab12c.json", "clinesdk", ""},
+		{"../../clinesdk/convert/testdata/s3-subagents/sessions/1759327200000_sub01/agent_7.messages.json", "clinesdk", ""},
+		{"../../clinesdk/convert/testdata/s5-malformed/sessions/1759345200000_bad01/1759345200000_bad01.compaction.json", "clinesdk", ""},
+		{write("x.messages.json", `{"version":1,"messages":[]}`), "", "-from"},
+		{"../../clinesdk/convert/testdata/s1-basic/sessions", "", "-from"},
 	} {
 		s, err := detect(tc.path)
 		if tc.err != "" {
@@ -176,7 +184,7 @@ func TestConvertFixtures(t *testing.T) {
 			sameSession(t, w.File, got, want.Sessions[i])
 		}
 	}
-	for _, name := range []string{"claudecode", "pi", "codex", "atif", "cline", "openhands", "opencode"} {
+	for _, name := range []string{"claudecode", "pi", "codex", "atif", "cline", "openhands", "opencode", "clinesdk"} {
 		if bySource[name] == 0 {
 			t.Errorf("no %s fixture was converted", name)
 		}
@@ -320,7 +328,11 @@ func TestReport(t *testing.T) {
 	}
 	lines := map[string]int{}
 	for _, f := range res.Files {
-		if f.Error != "" || f.Report == nil || f.Sessions == 0 {
+		// A classic task the VS Code extension carried on with nothing
+		// after its copy is the cline source's session alone: it
+		// converts to none, and says so.
+		dup := f.Source == "clinesdk" && strings.Contains(f.Path, "s4-legacy-dup")
+		if f.Error != "" || f.Report == nil || f.Sessions == 0 && !dup {
 			t.Errorf("%s: %+v", f.Path, f)
 			continue
 		}
@@ -671,5 +683,79 @@ INSERT INTO part VALUES ('prt_a', 'msg_a', 'ses_a', 1, 1, '{"type":"text","text"
 	store := t.TempDir()
 	if code, out, errOut := runCmd(t, "convert", "-o", store, db); code != 0 {
 		t.Fatalf("exit %d: %s\n%s", code, errOut, out)
+	}
+}
+
+// TestClineSDKSession converts a Cline data directory: each session
+// directory is one input, whichever of its files names it, its
+// children's histories converted with it, its index read from a copy.
+func TestClineSDKSession(t *testing.T) {
+	src := "../../clinesdk/convert/testdata/s3-subagents"
+	root := t.TempDir()
+	sess := filepath.Join(root, "sessions", "1759327200000_sub01")
+	if err := os.MkdirAll(sess, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files, _ := filepath.Glob(filepath.Join(src, "sessions", "1759327200000_sub01", "*"))
+	for _, f := range files {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(sess, filepath.Base(f)), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	script, err := os.ReadFile(filepath.Join(src, "db.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "db"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	w, err := sdksqlite.Fixture(filepath.Join(root, "db", "sessions.db"), string(script))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	names := func() []string {
+		entries, _ := os.ReadDir(filepath.Join(root, "db"))
+		var out []string
+		for _, e := range entries {
+			out = append(out, e.Name())
+		}
+		return out
+	}
+	before := names()
+	ins, skip, err := collect([]string{root, filepath.Join(sess, "agent_7.messages.json")}, "auto")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ins) != 1 || ins[0].source.name != "clinesdk" || filepath.Base(ins[0].path) != "1759327200000_sub01.messages.json" {
+		t.Fatalf("inputs %+v, skipped %v", ins, skip)
+	}
+	store := t.TempDir()
+	code, out, errOut := runCmd(t, "convert", "-o", store, "-report", "json", root)
+	if code != 0 {
+		t.Fatalf("exit %d: %s\n%s", code, errOut, out)
+	}
+	var res convertResult
+	if err := json.Unmarshal([]byte(out), &res); err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Sessions) != 1 || len(res.Sessions[0].Written) != 5 {
+		t.Fatalf("converted %+v", res.Sessions)
+	}
+	spawned := 0
+	for _, wr := range res.Sessions[0].Written {
+		if readSession(t, wr.File).Header().SpawnedBy != "" {
+			spawned++
+		}
+	}
+	if spawned != 3 {
+		t.Errorf("%d subsessions, want 3", spawned)
+	}
+	if after := names(); !slices.Equal(before, after) {
+		t.Errorf("the index's directory held %v and holds %v; something was written beside the database", before, after)
 	}
 }

@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "session_id": "1759330800000_sub02",
+  "source": "cli",
+  "pid": 4242,
+  "started_at": "2025-10-01T15:00:00.000Z",
+  "status": "completed",
+  "interactive": true,
+  "provider": "anthropic",
+  "model": "claude-x",
+  "cwd": "/work/proj",
+  "workspace_root": "/work/proj",
+  "enable_tools": true,
+  "enable_spawn": true,
+  "enable_teams": false,
+  "metadata": {
+    "title": "Plan the refactor"
+  },
+  "messages_path": "/home/u/.cline/data/sessions/1759330800000_sub02/1759330800000_sub02.messages.json"
+}

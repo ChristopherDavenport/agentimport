@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "updated_at": "2025-10-01T14:00:14.200Z",
+  "agent": "teammate",
+  "sessionId": "1759327200000_sub01__teamtask__reviewer__Ab3dE9",
+  "taskType": "team",
+  "origin": {
+    "source": "cli",
+    "mode": "team",
+    "sessionId": "1759327200000_sub01__teamtask__reviewer__Ab3dE9",
+    "parentThreadId": "1759327200000_sub01",
+    "version": "4.1.20"
+  },
+  "messages": [
+    {
+      "id": "k0",
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Review the plan"
+        }
+      ],
+      "ts": 1759327210200
+    },
+    {
+      "id": "k9",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "The plan looks sound."
+        }
+      ],
+      "ts": 1759327213200,
+      "modelInfo": {
+        "id": "claude-x",
+        "provider": "anthropic"
+      },
+      "metrics": {
+        "inputTokens": 300,
+        "outputTokens": 20,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 300,
+        "cost": 0.001
+      }
+    }
+  ]
+}

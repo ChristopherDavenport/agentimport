@@ -13,7 +13,7 @@ import (
 // read a transcript pays for nothing else. A package of this module's
 // internal tree may stand in for the standard library when it imports
 // the standard library alone, at any depth.
-var formatPackages = []string{"claudecode", "pi", "codex", "atif", "cline", "openhands", "opencode"}
+var formatPackages = []string{"claudecode", "pi", "codex", "atif", "cline", "openhands", "opencode", "clinesdk"}
 
 // TestImportBoundary enforces the module's dependency rule on the
 // format packages, which make deps cannot see: it checks the module as
