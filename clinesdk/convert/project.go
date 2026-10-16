@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/ChristopherDavenport/agentimport/clinesdk"
 	"github.com/ChristopherDavenport/agentimport/internal/jsjson"
@@ -663,4 +664,84 @@ func nestedBytes(v *jsjson.Value) int {
 		return n
 	}
 	return 0
+}
+
+// cacheable reports whether a tool's results take MessageBuilder's
+// recovery path from 4.1.23 (resultPolicy "cache-oversized"): an MCP
+// tool, named <server>__<tool> or, sanitised and cut, <base>_<hash8>,
+// or one of Composio's meta tools.
+func cacheable(name string) bool {
+	name = strings.ToLower(name)
+	return strings.Contains(name, "__") || mcpHashed.MatchString(name) || composioTools[name]
+}
+
+var mcpHashed = regexp.MustCompile(`^.{1,55}_[0-9a-f]{8}$`)
+
+var composioTools = map[string]bool{
+	"composio_search_tools": true, "composio_manage_connections": true,
+	"composio_wait_for_connections": true, "composio_multi_execute_tool": true,
+}
+
+// imageAttachedText is what the preview puts in place of an image it
+// sends apart.
+const imageAttachedText = "[image attached]"
+
+// splitMedia is splitToolResultMedia: the images a result holds taken
+// out, each replaced by a marker, and the images.
+func splitMedia(v *jsjson.Value, images *[]*jsjson.Value) *jsjson.Value {
+	switch {
+	case v == nil:
+		return v
+	case v.Kind == jsjson.Object:
+		t, _ := v.Get("type").Text()
+		_, data := v.Get("data").Text()
+		if t == "image" && data {
+			if _, ok := v.Get("mediaType").Text(); ok {
+				*images = append(*images, v)
+				return jsjson.NewString(imageAttachedText)
+			}
+			if mt, ok := v.Get("mimeType").Text(); ok {
+				d, _ := v.Get("data").Text()
+				im := &jsjson.Value{Kind: jsjson.Object}
+				im.Set("type", jsjson.NewString("image"))
+				im.Set("data", jsjson.NewString(d))
+				im.Set("mediaType", jsjson.NewString(mt))
+				*images = append(*images, im)
+				return jsjson.NewString(imageAttachedText)
+			}
+		}
+		out := &jsjson.Value{Kind: jsjson.Object, Keys: append([]jsjson.String(nil), v.Keys...), Vals: make([]*jsjson.Value, len(v.Vals))}
+		for i, it := range v.Vals {
+			out.Vals[i] = splitMedia(it, images)
+		}
+		return out
+	case v.Kind == jsjson.Array:
+		out := &jsjson.Value{Kind: jsjson.Array, Items: make([]*jsjson.Value, len(v.Items))}
+		for i, it := range v.Items {
+			out.Items[i] = splitMedia(it, images)
+		}
+		return out
+	}
+	return v
+}
+
+// cachePreview is MessageBuilder's recovery projection of an oversized
+// result: the result as text (JSON.stringify(result, null, 2) unless it
+// is a string), its images marked, cut to 8,000 characters in the
+// middle, then the images. ok is false for a result within the limit,
+// which takes the usual path.
+func cachePreview(content *jsjson.Value) (*jsjson.Value, bool) {
+	var images []*jsjson.Value
+	textual := splitMedia(content, &images)
+	text, isText := textual.Text()
+	if !isText {
+		text = string(textual.StringifyIndent())
+	}
+	if utf16Len(text) <= maxToolResultChars {
+		return nil, false
+	}
+	part := &jsjson.Value{Kind: jsjson.Object}
+	part.Set("type", jsjson.NewString("text"))
+	part.Set("text", jsjson.NewString(truncateMiddle(text, maxToolResultChars, truncatedMarker)))
+	return &jsjson.Value{Kind: jsjson.Array, Items: append([]*jsjson.Value{part}, images...)}, true
 }

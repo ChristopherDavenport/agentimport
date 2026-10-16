@@ -3,6 +3,7 @@ package convert
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -299,7 +300,7 @@ func (sc *sconv) result(k int, m *clinesdk.Message, b *clinesdk.Block, ts time.T
 	if err != nil {
 		return err
 	}
-	projected := truncateResult(content)
+	projected := sc.resultView(k, p.name, content)
 	out := &openresponses.FunctionCallOutput{CallID: p.id, Output: render(projected, b.IsError)}
 	e := itemEntry(out, ts)
 	e.Parents = parents
@@ -852,4 +853,70 @@ func (sc *sconv) replaced(k int, ts time.Time, data map[string]any) error {
 	sc.written(k, id)
 	sc.at(agentimport.Gap, "agentimport/context-replace", k, "Cline sends an earlier item rewritten from this request on; the original stays in context and the rewrite is a custom entry")
 	return nil
+}
+
+// previewFrom is the first release whose MessageBuilder sends an
+// oversized MCP or Composio result as a cache preview.
+var previewFrom = [3]int{4, 1, 23}
+
+// resultView is what a request sends of a tool result: from 4.1.23 an
+// MCP or Composio tool's oversized result as its cache preview, else
+// the result cut. Message k reports it.
+func (sc *sconv) resultView(k int, name string, content *jsjson.Value) *jsjson.Value {
+	if cacheable(name) {
+		if pv, ok := cachePreview(content); ok {
+			use, guessed := sc.previews()
+			if use {
+				detail := "the result is sent as Cline's cache preview: the whole result as text (indented JSON), cut to 8,000 characters in the middle, then its images; the notice naming the cache URI that held the rest, a random one, is not written"
+				if guessed {
+					detail += "; the release is not known to be 4.1.23 or later, from which Cline sends it, so this is a guess"
+				}
+				sc.at(agentimport.Lossy, "clinesdk/cache-preview", k, "%s: %s", name, detail)
+				return pv
+			}
+			sc.at(agentimport.Lossy, "clinesdk/cache-preview", k, "%s: the release is before 4.1.23, which sends the oversized result of an MCP or Composio tool as a cache preview; it is cut block by block", name)
+		}
+	}
+	return truncateResult(content)
+}
+
+// previews says whether the history's release sends cache previews: a
+// VS Code release before 4.1.23 does not; the version of another client
+// does not tell, and guessed is set.
+func (sc *sconv) previews() (use, guessed bool) {
+	o := sc.h.f.Origin
+	if o == nil && sc.fam.s.Messages != nil {
+		o = sc.fam.s.Messages.Origin
+	}
+	if o == nil || o.Source != "vscode" {
+		return true, true
+	}
+	v, ok := semver(o.Version)
+	if !ok {
+		return true, true
+	}
+	for i := range v {
+		if v[i] != previewFrom[i] {
+			return v[i] > previewFrom[i], false
+		}
+	}
+	return true, false
+}
+
+// semver reads major.minor.patch.
+func semver(s string) ([3]int, bool) {
+	var v [3]int
+	parts := strings.SplitN(strings.TrimPrefix(s, "v"), ".", 3)
+	if len(parts) != 3 {
+		return v, false
+	}
+	for i, p := range parts {
+		p, _, _ = strings.Cut(p, "-")
+		n, err := strconv.Atoi(p)
+		if err != nil || n < 0 {
+			return v, false
+		}
+		v[i] = n
+	}
+	return v, true
 }

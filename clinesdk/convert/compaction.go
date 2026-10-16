@@ -345,7 +345,11 @@ func (sc *sconv) renderItems(k int, m *clinesdk.Message) (openresponses.Items, e
 			if err != nil {
 				content = jsjson.NewString("")
 			}
-			out = append(out, &openresponses.FunctionCallOutput{CallID: callID(b.ToolUseID), Output: render(truncateResult(content), b.IsError)})
+			name := b.Name
+			if p := sc.calls[b.ToolUseID]; p != nil {
+				name = p.name
+			}
+			out = append(out, &openresponses.FunctionCallOutput{CallID: callID(b.ToolUseID), Output: render(sc.resultView(k, name, content), b.IsError)})
 		case m.Role == clinesdk.RoleUser && b.Type == clinesdk.BlockText:
 			parts = append(parts, &openresponses.InputText{Text: clinesdk.NormalizeUserInput(b.Text)})
 		case m.Role == clinesdk.RoleUser && b.Type == clinesdk.BlockImage:

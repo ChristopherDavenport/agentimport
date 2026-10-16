@@ -13,6 +13,7 @@ import (
 	"github.com/ChristopherDavenport/agentimport/clinesdk"
 	"github.com/ChristopherDavenport/agentimport/internal/jsjson"
 	"github.com/ChristopherDavenport/agentsession"
+	"github.com/ChristopherDavenport/openresponses"
 )
 
 // The wants were printed by node 25 running truncateMiddleByChars,
@@ -376,5 +377,72 @@ func TestSpawnWindow(t *testing.T) {
 	}
 	if by := spawnedBy(convertFiles(t, files, Options{})); by["c1"] != "" {
 		t.Errorf("a sub-agent started after its call's result is linked to it: %v", by)
+	}
+}
+
+// mcpSession is a session whose MCP tool returned many text blocks,
+// written by a client of origin.
+func mcpSession(origin string) map[string][]byte {
+	var parts []string
+	for i := 0; i < 40; i++ {
+		parts = append(parts, fmt.Sprintf(`{"type":"text","text":%q}`, strings.Repeat(fmt.Sprintf("hit %d ", i), 40)))
+	}
+	return map[string][]byte{"r.messages.json": []byte(`{"version":1,"origin":` + origin + `,"messages":[` + strings.Join([]string{
+		userMsg("search", 1000),
+		`{"role":"assistant","content":[{"type":"tool_use","id":"m1","name":"github__search_code","input":{"q":"x"}}],"ts":2000}`,
+		`{"role":"user","content":[{"type":"tool_result","tool_use_id":"m1","name":"github__search_code","content":[` + strings.Join(parts, ",") + `]}],"ts":3000}`,
+		reply("found", 4000),
+	}, ",") + `]}`)}
+}
+
+func outputOf(t *testing.T, s *agentsession.Session, call string) openresponses.FunctionCallOutputData {
+	t.Helper()
+	for _, e := range s.Entries() {
+		if it, ok := e.(*agentsession.ItemEntry); ok {
+			if o, ok := it.Item.(*openresponses.FunctionCallOutput); ok && o.CallID == call {
+				return o.Output
+			}
+		}
+	}
+	t.Fatalf("no output of %s", call)
+	return openresponses.FunctionCallOutputData{}
+}
+
+// TestCachePreview sends an MCP tool's oversized result as Cline's
+// cache preview from 4.1.23: the whole result as indented JSON, cut to
+// 8,000 characters; a VS Code release before cuts block by block.
+func TestCachePreview(t *testing.T) {
+	res := convertFiles(t, mcpSession(`{"source":"cli","version":"2.3.0"}`), Options{})
+	out := outputOf(t, res.Sessions[0], "m1")
+	if len(out.Parts) != 1 {
+		t.Fatalf("%d parts, want the one preview", len(out.Parts))
+	}
+	text := out.Parts[0].(*openresponses.InputText).Text
+	if utf16Len(text) != maxToolResultChars || !strings.HasPrefix(text, "[\n  {\n    \"type\": \"text\",\n    \"text\": \"hit 0 ") {
+		t.Errorf("preview of %d units: %.80q", utf16Len(text), text)
+	}
+	if !strings.Contains(strings.Join(res.Report.Codes(), " "), "clinesdk/cache-preview") {
+		t.Error("no clinesdk/cache-preview finding")
+	}
+	res = convertFiles(t, mcpSession(`{"source":"vscode","version":"4.1.20"}`), Options{})
+	if out := outputOf(t, res.Sessions[0], "m1"); len(out.Parts) != 40 {
+		t.Errorf("before 4.1.23: %d parts, want the 40 blocks", len(out.Parts))
+	}
+}
+
+// TestCompactionBatching reports, at a compaction, that a manual one
+// clears Cline's batched rewrites of outdated reads.
+func TestCompactionBatching(t *testing.T) {
+	body := strings.Repeat("x", 9000)
+	ms := []string{userMsg("go", 1000)}
+	for i := 0; i < 10; i++ {
+		ms = append(ms, fmt.Sprintf(`{"role":"assistant","content":[{"type":"tool_use","id":"r%d","name":"read_files","input":{"files":[{"path":"/a"}]}}],"ts":%d}`, i, 2000+10*i))
+		ms = append(ms, fmt.Sprintf(`{"role":"user","content":[{"type":"tool_result","tool_use_id":"r%d","name":"read_files","content":[{"query":"/a","result":%q,"success":true}]}],"ts":%d}`, i, body, 2005+10*i))
+	}
+	ms = append(ms, reply("read", 3000), userMsg("more", 3100), reply("done", 3200))
+	comp := fmt.Sprintf(`{"version":1,"updated_at":"2026-10-01T10:00:00Z","source_message_count":%d,"source_last_message_key":"ts:assistant:3000","messages":[{"role":"user","content":"Context summary:\n\ns","metadata":{"kind":"compaction_summary"}}]}`, len(ms)-2)
+	res := convertFiles(t, map[string][]byte{"r.messages.json": msgs(ms...), "r.compaction.json": []byte(comp)}, Options{})
+	if !strings.Contains(fmt.Sprint(res.Report.Findings), "a manual one (/compact) clears them") {
+		t.Error("the compaction's effect on the batching is not reported")
 	}
 }

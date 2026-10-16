@@ -633,3 +633,53 @@ func Number2String(f float64) string {
 	}
 	return sign + out
 }
+
+// StringifyIndent writes v as JSON.stringify(v, null, 2) does: each
+// member and element on a line of its own, indented two spaces a level,
+// an empty array or object as [] or {}.
+func (v *Value) StringifyIndent() []byte {
+	var b bytes.Buffer
+	v.writeIndent(&b, 0)
+	return b.Bytes()
+}
+
+func (v *Value) writeIndent(b *bytes.Buffer, depth int) {
+	if v == nil {
+		b.WriteString("null")
+		return
+	}
+	line := func(d int) {
+		b.WriteByte('\n')
+		for i := 0; i < d; i++ {
+			b.WriteString("  ")
+		}
+	}
+	switch {
+	case v.Kind == Array && len(v.Items) > 0:
+		b.WriteByte('[')
+		for i, it := range v.Items {
+			if i > 0 {
+				b.WriteByte(',')
+			}
+			line(depth + 1)
+			it.writeIndent(b, depth+1)
+		}
+		line(depth)
+		b.WriteByte(']')
+	case v.Kind == Object && len(v.Keys) > 0:
+		b.WriteByte('{')
+		for i, k := range v.Keys {
+			if i > 0 {
+				b.WriteByte(',')
+			}
+			line(depth + 1)
+			Quote(b, k)
+			b.WriteString(": ")
+			v.Vals[i].writeIndent(b, depth+1)
+		}
+		line(depth)
+		b.WriteByte('}')
+	default:
+		v.write(b)
+	}
+}

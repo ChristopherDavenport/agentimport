@@ -159,14 +159,29 @@ formatting. The converter rebuilds what each request sent:
   as first sent, and the rewritten output is a custom entry where it
   first applied (`agentimport/context-replace`). The converter runs
   MessageBuilder's index and batching request by request, assuming one
-  process ran the session.
+  process ran the session with MessageBuilder's default limits: a
+  restart, a manual compaction (`/compact`, which the files do not tell
+  from an automatic one) and an OAuth retry clear the batch, and
+  `CLINE_MESSAGE_BUILDER_MAX_TOOL_RESULT_CHARS`,
+  `CLINE_MESSAGE_BUILDER_MAX_TOTAL_TEXT_BYTES` and
+  `CLINE_MESSAGE_BUILDER_MIN_OUTDATED_REWRITE_BYTES` change the limits;
+  each is reported, none rebuilt.
+- **An MCP or Composio tool's oversized result** (its name
+  `<server>__<tool>`, or cut and hashed `<base>_<8 hex>`, or one of
+  Composio's meta tools: resultPolicy `cache-oversized`) is sent from
+  4.1.23 as a cache preview: the whole result as text, indented JSON
+  unless it is a string, its images replaced by `[image attached]`, cut
+  to 8,000 characters in the middle, then the images, and a notice
+  naming the random cache URI that held the rest. The output holds the
+  preview without the notice (`clinesdk/cache-preview`); a VS Code
+  release before 4.1.23 cuts the result block by block, and for
+  another client, whose version does not tell, the preview is a guess.
 - **An assistant text** over 200,000 characters (12,000 when it repeats
   tool-call markup) is cut in every later request: the response keeps
   the text the model wrote, the cut one is a custom entry after it.
 - **The 6 MB budget**, which cuts the largest results and texts of a
   request over it, is reported and not rebuilt; so are the media budget
-  and the placeholder a model without image input gets, and the cache
-  preview of an oversized MCP result from v4.1.23.
+  and the placeholder a model without image input gets.
 - **An empty message** is sent as `ERROR: EMPTY CONTENT`.
 
 The system prompt is stored once, the latest; earlier requests may
@@ -304,6 +319,7 @@ child reached twice is converted once.
 | `clinesdk/null-block` | dropped | A content block that is not an object. |
 | `clinesdk/subagent-cycle` | dropped | A child being converted, or converted already, reached again. |
 | `clinesdk/unreached` | dropped | A unit the converter did not reach; a bug if it occurs. |
+| `clinesdk/cache-preview` | lossy | An MCP or Composio tool's oversized result is Cline's cache preview, without its notice; or, before 4.1.23, cut block by block. |
 | `clinesdk/compaction` | lossy | The sidecar's compaction, where it is written and what tied it to the history. |
 | `clinesdk/compaction-conversation` | lossy | A sidecar naming another conversation, which Cline applies when it is the agent's; applied. |
 | `clinesdk/compaction-inline` | lossy | A compaction summary in the history: before 4.1 a compaction rewrote it. |
@@ -327,7 +343,7 @@ child reached twice is converted once.
 | `clinesdk/no-system-prompt` | lossy | A history with no system prompt. |
 | `clinesdk/no-timestamp` | lossy | No time at all; `created_at` is the epoch. |
 | `clinesdk/orphan-result` | lossy | A tool result for no call before it, a custom entry. |
-| `clinesdk/outdated-read` | lossy | A read result Cline sends as a notice from a request on, or whole again. |
+| `clinesdk/outdated-read` | lossy | A read result Cline sends as a notice from a request on, or whole again; at a compaction, that a manual one clears the batch. |
 | `clinesdk/pending-call` | lossy | A call with no result at the end of the history. |
 | `clinesdk/rejection` | lossy | A refused call: a reject decision before the output. |
 | `clinesdk/request-budget` | lossy | A request over Cline's 6 MB text budget, cut by Cline, not rebuilt. |

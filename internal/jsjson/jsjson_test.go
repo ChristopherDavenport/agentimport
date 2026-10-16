@@ -143,3 +143,15 @@ func TestManyKeys(t *testing.T) {
 		t.Errorf("%v for 20000 keys, %v for 80000: not linear", a, b)
 	}
 }
+
+// The want was printed by node 25's JSON.stringify(JSON.parse(in), null, 2).
+func TestStringifyIndent(t *testing.T) {
+	v, err := Parse([]byte(`{"a":[1,{"b":[],"c":{}},"x\ny"],"2":true,"d":{"e":null}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "{\n  \"2\": true,\n  \"a\": [\n    1,\n    {\n      \"b\": [],\n      \"c\": {}\n    },\n    \"x\\ny\"\n  ],\n  \"d\": {\n    \"e\": null\n  }\n}"
+	if got := string(v.StringifyIndent()); got != want {
+		t.Errorf("got %q", got)
+	}
+}
