@@ -122,11 +122,6 @@ func Convert(opts Options, st hermes.Store) (*agentimport.Result, error) {
 		rec := fam.recs[id]
 		why := "its parent's conversion did not convert it"
 		switch {
-		case fam.cycle(rec):
-			rec.noParent = true
-			fam.report.Addf(agentimport.Repaired, "hermes/parent-cycle", rec.s.Unit, 0, "the session's parents form a cycle; it is converted with no parent")
-			out = append(out, fam.convertRoot(rec, "")...)
-			continue
 		case fam.opts.Alone && rec.rel != hermes.Continuation:
 			why = "Alone converts each session without its sub-agents"
 		case fam.depthOf(rec) >= maxDepth:
@@ -174,6 +169,10 @@ type record struct {
 	parent *record
 	// noParent says the session is converted as having none.
 	noParent bool
+	// own is the session the record becomes under its own ID, chosen
+	// before any converts, so a session that names it converted first
+	// names the right one.
+	own target
 	// sid is the session ID the record converted to, once it has.
 	sid string
 	// msgs are the session's rows, once read.
@@ -214,14 +213,28 @@ func (fam *family) index() error {
 	})
 	for _, id := range fam.order {
 		rec := fam.recs[id]
-		if p := rec.s.ParentID; p != "" && p != id {
+		rec.own = fam.ownTarget(rec)
+		if p := rec.s.ParentID; p == id {
+			rec.noParent = true
+			fam.report.Addf(agentimport.Repaired, "hermes/parent-cycle", rec.s.Unit, 0, "the session names itself as its parent; it is converted with no parent")
+		} else if p != "" {
 			rec.parent = fam.recs[p]
+		}
+	}
+	fam.breakCycles()
+	for _, id := range fam.order {
+		rec := fam.recs[id]
+		if rec.noParent {
+			rec.parent = nil
 		}
 		var ps *hermes.Session
 		if rec.parent != nil {
 			ps = rec.parent.s
 		}
 		rec.rel, rec.marked = hermes.Classify(rec.s, ps)
+		if rec.noParent {
+			rec.rel, rec.marked = hermes.Root, false
+		}
 		if rec.parent != nil {
 			fam.children[rec.parent.s.ID] = append(fam.children[rec.parent.s.ID], id)
 		}
@@ -276,19 +289,39 @@ func (fam *family) strays(strays []*hermes.Stray) {
 	}
 }
 
-// cycle reports whether a session's parents lead back to one of them.
-func (fam *family) cycle(rec *record) bool {
-	seen := map[*record]bool{}
-	for cur := rec; cur != nil; cur = cur.parent {
-		if seen[cur] {
-			return true
+// breakCycles breaks each cycle of parents at its member that started
+// first, which is converted with no parent; the sessions below a cycle
+// keep their parents.
+func (fam *family) breakCycles() {
+	state := map[*record]int{} // 1 on the walk, 2 done
+	for _, id := range fam.order {
+		start := fam.recs[id]
+		var path []*record
+		cur := start
+		for cur != nil && state[cur] == 0 && !cur.noParent {
+			state[cur] = 1
+			path = append(path, cur)
+			cur = cur.parent
 		}
-		seen[cur] = true
-		if cur.noParent {
-			return false
+		if cur != nil && state[cur] == 1 && !cur.noParent {
+			// cur is on a cycle: the members are path from cur on.
+			k := 0
+			for path[k] != cur {
+				k++
+			}
+			first := cur
+			for _, r := range path[k:] {
+				if r.s.Started.Before(first.s.Started) || r.s.Started.Equal(first.s.Started) && r.s.ID < first.s.ID {
+					first = r
+				}
+			}
+			first.noParent = true
+			fam.report.Addf(agentimport.Repaired, "hermes/parent-cycle", first.s.Unit, 0, "the session's parents form a cycle of %d sessions; it, the one that started first, is converted with no parent", len(path)-k)
+		}
+		for _, r := range path {
+			state[r] = 2
 		}
 	}
-	return false
 }
 
 // depthOf counts a session's ancestors in the store.
@@ -306,13 +339,13 @@ func (fam *family) depthOf(rec *record) int {
 // with its continuations and sub-agents. alone, when not empty, says why
 // a child is converted on its own.
 func (fam *family) convertRoot(rec *record, alone string) []*agentsession.Session {
-	tgt := fam.ownTarget(rec)
+	tgt := rec.own
 	if rec.parent != nil && !rec.noParent {
 		switch rec.rel {
 		case hermes.Branch, hermes.Continuation, hermes.Delegate, hermes.Tool:
 			tgt.parent = rec.parent.sidOrID()
 		}
-	} else if rec.parent == nil && rec.s.ParentID != "" && rec.rel != hermes.Reset {
+	} else if rec.parent == nil && !rec.noParent && rec.s.ParentID != "" && rec.rel != hermes.Reset {
 		tgt.parent = rec.s.ParentID
 		fam.report.Addf(agentimport.Lossy, "hermes/parent-missing", rec.s.Unit, 0, "the session's parent, %s, has no row in the database; parent_session names it", rec.s.ParentID)
 	}
@@ -386,7 +419,7 @@ func (rec *record) sidOrID() string {
 	if rec.sid != "" {
 		return rec.sid
 	}
-	return rec.s.ID
+	return rec.own.id
 }
 
 // messages reads a session's rows once.

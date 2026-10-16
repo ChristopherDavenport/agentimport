@@ -40,6 +40,9 @@ type sconv struct {
 
 	kids     *kids
 	children []*sconv
+	// failed are the children that could not be converted, whose rows
+	// this session's report counts as dropped.
+	failed []*record
 }
 
 func newSconv(fam *family, rec *record, tgt target, depth int) *sconv {
@@ -123,11 +126,19 @@ func (sc *sconv) abandon() {
 	for range sc.units {
 		r.Line(agentimport.LineDropped)
 	}
+	// Each child converted with it, and each that failed with it, is
+	// converted again on its own; the report built here counts this
+	// session's rows alone, so none is counted twice or lost.
 	var release func(s *sconv)
 	release = func(s *sconv) {
+		for _, rec := range s.failed {
+			delete(sc.fam.done, rec.s.ID)
+		}
 		for _, ch := range s.children {
 			delete(sc.fam.done, ch.rec.s.ID)
-			delete(sc.fam.ids, ch.tgt.id)
+			if ch.tgt.id != ch.rec.own.id {
+				delete(sc.fam.ids, ch.tgt.id)
+			}
 			ch.rec.sid = ""
 			release(ch)
 		}

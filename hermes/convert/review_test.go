@@ -2,6 +2,7 @@ package convert
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -488,4 +489,86 @@ INSERT INTO messages (session_id, role, content, timestamp, _compressed_summary)
 	if n := codes(res.Report)["hermes/summary-row"]; n != 1 {
 		t.Errorf("%d summary rows", n)
 	}
+}
+
+// header reads a converted session's parent_session.
+func parentOf(t *testing.T, res *agentimport.Result, id string) string {
+	t.Helper()
+	return sessionOf(t, res, id).Header().ParentSession
+}
+
+// TestSelfParent (F12): a session that names itself as its parent is
+// converted with no parent, and the cycle reported.
+func TestSelfParent(t *testing.T) {
+	res := convertScript(t, `
+INSERT INTO sessions (id, source, model, parent_session_id, started_at) VALUES ('s1', 'cli', 'm', 's1', 1760000000.0);
+INSERT INTO messages (session_id, role, content, timestamp) VALUES ('s1', 'user', 'hi', 1760000001.0);
+`, Options{})
+	if p := parentOf(t, res, "s1"); p != "" {
+		t.Errorf("parent_session %q", p)
+	}
+	got := codes(res.Report)
+	if got["hermes/parent-cycle"] != 1 || got["hermes/parent-missing"] != 0 {
+		t.Errorf("findings %v", got)
+	}
+}
+
+// TestCycleBelow (F13): a session whose ancestors form a cycle keeps
+// its parent; the cycle is broken at a member of it, the earliest
+// started.
+func TestCycleBelow(t *testing.T) {
+	res := convertScript(t, `
+INSERT INTO sessions (id, source, model, parent_session_id, started_at) VALUES
+  ('C', 'cli', 'm', 'A', 1760000001.0),
+  ('A', 'cli', 'm', 'B', 1760000002.0),
+  ('B', 'cli', 'm', 'A', 1760000003.0);
+INSERT INTO messages (session_id, role, content, timestamp) VALUES ('C', 'user', 'c', 1760000004.0), ('A', 'user', 'a', 1760000005.0), ('B', 'user', 'b', 1760000006.0);
+`, Options{})
+	if p := parentOf(t, res, "C"); p != "A" {
+		t.Errorf("C's parent_session %q, want A", p)
+	}
+	if p := parentOf(t, res, "A"); p != "" {
+		t.Errorf("A's parent_session %q, want none", p)
+	}
+	if p := parentOf(t, res, "B"); p != "A" {
+		t.Errorf("B's parent_session %q, want A", p)
+	}
+	got := codes(res.Report)
+	if got["hermes/parent-cycle"] != 1 || got["hermes/subagent-cycle"] != 0 {
+		t.Errorf("findings %v", got)
+	}
+}
+
+// TestParentIDBeforeConversion (F18): a branch converted before its
+// parent names the session ID its parent converts to.
+func TestParentIDBeforeConversion(t *testing.T) {
+	res := convertScript(t, `
+INSERT INTO sessions (id, source, model, started_at) VALUES ('p 1', 'cli', 'm', 1760000010.0);
+INSERT INTO sessions (id, source, model, model_config, parent_session_id, started_at) VALUES ('B', 'cli', 'm', '{"_branched_from":"p 1"}', 'p 1', 1760000001.0);
+INSERT INTO messages (session_id, role, content, timestamp) VALUES ('p 1', 'user', 'p', 1760000011.0), ('B', 'user', 'b', 1760000012.0);
+`, Options{})
+	want := agentsession.SubsessionID(Source, "session/p 1")
+	sessionOf(t, res, want)
+	if p := parentOf(t, res, "B"); p != want {
+		t.Errorf("B's parent_session %q, want %q", p, want)
+	}
+	for _, e := range sessionOf(t, res, "B").Entries() {
+		if l, ok := e.(*agentsession.LinkEntry); ok && l.Rel == agentsession.RelForkOf && l.Session != want {
+			t.Errorf("fork_of names %q", l.Session)
+		}
+	}
+}
+
+// TestNestedFailure (F14): when a sub-agent fails and then its parent
+// does, every row is still counted, the tally checked by convertHome.
+func TestNestedFailure(t *testing.T) {
+	testHookRun = func(sc *sconv) error {
+		switch sc.rec.s.ID {
+		case "20261005_060000_ee0007", "20261005_060010_ee0008":
+			return errors.New("injected")
+		}
+		return nil
+	}
+	defer func() { testHookRun = nil }()
+	convertFixture(t, "subagents", Options{})
 }

@@ -461,7 +461,7 @@ finding:
 | `hermes/observed` | lossy | An observed group-chat message; a Telegram channel's block of them is not reproduced. |
 | `hermes/orphan` | dropped | A message row of no session that can be read. |
 | `hermes/orphan-output` | repaired | An output of no call before it in the context at the leaf, left out there by `omit`. |
-| `hermes/parent-cycle` | repaired | A session's parents form a cycle; it is converted with no parent. |
+| `hermes/parent-cycle` | repaired | A session names itself as its parent, or its parents form a cycle, which is broken at its member that started first; that session is converted with no parent, and the sessions below it keep theirs. |
 | `hermes/parent-missing` | lossy | The session's parent has no row; `parent_session` names it. |
 | `hermes/reasoning-carrier` | kept | Entries of a reasoning carrier no item holds, kept in the row's columns. |
 | `hermes/reasoning-malformed` | repaired | Entries of a reasoning carrier that are not objects. |

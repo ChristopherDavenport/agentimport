@@ -15,5 +15,5 @@ hermes: 20 rows: mapped 17 kept 0 dropped 1 malformed 2
   repaired hermes/call-malformed                             1  1 entries of the row's tool_calls are not objects; Hermes cannot send them, and they are kept in the row's columns
   repaired hermes/malformed                                  2  a session row that cannot be read is skipped: the row has no id
   repaired hermes/mistyped                                   5  column started_at does not hold what Hermes writes; it is kept as written and read as absent
-  repaired hermes/parent-cycle                               1  the session's parents form a cycle; it is converted with no parent
+  repaired hermes/parent-cycle                               1  the session's parents form a cycle of 2 sessions; it, the one that started first, is converted with no parent
   repaired hermes/reasoning-malformed                        1  1 entries of the row's reasoning_details are not objects; they are kept as written

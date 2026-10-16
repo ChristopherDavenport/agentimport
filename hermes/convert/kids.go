@@ -288,7 +288,7 @@ func (sc *sconv) linkBefore(callID string, out *hermes.Message) ([]agentsession.
 			sc.fam.ids[sid] = true
 			tgt = target{id: sid}
 		} else {
-			tgt = sc.fam.ownTarget(rec)
+			tgt = rec.own
 		}
 		tgt.parent, tgt.spawnedBy = sc.tgt.id, callID
 		ch := sc.convertChild(rec, tgt)
@@ -327,7 +327,7 @@ func (sc *sconv) linkAfter(callID string, out *hermes.Message) error {
 		}
 	}
 	for _, rec := range sc.usable(dc, later, out.Unit) {
-		tgt := sc.fam.ownTarget(rec)
+		tgt := rec.own
 		tgt.parent = sc.tgt.id
 		ch := sc.convertChild(rec, tgt)
 		if ch == nil {
@@ -358,6 +358,7 @@ func (sc *sconv) convertChild(rec *record, tgt target) *sconv {
 	ch := sc.fam.convertInto(rec, tgt, sc.depth+1, sc.report)
 	if ch == nil {
 		sc.kids.failed[rec] = true
+		sc.failed = append(sc.failed, rec)
 		return nil
 	}
 	sc.children = append(sc.children, ch)
@@ -379,7 +380,7 @@ func (sc *sconv) unlinkedKids() error {
 		if sc.fam.done[id] || sc.kids.failed[rec] {
 			continue
 		}
-		tgt := sc.fam.ownTarget(rec)
+		tgt := rec.own
 		tgt.parent = sc.tgt.id
 		if sc.convertChild(rec, tgt) == nil {
 			continue
@@ -407,10 +408,11 @@ func (sc *sconv) continuations() error {
 		if rec.rel != hermes.Continuation || sc.fam.done[id] {
 			continue
 		}
-		tgt := sc.fam.ownTarget(rec)
+		tgt := rec.own
 		tgt.parent = sc.tgt.id
 		ch := sc.fam.convertInto(rec, tgt, sc.depth, sc.report)
 		if ch == nil {
+			sc.failed = append(sc.failed, rec)
 			continue
 		}
 		sc.children = append(sc.children, ch)
