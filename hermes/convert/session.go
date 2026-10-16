@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/ChristopherDavenport/agentimport"
@@ -274,7 +275,13 @@ func (sc *sconv) header(msgs []*hermes.Message) (agentsession.Header, error) {
 		return h, err
 	}
 	if !sc.slim {
-		rest := s.Cols.Without(sessionMapped...)
+		mapped := sessionMapped
+		if _, from := sc.systemPromptSource(); from != "the row's system_prompt column" {
+			// The row's own prompt, Hermes' read fallback, is not the
+			// one sent; it stays with the row.
+			mapped = slices.DeleteFunc(slices.Clone(mapped), func(c string) bool { return c == "system_prompt" })
+		}
+		rest := s.Cols.Without(mapped...)
 		raw, err := cleanRaw(rest.JSON())
 		if err != nil {
 			return h, err
@@ -426,12 +433,19 @@ func (sc *sconv) start() error {
 // Hermes keeps as the fallback.
 func (sc *sconv) systemPrompt() (prompt, from string) {
 	s := sc.rec.s
+	prompt, from = sc.systemPromptSource()
+	if s.SystemPromptHash != "" && from != "system_prompts, by the row's system_prompt_hash" && s.SystemPrompt == "" {
+		sc.addf(agentimport.Lossy, "hermes/system-prompt-missing", "", "the session names system prompt %s, which system_prompts does not hold", s.SystemPromptHash)
+	}
+	return prompt, from
+}
+
+// systemPromptSource reads the prompt and says where it came from.
+func (sc *sconv) systemPromptSource() (prompt, from string) {
+	s := sc.rec.s
 	if s.SystemPromptHash != "" {
 		if p, ok := sc.fam.st.SystemPrompt(s.SystemPromptHash); ok {
 			return p, "system_prompts, by the row's system_prompt_hash"
-		}
-		if s.SystemPrompt == "" {
-			sc.addf(agentimport.Lossy, "hermes/system-prompt-missing", "", "the session names system prompt %s, which system_prompts does not hold", s.SystemPromptHash)
 		}
 	}
 	return s.SystemPrompt, "the row's system_prompt column"

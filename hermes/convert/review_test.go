@@ -633,3 +633,20 @@ INSERT INTO messages (session_id, role, content, tool_calls, tool_call_id, times
 	}
 	sameLines(t, "g2 leaf", leaf(t, sessionOf(t, res, "g2")), []string{"user: next"})
 }
+
+// TestFallbackPromptKept (F19): when the prompt comes from
+// system_prompts, the row's own system_prompt, Hermes' read fallback,
+// stays with the session row.
+func TestFallbackPromptKept(t *testing.T) {
+	res := convertScript(t, `
+INSERT INTO system_prompts VALUES ('h', 'new prompt');
+INSERT INTO sessions (id, source, model, system_prompt, system_prompt_hash, started_at) VALUES ('fp', 'cli', 'm', 'old prompt', 'h', 1760000000.0);
+`, Options{})
+	var row map[string]json.RawMessage
+	if err := json.Unmarshal(sessionOf(t, res, "fp").Header().Extra[Source+":session"], &row); err != nil {
+		t.Fatal(err)
+	}
+	if string(row["system_prompt"]) != `"old prompt"` {
+		t.Errorf("system_prompt %s", row["system_prompt"])
+	}
+}

@@ -334,7 +334,9 @@ Every column of `messages` at schema version 31:
 | `display_identity`, `display_order` | Hermes' display index, derived from the other columns; not kept (`hermes/display-index`) |
 | `message_uid` | `hermes:columns`: the row's durable identity |
 | `absorbed_message_uids` | `hermes:columns`: on a user row a consecutive-user merge kept, the `message_uid` of each row merged into it (`record_absorbed_message`) |
-| `tool_call_uids`, `tool_call_uid` | `hermes:columns`: per-occurrence identities of an assistant's calls and of the call an output answers | A renamed call keeps the native ID in
+| `tool_call_uids`, `tool_call_uid` | `hermes:columns`: per-occurrence identities of an assistant's calls and of the call an output answers |
+
+A renamed call keeps the native ID in
 `hermes:call_id`, and a call's members beyond `id`, `type` and
 `function` (such as `extra_content`) are in `hermes:call`.
 
@@ -465,7 +467,7 @@ finding:
 | `hermes/empty-turn` | lossy | An empty user or assistant turn, which Hermes sends as a placeholder once a message follows it; the item stays empty. |
 | `hermes/inactive-rows` | lossy | Runs of rows out of context (rewound, superseded, deactivated), each a branch. |
 | `hermes/malformed` | repaired | A row that cannot be read (no id, no role) is skipped. |
-| `hermes/members` | kept | Native values kept in a namespaced member, or dropped under `Slim`. |
+| `hermes/members` | kept, or dropped | Native values kept in a namespaced member, or dropped under `Slim`. |
 | `hermes/mistyped` | repaired | A column does not hold what Hermes writes; it is kept as written and read as Hermes reads it. |
 | `hermes/native-compaction` | lossy | A provider's compaction item among the Codex reasoning items; Hermes replays it only to a request with context management. |
 | `hermes/observed` | lossy | An observed group-chat message; a Telegram channel's block of them is not reproduced. |
@@ -477,13 +479,13 @@ finding:
 | `hermes/reasoning-malformed` | repaired | Entries of a reasoning carrier that are not objects. |
 | `hermes/reasoning-text` | lossy | Reasoning from the row's text columns, a reasoning item's content. |
 | `hermes/reset` | lossy | A reset child: a new conversation, with no `parent_session`. |
-| `hermes/review-harness` | kept | A background-review harness prompt or its reply, a custom entry, out of context. |
+| `hermes/review-harness` | kept, or dropped | A background-review harness prompt or its reply, a custom entry, out of context; left out under `Slim`. |
 | `hermes/sanitized-content` | lossy | The item is the text Hermes sends, not the content it stores (memory blocks taken out, white space stripped, a stale marker blanked); the stored content is kept in `hermes:columns`. |
 | `hermes/schema-version` | lossy | The database records no schema version, or one newer than 31. |
 | `hermes/session-failed` | dropped | A session could not be converted; its rows are dropped. |
 | `hermes/session-id` | lossy | The session's ID is derived, as the native one is not a store name or is taken. |
-| `hermes/session-meta` | kept | The gateway's `session_meta` row, a custom entry. |
-| `hermes/session-row` | kept | The session row's columns the header has no place for, in `hermes:session`, or dropped under `Slim`. |
+| `hermes/session-meta` | kept, or dropped | The gateway's `session_meta` row, a custom entry; left out under `Slim`. |
+| `hermes/session-row` | kept, or dropped | The session row's columns the header has no place for, in `hermes:session`, or dropped under `Slim`. |
 | `hermes/session-usage` | gap | Usage recorded per session and per model, not per response, kept in the header's members. |
 | `hermes/stale-marker` | repaired | A bare tool marker as an assistant's content is no text, as a resume blanks it. |
 | `hermes/subagent` | lossy | A sub-agent a foreground call ran: a subsession, tied by its start time. |
@@ -491,12 +493,12 @@ finding:
 | `hermes/subagent-peer` | lossy | A sub-agent a background call ran: a peer, linked after the call's output. |
 | `hermes/subagent-unlinked` | lossy | A sub-agent or tool session no call is tied to; `parent_session` alone names its parent. |
 | `hermes/summary-row` | lossy | A compaction's summary written as an assistant message; no response. |
-| `hermes/system-prompt` | lossy | The instructions are the stored system prompt; what Hermes adds per request is not stored. Dropped when the row has none. |
+| `hermes/system-prompt` | lossy, or dropped | Lossy: the instructions are the stored system prompt, and what Hermes adds per request is not stored. Dropped: the row holds no system prompt. |
 | `hermes/system-prompt-missing` | lossy | The session names a system prompt hash `system_prompts` does not hold. |
 | `hermes/system-row` | lossy | A system row is in context where it stands; the gateway's replay leaves it out. |
 | `hermes/thinking-only` | lossy | An assistant turn of reasoning alone, left out by `omit` from every request after it as Hermes drops it from each request's copy; or, of Codex items alone, kept, as only the route decides. |
 | `hermes/tools` | dropped | Hermes stores no tool definitions. |
 | `hermes/unanswered-call` | repaired | A call with no output in the context at the leaf, left out there by `omit`. |
-| `hermes/unknown-role` | kept | A row of a role Hermes' readers do not send, a custom entry. |
+| `hermes/unknown-role` | kept, or dropped | A row of a role Hermes' readers do not send, a custom entry; left out under `Slim`. |
 | `hermes/unreached` | dropped | A row read and nothing made of it; a converter bug. |
 | `hermes/usage-rollup` | lossy | The session ran sub-agents, whose estimated cost Hermes adds to its own. |
