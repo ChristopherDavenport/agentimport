@@ -93,6 +93,7 @@ func (c *conv) rangeEvents() {
 			c.uiAt(agentimport.Lossy, "cline/range-invalid", i, "a deleted range that is not two counts in order is ignored")
 			continue
 		}
+		r[0], r[1] = min(r[0], n), min(r[1], n)
 		if !has && cur == nil || has && cur != nil && *cur == r {
 			continue
 		}
@@ -100,6 +101,11 @@ func (c *conv) rangeEvents() {
 		ev.ts, _ = m.Time()
 		if hi, ok := m.HistoryIndex(); ok {
 			ev.p = hi + 1
+			if c.summarizes(hi + 1) {
+				// summarize_task and condense set the range while their
+				// own response streams; it governs the request after it.
+				ev.p = hi + 2
+			}
 		} else {
 			ev.p = c.posByTime(ev.ts) + 1
 			ev.placed = "by the UI message's time"
@@ -120,10 +126,46 @@ func (c *conv) rangeEvents() {
 		return
 	}
 	r, ok := hi.DeletedRange()
+	r[0], r[1] = min(r[0], n), min(r[1], n)
 	if ok && (cur == nil || *cur != r) {
 		c.events = append(c.events, &event{p: n, kind: evRange, order: len(c.t.UI.Elems), rng: r, special: -1, ui: -1,
 			placed: "at the end, from the index entry, since no UI message carries it"})
 	}
+}
+
+// summarizes reports whether API element k is a response calling
+// summarize_task or condense, natively or as XML in its text.
+func (c *conv) summarizes(k int) bool {
+	if k < 0 || k >= len(c.t.API.Elems) {
+		return false
+	}
+	m := c.t.API.Elems[k]
+	if m.Err != nil || m.Role != cline.RoleAssistant {
+		return false
+	}
+	is := func(name string) bool { return name == "summarize_task" || name == "condense" }
+	for _, b := range m.ToolUses() {
+		if is(b.Name) {
+			return true
+		}
+	}
+	texts := []string{}
+	if m.Content.IsText {
+		texts = append(texts, m.Content.Text)
+	}
+	for _, b := range m.Content.Blocks {
+		if b.Err == nil && b.Type == cline.BlockText {
+			texts = append(texts, b.Text)
+		}
+	}
+	for _, t := range texts {
+		for _, x := range cline.ParseXMLTools(t) {
+			if is(x.Name) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // rooEvents reads Roo's summaries and markers. Each is matched to the
@@ -146,17 +188,48 @@ func (c *conv) rooEvents() {
 			truncs = append(truncs, i)
 		}
 	}
+	// Records are matched by ID first, every summary and marker, then
+	// the rest pair in order, so a summary whose record is gone does
+	// not take the next one's.
 	used := map[int]bool{}
-	match := func(list []int, member func(*cline.UIMessage) json.RawMessage, key, id string) int {
-		if id != "" {
-			for _, i := range list {
-				var v map[string]json.RawMessage
-				var got string
-				if !used[i] && json.Unmarshal(member(c.t.UI.Elems[i]), &v) == nil && json.Unmarshal(v[key], &got) == nil && got == id {
-					used[i] = true
-					return i
-				}
+	recordID := func(i int, trunc bool) string {
+		u := c.t.UI.Elems[i]
+		raw, key := u.ContextCondense, "condenseId"
+		if trunc {
+			raw, key = u.ContextTruncation, "truncationId"
+		}
+		var v map[string]json.RawMessage
+		var id string
+		if json.Unmarshal(raw, &v) == nil && json.Unmarshal(v[key], &id) == nil {
+			return id
+		}
+		return ""
+	}
+	var specials []int
+	byID := map[int]int{}
+	for s, m := range elems {
+		if m.Err != nil || !(m.IsSummary || m.IsTruncationMarker) {
+			continue
+		}
+		specials = append(specials, s)
+		trunc, list, id := !m.IsSummary, condense, m.CondenseID
+		if trunc {
+			list, id = truncs, m.TruncationID
+		}
+		if id == "" {
+			continue
+		}
+		for _, i := range list {
+			if !used[i] && recordID(i, trunc) == id {
+				used[i] = true
+				byID[s] = i
+				break
 			}
+		}
+	}
+	match := func(s int, list []int) int {
+		if i, ok := byID[s]; ok {
+			return i
 		}
 		for _, i := range list {
 			if !used[i] {
@@ -166,10 +239,8 @@ func (c *conv) rooEvents() {
 		}
 		return -1
 	}
-	for s, m := range elems {
-		if m.Err != nil || !(m.IsSummary || m.IsTruncationMarker) {
-			continue
-		}
+	for _, s := range specials {
+		m := elems[s]
 		c.special[s] = true
 		ev := &event{order: s, special: s, ui: -1}
 		if m.IsSummary {
@@ -182,10 +253,10 @@ func (c *conv) rooEvents() {
 			default:
 				ev.era = eraDestructive
 			}
-			ev.ui = match(condense, func(u *cline.UIMessage) json.RawMessage { return u.ContextCondense }, "condenseId", m.CondenseID)
+			ev.ui = match(s, condense)
 		} else {
 			ev.kind = evTruncation
-			ev.ui = match(truncs, func(u *cline.UIMessage) json.RawMessage { return u.ContextTruncation }, "truncationId", m.TruncationID)
+			ev.ui = match(s, truncs)
 		}
 		if ev.ui >= 0 {
 			ev.ts, _ = c.t.UI.Elems[ev.ui].Time()
@@ -234,8 +305,9 @@ func (c *conv) rooEvents() {
 	}
 }
 
-// applyEvents writes the compactions of the events placed before
-// element k.
+// applyEvents writes the events placed before element k: an omit
+// config entry for a filter of the history, as classic's ranges are; a
+// compaction for a Roo summary or marker.
 func (c *conv) applyEvents(k int) error {
 	for c.nextEvt < len(c.events) && c.events[c.nextEvt].p <= k {
 		idx := c.nextEvt
@@ -244,7 +316,14 @@ func (c *conv) applyEvents(k int) error {
 			// Another range replaced this one before any request.
 			continue
 		}
-		if err := c.compaction(idx); err != nil {
+		spec := c.spec(idx)
+		var err error
+		if slices.ContainsFunc(spec, func(k int) bool { return c.special[k] }) {
+			err = c.compaction(idx, spec)
+		} else {
+			err = c.filter(idx, spec)
+		}
+		if err != nil {
 			return err
 		}
 	}
@@ -363,115 +442,253 @@ func (c *conv) rooSpec(idx int) []int {
 	return slice
 }
 
-// itemsOf is the items element k puts in context: those written for an
-// ordinary element, those of the summary or marker for a special one.
-func (c *conv) itemsOf(k int) []openresponses.Item {
-	if !c.special[k] {
-		return c.items[k]
+// filter writes event idx as what it is when the requests after it
+// send messages the path holds, in its order, and leave others out:
+// an omit config entry naming the item entries left out. Classic's
+// range is this: messages 0 and 1 stay where they are, and what the
+// range deletes is omitted, with the tool results of the first message
+// after it. Cline sends "result missing" for message 1's calls, whose
+// results the range deletes; their outputs stay, in that place, and the
+// replaced text is a context-replace gap.
+func (c *conv) filter(idx int, spec []int) error {
+	ev := c.events[idx]
+	in := map[int]bool{}
+	visible := map[string]bool{}
+	for _, k := range spec {
+		in[k] = true
+		for _, id := range c.callsAt[k] {
+			visible[id] = true
+		}
 	}
-	if items, ok := c.specialItems[k]; ok {
-		return items
+	var hide []string
+	replaced := 0
+	for k := 0; k < ev.p && k < len(c.itemEntries); k++ {
+		if in[k] || c.special[k] {
+			continue
+		}
+		for _, id := range c.itemEntries[k] {
+			if call, ok := c.outputCall[id]; ok && visible[call.id] && !c.roo {
+				replaced++
+				continue
+			}
+			hide = append(hide, id)
+		}
 	}
-	items := c.summaryItems(k)
-	c.specialItems[k] = items
-	return items
+	if !c.roo {
+		c.cut, c.cutDone = -1, false
+		if !ev.noRange {
+			c.cut = ev.rng[1] + 1
+			if c.cut < ev.p && c.cut < len(c.outputs) {
+				hide = append(hide, c.outputs[c.cut]...)
+				c.cutDone = true
+			}
+		}
+	}
+	if err := c.setOmit(append(slices.Clone(c.reasonOmits), hide...), ev.ts); err != nil {
+		return err
+	}
+	line := 0
+	if ev.special >= 0 {
+		line = ev.special + 1
+		c.mark(unit{uAPI, ev.special}, agentimport.LineDropped)
+		c.apiAt(agentimport.Dropped, "cline/special-unsent", ev.special, "the requests after this %s do not send it; it is left out", ev.kind)
+	}
+	switch {
+	case ev.kind == evRange && ev.noRange:
+		c.addf(agentimport.Lossy, "cline/deleted-range", c.t.API.Name, line, "from API message %d the deleted range is reset: requests send the whole history again, and the omit config entry clears what it left out", ev.p+1)
+	case ev.kind == evRange:
+		c.addf(agentimport.Lossy, "cline/deleted-range", c.t.API.Name, line, "from API message %d requests leave out API messages %d to %d; an omit config entry names their items, and messages 1 and 2 stay where they are", ev.p+1, ev.rng[0]+1, ev.rng[1]+1)
+	}
+	if replaced > 0 {
+		c.addf(agentimport.Gap, "agentimport/context-replace", c.t.API.Name, line,
+			"from API message %d Cline sends %q in place of the %d outputs of message 2's calls, whose results the range deleted; the session keeps the outputs", ev.p+1, resultMissingText, replaced)
+	}
+	if ev.placed != "" {
+		c.addf(agentimport.Lossy, "cline/event-placed", c.t.API.Name, line, "the %s is placed %s", ev.kind, ev.placed)
+	}
+	return nil
 }
 
-// summaryItems is the message a Roo summary or marker puts in context:
-// its text, and a user's images. Other blocks are left out and
-// reported.
-func (c *conv) summaryItems(k int) []openresponses.Item {
-	m := c.t.API.Elems[k]
-	role := openresponses.RoleUser
-	if m.Role == cline.RoleAssistant {
-		role = openresponses.RoleAssistant
-	}
-	var parts openresponses.Contents
-	text := func(s string) openresponses.Content {
-		if role == openresponses.RoleAssistant {
-			return &openresponses.OutputText{Text: s, Annotations: openresponses.Annotations{}}
+// setOmit makes the items omitted in force desired: an omit config
+// entry adding those not omitted yet, after one clearing the set when
+// something omitted is no longer.
+func (c *conv) setOmit(desired []string, ts time.Time) error {
+	want := map[string]bool{}
+	var list []string
+	for _, id := range desired {
+		if !want[id] {
+			want[id] = true
+			list = append(list, id)
 		}
-		return &openresponses.InputText{Text: s}
+	}
+	clearing := false
+	for id := range c.omitNow {
+		if !want[id] {
+			clearing = true
+			break
+		}
+	}
+	var add []string
+	if clearing {
+		cfg := &agentsession.ConfigEntry{Omit: &agentsession.Omit{}}
+		cfg.Timestamp = ts
+		if _, err := c.appendEntry(cfg); err != nil {
+			return err
+		}
+		add = list
+	} else {
+		for _, id := range list {
+			if !c.omitNow[id] {
+				add = append(add, id)
+			}
+		}
+	}
+	if len(add) > 0 {
+		cfg := &agentsession.ConfigEntry{Omit: &agentsession.Omit{Items: add}}
+		cfg.Timestamp = ts
+		if _, err := c.appendEntry(cfg); err != nil {
+			return err
+		}
+	}
+	c.omitNow = want
+	return nil
+}
+
+// addOmit omits the item entries ids of element k from here on;
+// reasoning says they stay omitted whatever a range does.
+func (c *conv) addOmit(k int, ids []string, ts time.Time, reasoning bool) error {
+	for _, id := range ids {
+		c.omitted[id] = k
+	}
+	if reasoning {
+		c.reasonOmits = append(c.reasonOmits, ids...)
+	}
+	cur := make([]string, 0, len(c.omitNow)+len(ids))
+	for id := range c.omitNow {
+		cur = append(cur, id)
+	}
+	slices.Sort(cur)
+	return c.setOmit(append(cur, ids...), ts)
+}
+
+// specialParts is what a Roo summary or marker put in a request: its
+// text and a user's images, as the parts of the compaction's summary,
+// and the calls and encrypted reasoning a 3.36 to 3.42 summary carries
+// for the results it kept, as the item entries already written for
+// them, to pin. Its blocks' other members are returned by index.
+func (c *conv) specialParts(k int) (openresponses.Contents, openresponses.Items, map[string]json.RawMessage) {
+	m := c.t.API.Elems[k]
+	var parts openresponses.Contents
+	var pinned openresponses.Items
+	var members map[string]json.RawMessage
+	keep := func(i int, rest map[string]json.RawMessage) {
+		if len(rest) == 0 {
+			return
+		}
+		raw, err := json.Marshal(rest)
+		if err != nil {
+			return
+		}
+		if members == nil {
+			members = map[string]json.RawMessage{}
+		}
+		members[fmt.Sprint(i)] = raw
 	}
 	if m.Content.IsText {
-		parts = append(parts, text(m.Content.Text))
+		parts = append(parts, &openresponses.InputText{Text: m.Content.Text})
 	}
-	left := 0
-	for _, b := range m.Content.Blocks {
+	plain, missing, left := 0, 0, 0
+	for i, b := range m.Content.Blocks {
 		switch {
-		case b.Err == nil && b.Type == cline.BlockText:
-			parts = append(parts, text(b.Text))
-		case b.Err == nil && b.Type == cline.BlockImage && b.Source != nil && b.Source.Type == "base64" && role == openresponses.RoleUser:
+		case b.Err != nil:
+			left++
+		case b.Type == cline.BlockText:
+			parts = append(parts, &openresponses.InputText{Text: b.Text})
+			keep(i, blockRest(b, "text"))
+		case b.Type == cline.BlockImage && b.Source != nil && b.Source.Type == "base64" && m.Role == cline.RoleUser:
 			parts = append(parts, &openresponses.InputImage{ImageURL: "data:" + b.Source.MediaType + ";base64," + b.Source.Data})
+			keep(i, blockRest(b, "source"))
+		case b.Type == cline.BlockToolUse:
+			if p := c.callByNative[b.ID]; p != nil && p.elem < k {
+				pinned = append(pinned, p.item)
+			} else {
+				missing++
+			}
+		case b.Type == cline.BlockReasoning && b.EncryptedContent != "", b.Type == cline.BlockThinking && b.Signature != "":
+			enc := b.EncryptedContent
+			if enc == "" {
+				enc = b.Signature
+			}
+			if r, ok := c.reasoningByEnc[enc]; ok && r.elem < k {
+				pinned = append(pinned, r.item)
+			} else {
+				missing++
+			}
+		case b.Type == cline.BlockReasoning || b.Type == cline.BlockThinking:
+			plain++
 		default:
 			left++
 		}
 	}
+	if plain > 0 {
+		c.apiAt(agentimport.Lossy, "cline/roo-plain-reasoning", k, "the summary's %d plain reasoning blocks, which Roo leaves out unless the model preserves reasoning, are left out of the compaction", plain)
+	}
+	if missing > 0 {
+		c.apiAt(agentimport.Dropped, "cline/summary-content", k, "the summary carries %d calls or reasoning items no earlier message wrote; they are left out of the compaction", missing)
+	}
 	if left > 0 || m.Content.Err != nil {
-		c.apiAt(agentimport.Dropped, "cline/summary-content", k, "a summary or marker holds content other than text and images, which is left out of the compaction (%d blocks)", left)
+		c.apiAt(agentimport.Dropped, "cline/summary-content", k, "a summary or marker holds %d blocks other than text, images, calls and reasoning, which are left out of the compaction", left)
 	}
-	if len(parts) == 0 {
-		return nil
-	}
-	msg := &openresponses.Message{Role: role, Content: parts}
-	if role == openresponses.RoleAssistant {
-		msg.Status = openresponses.StatusCompleted
-	}
-	return []openresponses.Item{msg}
+	return parts, pinned, members
 }
 
-// compaction writes event idx: the requests after it send the list
-// spec gives, which is written as the longest run at the path's end
-// that the list ends with, kept from first_kept, and the elements
-// before that run, whose items are copied unedited into the
-// compaction's summary (the first) and pinned items (the rest), so the
-// context holds them in the order sent.
-func (c *conv) compaction(idx int) error {
+// compaction writes event idx, a Roo summary or marker, as a
+// compaction: its summary a user message of the summaries' and
+// markers' text the requests carried, pinned the item entries the
+// requests sent with them (the first message an older summary was sent
+// after, the calls a summary carried for the results it kept),
+// first_kept the first message kept after them, and an omit in its
+// settings for what the requests left out after that. The format puts
+// the summary first; a request that sent a message ahead of it, or the
+// summary as an assistant message, is the fold-head gap.
+func (c *conv) compaction(idx int, spec []int) error {
 	ev := c.events[idx]
-	spec := c.spec(idx)
-	var live []int
-	for _, k := range spec {
-		if len(c.itemsOf(k)) > 0 {
-			live = append(live, k)
+	elems := c.t.API.Elems
+	ls := 0
+	for i, k := range spec {
+		if c.special[k] {
+			ls = i
 		}
 	}
-	var ord []int
-	for k := 0; k < ev.p && k < len(c.t.API.Elems); k++ {
-		if !c.special[k] && len(c.items[k]) > 0 {
-			ord = append(ord, k)
+	head, tail := spec[:ls+1], spec[ls+1:]
+	var parts openresponses.Contents
+	var pinned openresponses.Items
+	var members map[string]json.RawMessage
+	ahead, assistant := false, false
+	var heads []string
+	for _, k := range head {
+		heads = append(heads, fmt.Sprint(k+1))
+		if !c.special[k] {
+			ahead = true
+			pinned = append(pinned, c.items[k]...)
+			continue
+		}
+		p, pin, mem := c.specialParts(k)
+		parts = append(parts, p...)
+		pinned = append(pinned, pin...)
+		if k == ev.special {
+			members = mem
+		}
+		if elems[k].Role == cline.RoleAssistant {
+			assistant = true
 		}
 	}
-	i, j := len(live)-1, len(ord)-1
-	for i >= 0 && j >= 0 && !c.special[live[i]] && live[i] == ord[j] {
-		i--
-		j--
-	}
-	split := i + 1
-	if split == 0 {
-		if j < 0 && c.compacts == 0 && ev.special < 0 {
-			// The requests send everything on the path.
-			return nil
-		}
-		split = 1
-	}
-	if len(live) == 0 {
-		c.addf(agentimport.Lossy, "cline/compaction-empty", c.t.API.Name, ev.special+1, "the requests after this point send nothing written so far; no compaction is written")
-		if ev.special >= 0 {
-			c.mark(unit{uAPI, ev.special}, agentimport.LineDropped)
-		}
+	if len(parts) == 0 {
+		c.addf(agentimport.Lossy, "cline/compaction-empty", c.t.API.Name, ev.special+1, "the summaries and markers the requests sent hold no text; no compaction is written")
+		c.mark(unit{uAPI, ev.special}, agentimport.LineDropped)
 		return nil
 	}
-	head, tail := live[:split], live[split:]
-	var headItems []openresponses.Item
-	var copied []string
-	for _, k := range head {
-		headItems = append(headItems, c.itemsOf(k)...)
-		copied = append(copied, fmt.Sprint(k+1))
-		if !c.roo && k == 1 {
-			headItems = append(headItems, c.missingAfterCut()...)
-		}
-	}
-	firstKept := ""
+	var firstKept string
 	var err error
 	if len(tail) > 0 {
 		firstKept = c.first[tail[0]]
@@ -483,60 +700,71 @@ func (c *conv) compaction(idx int) error {
 		return err
 	}
 	cfg := ctx.Settings
-	// The checkpoint omits what is still omitted in the window it
-	// keeps; what is before first_kept is out of context anyway.
+	// The checkpoint omits what stays omitted in the window it keeps,
+	// and what the requests left out of it.
 	var omit []string
-	for _, id := range cfg.Omit.Items {
-		if k, ok := c.omitted[id]; ok && len(tail) > 0 && k >= tail[0] {
-			omit = append(omit, id)
-		}
-	}
-	if !c.roo && ev.kind == evRange && !ev.noRange {
-		c.cut, c.cutDone = ev.rng[1]+1, false
-		if c.cut < ev.p && c.cut < len(c.outputs) && len(c.outputs[c.cut]) > 0 {
-			for _, id := range c.outputs[c.cut] {
-				c.omitted[id] = c.cut
+	if len(tail) > 0 {
+		start := tail[0]
+		for _, id := range cfg.Omit.Items {
+			if k, ok := c.omitted[id]; ok && k >= start {
+				omit = append(omit, id)
 			}
-			omit = append(omit, c.outputs[c.cut]...)
-			c.cutDone = true
 		}
-	} else if !c.roo {
-		c.cut = -1
+		in := map[int]bool{}
+		for _, k := range tail {
+			in[k] = true
+		}
+		for k := start; k < ev.p && k < len(c.itemEntries); k++ {
+			if !in[k] && !c.special[k] {
+				omit = append(omit, c.itemEntries[k]...)
+			}
+		}
 	}
 	cfg.Omit.Items = omit
-	e := &agentsession.CompactionEntry{FirstKept: firstKept, Summary: headItems[0], Pinned: openresponses.Items(headItems[1:]), Config: cfg}
+	e := &agentsession.CompactionEntry{FirstKept: firstKept, Summary: openresponses.UserMessage(parts...), Pinned: pinned, Config: cfg}
 	e.Timestamp = ev.ts
-	if err := c.eventMembers(e, ev); err != nil {
+	if err := c.eventMembers(e, ev, members); err != nil {
 		return err
 	}
 	if _, err := c.appendEntry(e); err != nil {
 		return err
 	}
-	if ev.special >= 0 {
-		c.mark(unit{uAPI, ev.special}, agentimport.LineMapped)
+	c.mark(unit{uAPI, ev.special}, agentimport.LineMapped)
+	c.omitNow = map[string]bool{}
+	for _, id := range omit {
+		c.omitNow[id] = true
 	}
-	c.compacts++
-	c.eventFindings(ev, copied, len(tail) > 0)
-	return nil
-}
-
-// missingAfterCut is the output Cline sends for each call of API
-// message 1 once a range has cut the message that answered it: "result
-// missing", first in the message after the cut.
-func (c *conv) missingAfterCut() []openresponses.Item {
-	var out []openresponses.Item
-	if len(c.items) < 2 {
-		return nil
-	}
-	for _, it := range c.items[1] {
-		if fc, ok := it.(*openresponses.FunctionCall); ok {
-			out = append(out, &openresponses.FunctionCallOutput{CallID: fc.CallID, Output: openresponses.FunctionCallOutputData{Text: resultMissingText}})
+	if ev.era == eraFresh {
+		// Roo leaves out a later result whose call is before this.
+		c.condensed = map[string]bool{}
+		for native := range c.callByNative {
+			c.condensed[native] = true
 		}
 	}
-	if len(out) > 0 {
-		c.apiAt(agentimport.Repaired, "cline/result-missing", 1, "the range cut the results of this message's calls; Cline sends %q for each, first in the message after the cut, which the compaction's pinned items hold", resultMissingText)
+	kept := "nothing after it"
+	if len(tail) > 0 {
+		kept = fmt.Sprintf("the messages from API message %d kept", tail[0]+1)
 	}
-	return out
+	switch ev.kind {
+	case evCondense:
+		c.apiAt(agentimport.Lossy, "cline/roo-condense", ev.special, "a %s summary (%s): a compaction of API messages %s, which the requests sent ahead of %s, as that release sent them", ev.era, eraReleases(ev.era), strings.Join(heads, ", "), kept)
+	case evTruncation:
+		c.apiAt(agentimport.Lossy, "cline/roo-truncation", ev.special, "a sliding-window marker: a compaction of API messages %s, which the requests sent ahead of %s, as Roo sends them", strings.Join(heads, ", "), kept)
+	}
+	if ahead || assistant {
+		why := []string{}
+		if ahead {
+			why = append(why, "the requests sent a message ahead of the summary, which is pinned after it")
+		}
+		if assistant {
+			why = append(why, "the requests sent the summary as an assistant message, which the compaction's summary carries as a user message so no request starts with the assistant")
+		}
+		c.apiAt(agentimport.Gap, "agentimport/fold-head", ev.special, "%s", strings.Join(why, "; "))
+	}
+	if ev.placed != "" {
+		c.apiAt(agentimport.Lossy, "cline/event-placed", ev.special, "the %s is placed %s", ev.kind, ev.placed)
+	}
+	return nil
 }
 
 // keepNone returns the entry a compaction that keeps nothing of the
@@ -568,7 +796,7 @@ func (c *conv) keepNone(ev *event) (string, error) {
 // eventMembers sets what an event records beside the compaction: the
 // UI record of a Roo condense or truncation, the summary's or marker's
 // own members, the range.
-func (c *conv) eventMembers(e *agentsession.CompactionEntry, ev *event) error {
+func (c *conv) eventMembers(e *agentsession.CompactionEntry, ev *event, blocks map[string]json.RawMessage) error {
 	info := map[string]any{"kind": ev.kind}
 	if ev.kind == evRange {
 		if ev.noRange {
@@ -591,6 +819,16 @@ func (c *conv) eventMembers(e *agentsession.CompactionEntry, ev *event) error {
 		rest, err := messageRest(m)
 		if err != nil {
 			return err
+		}
+		if len(blocks) > 0 {
+			raw, err := json.Marshal(blocks)
+			if err != nil {
+				return err
+			}
+			if rest == nil {
+				rest = map[string]json.RawMessage{}
+			}
+			rest["content_blocks"] = raw
 		}
 		if err := c.keepMembers(e, ev.special, "message", rest, "the summary's or marker's"); err != nil {
 			return err
@@ -624,55 +862,6 @@ func (c *conv) eventMembers(e *agentsession.CompactionEntry, ev *event) error {
 		return err
 	}
 	return c.b.Member(e, "ui", json.RawMessage(raw))
-}
-
-// eventFindings reports how an event was written.
-func (c *conv) eventFindings(ev *event, copied []string, keptTail bool) {
-	head := "the compaction's summary is a copy of API message " + copied[0]
-	if len(copied) > 1 {
-		head += " and its pinned items copies of " + strings.Join(copied[1:], ", ")
-	}
-	tail := "nothing after"
-	if keptTail {
-		tail = "the messages after it kept from first_kept"
-	}
-	line := ev.special + 1
-	if ev.ui >= 0 && ev.kind == evRange {
-		line = 0
-	}
-	switch ev.kind {
-	case evRange:
-		what := "the deleted range is reset"
-		if !ev.noRange {
-			what = fmt.Sprintf("requests leave out API messages %d to %d", ev.rng[0]+1, ev.rng[1]+1)
-		}
-		c.addf(agentimport.Lossy, "cline/deleted-range", c.t.API.Name, line, "from API message %d, %s: %s, %s, as Cline sends them", ev.p+1, what, head, tail)
-		if !ev.noRange {
-			keys := make([][2]int, 0, len(c.edits))
-			for key := range c.edits {
-				if key[0] == 0 || key[0] == 1 {
-					keys = append(keys, key)
-				}
-			}
-			slices.SortFunc(keys, func(a, b [2]int) int {
-				if a[0] != b[0] {
-					return a[0] - b[0]
-				}
-				return a[1] - b[1]
-			})
-			for _, key := range keys {
-				list := c.edits[key]
-				c.apiAt(agentimport.Lossy, "cline/pinned-unedited", key[0], "the compaction holds API message %d unedited; the requests sent %s with its text replaced by %s", key[0]+1, c.describeBlock(key[0], key[1]), describeText(list[len(list)-1].NewText()))
-			}
-		}
-	case evCondense:
-		c.apiAt(agentimport.Lossy, "cline/roo-condense", ev.special, "a %s summary (%s): %s, %s, as that release sent them", ev.era, eraReleases(ev.era), head, tail)
-	case evTruncation:
-		c.apiAt(agentimport.Lossy, "cline/roo-truncation", ev.special, "a sliding-window marker: %s, %s, as Roo sends them", head, tail)
-	}
-	if ev.placed != "" {
-		c.addf(agentimport.Lossy, "cline/event-placed", c.t.API.Name, line, "the %s is placed %s", ev.kind, ev.placed)
-	}
 }
 
 // eraReleases names the Roo releases that wrote a condense era.

@@ -203,9 +203,12 @@ func short(s string) string {
 }
 
 // TestContexts checks the context at the leaf of the fixtures whose
-// requests the native agent rebuilt: the first pair and the tail after
-// a deleted range, the summary from a fresh start on, the first message
-// and the summary before what an older condense kept.
+// requests the native agent rebuilt. Classic's range is an omit:
+// messages 0 and 1 where they stand, the outputs of message 1's calls
+// (Cline sends "result missing" for them), and the first message after
+// the range without its tool results. A Roo summary is a compaction
+// whose summary is the text the requests carried and whose pinned items
+// are the entries the requests sent with it.
 func TestContexts(t *testing.T) {
 	fx := fixtures(t)
 	env := "<environment_details>"
@@ -213,11 +216,8 @@ func TestContexts(t *testing.T) {
 		name string
 		want []string
 	}{
-		// Messages 0 and 1, the result Cline sends for message 1's call
-		// whose result the range cut, then message 6 without its tool
-		// result, which answered a deleted call.
 		{"classic-truncation", []string{
-			"user: <task> | " + env, "assistant: Step 1.", "call toolu_1 read_file", "output toolu_1 result missing",
+			"user: <task> | " + env, "assistant: Step 1.", "call toolu_1 read_file", "output toolu_1 [read_file for 'p1.go'] Result:",
 			"user: " + env,
 			"assistant: Step 4.", "call toolu_4 read_file", "output toolu_4 [read_file for 'p4.go'] Result:", "user: " + env,
 			"assistant: Step 5.", "call toolu_5 read_file", "output toolu_5 [read_file for 'p5.go'] Result:", "user: " + env,
@@ -226,7 +226,7 @@ func TestContexts(t *testing.T) {
 		// The range [2,9] keeps the first pair and what follows the
 		// summarize call, whose message loses its results.
 		{"classic-summarize", []string{
-			"user: <task> | " + env, "call toolu_1 read_file", "output toolu_1 result missing",
+			"user: <task> | " + env, "call toolu_1 read_file", "output toolu_1 [read_file for 'p1.go'] Result:",
 			"user: " + env,
 			"assistant: Continuing with p5.go.", "call toolu_6 read_file", "output toolu_6 [read_file for 'p5.go'] Result:", "user: " + env,
 			"call toolu_7 attempt_completion",
@@ -236,22 +236,25 @@ func TestContexts(t *testing.T) {
 			"assistant: Turn 3.", "call toolu_3 read_file", "output toolu_3 File: f3.ts", "user: <environment_details>",
 			"assistant: Logging is in place.", "call toolu_4 attempt_completion",
 		}},
+		// Roo 3.40 sent the first message, the summary with the call its
+		// first kept result answers, and the kept messages.
 		{"roo-tagged-condense", []string{
-			"user: <task>", "assistant: Summary: docs for f1 and f2 are drafted.",
+			"user: Summary: docs for f1 and f2 are drafted.", "user: <task>", "call toolu_2 read_file",
+			"output toolu_2 File: f2.ts", "user: <environment_details>",
 			"assistant: Turn 3.", "call toolu_3 read_file", "output toolu_3 File: f3.ts", "user: <environment_details>",
 			"assistant: Turn 4.", "call toolu_4 read_file", "output toolu_4 File: f4.ts", "user: <environment_details>",
 			"assistant: Turn 5.", "call toolu_5 read_file",
 		}},
 		{"roo-destructive-condense", []string{
-			"user: <task>", "assistant: Summary: config keys a and b moved.",
+			"user: Summary: config keys a and b moved.", "user: <task>",
 			"assistant: Turn 3.", "call toolu_3 read_file", "output toolu_3 File: f3.ts", "user: <environment_details>",
 			"assistant: Turn 4.", "call toolu_4 read_file", "output toolu_4 File: f4.ts", "user: <environment_details>",
 			"assistant: Turn 5.", "call toolu_5 read_file",
 		}},
-		// The marker after the first message; the orphan condense tag
+		// The marker and the first message; the orphan condense tag
 		// keeps its message.
 		{"roo-sliding-window", []string{
-			"user: <task>", "user: [Sliding window truncation: 2 messages h",
+			"user: [Sliding window truncation: 2 messages h", "user: <task>",
 			"assistant: Turn 2.", "call toolu_2 read_file", "output toolu_2 File: f2.ts", "user: <environment_details>",
 			"assistant: Turn 3.", "call toolu_3 read_file", "output toolu_3 File: f3.ts", "user: <environment_details>",
 			"assistant: Turn 4.", "call toolu_4 read_file",
@@ -264,6 +267,106 @@ func TestContexts(t *testing.T) {
 				t.Errorf("context:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(tc.want, "\n"))
 			}
 		})
+	}
+}
+
+// TestSummarizeRequest checks the request that produced the summary
+// sent the whole history: classic's summarize_task sets its range while
+// its own response streams, for the request after.
+func TestSummarizeRequest(t *testing.T) {
+	s := convertFixture(t, fixtures(t)["classic-summarize"], Options{}).Sessions[0]
+	for _, e := range s.Entries() {
+		r, ok := e.(*agentsession.ResponseEntry)
+		if !ok || r.ResponseID != "req_5" {
+			continue
+		}
+		ctx, err := s.ContextAt(r.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		calls := 0
+		for _, it := range ctx.Items {
+			if _, ok := it.(*openresponses.FunctionCallOutput); ok {
+				calls++
+			}
+		}
+		if calls != 4 {
+			t.Errorf("the summarize request's context holds %d outputs, want the 4 before it", calls)
+		}
+		return
+	}
+	t.Fatal("no response req_5")
+}
+
+// TestCompactionRecord checks what every compaction records, in every
+// fixture: pinned items are items of entries on the path before
+// first_kept, as RFC 0001 requires, and the summary is no copy of an
+// entry's item.
+func TestCompactionRecord(t *testing.T) {
+	for name, path := range fixtures(t) {
+		for _, s := range convertFixture(t, path, Options{}).Sessions {
+			for _, e := range s.Entries() {
+				comp, ok := e.(*agentsession.CompactionEntry)
+				if !ok {
+					continue
+				}
+				before := map[string]bool{}
+				all := map[string]bool{}
+				reached := false
+				for _, pe := range s.Path(comp.ID) {
+					if pe.Base().ID == comp.FirstKept {
+						reached = true
+					}
+					ie, ok := pe.(*agentsession.ItemEntry)
+					if !ok {
+						continue
+					}
+					raw, _ := json.Marshal(ie.Item)
+					all[string(raw)] = true
+					if !reached {
+						before[string(raw)] = true
+					}
+				}
+				for _, p := range comp.Pinned {
+					raw, _ := json.Marshal(p)
+					if !before[string(raw)] {
+						t.Errorf("%s: pinned item on no path before first_kept: %s", name, raw)
+					}
+				}
+				if raw, _ := json.Marshal(comp.Summary); all[string(raw)] {
+					t.Errorf("%s: the summary copies an entry's item: %s", name, raw)
+				}
+			}
+		}
+	}
+}
+
+// TestCallsAnswered checks, at every response of every fixture, that
+// each output in the request's context follows its call there.
+func TestCallsAnswered(t *testing.T) {
+	for name, path := range fixtures(t) {
+		for _, s := range convertFixture(t, path, Options{}).Sessions {
+			for _, e := range s.Entries() {
+				if _, ok := e.(*agentsession.ResponseEntry); !ok {
+					continue
+				}
+				ctx, err := s.ContextAt(e.Base().ID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				calls := map[string]bool{}
+				for _, it := range ctx.Items {
+					switch it := it.(type) {
+					case *openresponses.FunctionCall:
+						calls[it.CallID] = true
+					case *openresponses.FunctionCallOutput:
+						if !calls[it.CallID] {
+							t.Errorf("%s: at %s an output for %s has no call before it", name, e.Base().ID, it.CallID)
+						}
+					}
+				}
+			}
+		}
 	}
 }
 
@@ -454,5 +557,60 @@ func TestResumeStatus(t *testing.T) {
 		if r, ok := e.(*agentsession.ResponseEntry); ok && r.ResponseID == "req_2" && r.Status != openresponses.ResponseStatusCompleted {
 			t.Errorf("req_2 status %s", r.Status)
 		}
+	}
+}
+
+// rooTask builds a Roo task from its files' contents.
+func rooTask(t *testing.T, api, ui string) *cline.Task {
+	t.Helper()
+	task := cline.ParseTask("t1", map[string][]byte{cline.FileAPI: []byte(api), cline.FileUI: []byte(ui)})
+	task.Variant = cline.Roo
+	return task
+}
+
+// TestRecordMatching checks every summary takes its own UI record by ID
+// before any pairs in order: a summary whose record is gone does not
+// take the next one's.
+func TestRecordMatching(t *testing.T) {
+	task := rooTask(t, `[
+		{"role":"user","content":"task","ts":1000,"condenseParent":"c-1"},
+		{"role":"assistant","content":"a","ts":2000,"condenseParent":"c-1"},
+		{"role":"user","content":"Summary one","isSummary":true,"condenseId":"c-1","ts":2001,"condenseParent":"c-2"},
+		{"role":"assistant","content":"b","ts":3000,"condenseParent":"c-2"},
+		{"role":"user","content":"Summary two","isSummary":true,"condenseId":"c-2","ts":3001},
+		{"role":"assistant","content":"c","ts":4000}]`,
+		`[{"ts":3002,"type":"say","say":"condense_context","contextCondense":{"condenseId":"c-2","prevContextTokens":500}}]`)
+	res, err := Convert(task, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []int
+	for _, e := range res.Sessions[0].Entries() {
+		if comp, ok := e.(*agentsession.CompactionEntry); ok {
+			got = append(got, comp.TokensBefore)
+		}
+	}
+	if !slices.Equal(got, []int{0, 500}) {
+		t.Errorf("tokens before %v, want the second summary's record on the second", got)
+	}
+}
+
+// TestFreshStartOrphan checks a result whose call is before a
+// fresh-start summary is left out, as Roo leaves it out.
+func TestFreshStartOrphan(t *testing.T) {
+	task := rooTask(t, `[
+		{"role":"user","content":"task","ts":1000,"condenseParent":"c-1"},
+		{"role":"assistant","id":"r1","content":[{"type":"tool_use","id":"t1","name":"read_file","input":{}}],"ts":2000,"condenseParent":"c-1"},
+		{"role":"user","content":"Summary","isSummary":true,"condenseId":"c-1","ts":2001},
+		{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"late"},{"type":"text","text":"go on"}],"ts":3000},
+		{"role":"assistant","id":"r2","content":"done","ts":4000}]`, `[]`)
+	res, err := Convert(task, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := contextAtLeaf(t, res.Sessions[0])
+	want := []string{"user: Summary", "user: go on", "assistant: done"}
+	if !slices.Equal(got, want) {
+		t.Errorf("context %v, want %v", got, want)
 	}
 }

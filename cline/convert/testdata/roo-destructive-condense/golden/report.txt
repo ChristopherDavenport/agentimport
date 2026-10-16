@@ -1,9 +1,10 @@
 cline: 8 elements and files: mapped 7 kept 0 dropped 1 malformed 0
+  gap      agentimport/fold-head                             1  the requests sent a message ahead of the summary, which is pinned after it; the requests sent the summary as an assistant message, which the compaction's summary carries as a user message so no request starts with the assistant (at api_conversation_history.json:2)
   gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
   dropped  cline/ui-restated                                 1  a say text UI message restates the API history, or is a prompt carrying nothing (at ui_messages.json:1)
   lossy    cline/call-without-result                         1  the last response's calls toolu_5 have no result: the task ended before they were answered
   lossy    cline/event-placed                                1  the condense is placed after the 3 messages Roo kept, since no UI record of the condense was found (at api_conversation_history.json:2)
   lossy    cline/missing-index                               1  the task has no history_item.json, which older Roo releases kept in VS Code's state database; the working directory, mode and provider profile are unknown, and sub-tasks cannot be linked
-  lossy    cline/roo-condense                                1  a destructive summary (assistant role, no condenseId, Roo 3.35 and earlier): the compaction's summary is a copy of API message 1 and its pinned items copies of 2, the messages after it kept from first_kept, as that release sent them (at api_conversation_history.json:2)
+  lossy    cline/roo-condense                                1  a destructive summary (assistant role, no condenseId, Roo 3.35 and earlier): a compaction of API messages 1, 2, which the requests sent ahead of the messages from API message 3 kept, as that release sent them (at api_conversation_history.json:2)
   lossy    cline/roo-no-model                                1  Roo records no model ID; the settings have none, and the provider profile and mode are members of the first config entry
   kept     cline/members                                     1  the summary's or marker's members isSummary are cline:message (at api_conversation_history.json:2)

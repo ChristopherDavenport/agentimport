@@ -22,6 +22,7 @@ func (c *conv) written(k int, id string, item openresponses.Item) {
 	}
 	if item != nil {
 		c.items[k] = append(c.items[k], item)
+		c.itemEntries[k] = append(c.itemEntries[k], id)
 	}
 }
 
@@ -261,15 +262,24 @@ func (c *conv) user(k int, m *cline.Message) error {
 	if !c.roo && k == c.cut && !c.cutDone && len(c.outputs[k]) > 0 {
 		// The range in force leaves this first message after it without
 		// its tool results, whose calls it deleted.
-		for _, id := range c.outputs[k] {
-			c.omitted[id] = k
-		}
-		cfg := &agentsession.ConfigEntry{Omit: &agentsession.Omit{Items: slices.Clone(c.outputs[k])}}
-		cfg.Timestamp = ts
-		if _, err := c.appendEntry(cfg); err != nil {
+		if err := c.addOmit(k, c.outputs[k], ts, false); err != nil {
 			return err
 		}
 		c.cutDone = true
+	}
+	if c.roo && c.condensed != nil {
+		var orphans []string
+		for _, id := range c.outputs[k] {
+			if p := c.outputCall[id]; p != nil && c.condensed[p.native] && p.elem < k {
+				orphans = append(orphans, id)
+			}
+		}
+		if len(orphans) > 0 {
+			if err := c.addOmit(k, orphans, ts, false); err != nil {
+				return err
+			}
+			c.apiAt(agentimport.Lossy, "cline/roo-condensed-result", k, "Roo leaves out a tool result whose call is before the last summary (getEffectiveApiHistory); %d outputs are omitted", len(orphans))
+		}
 	}
 	c.mark(u, agentimport.LineMapped)
 	return nil
@@ -361,6 +371,7 @@ func (c *conv) result(k int, m *cline.Message, b *cline.Block, p *call, ts time.
 	p.output = true
 	c.written(k, id, out)
 	c.outputs[k] = append(c.outputs[k], id)
+	c.outputCall[id] = p
 	return nil
 }
 
@@ -394,6 +405,7 @@ func (c *conv) missingResult(k int, p *call, ts time.Time, skip string, setMembe
 	p.output = true
 	c.written(k, id, out)
 	c.outputs[k] = append(c.outputs[k], id)
+	c.outputCall[id] = p
 	c.apiAt(agentimport.Repaired, "cline/result-missing", k, "no tool result answers call %s (%s); Cline sends %q in its place, which is written, marked %s:synthesized", p.id, p.name, resultMissingText, Source)
 	return nil
 }
@@ -676,6 +688,9 @@ func (c *conv) standaloneReasoning(k int, m *cline.Message) error {
 		return err
 	}
 	c.written(k, id, r)
+	if r.EncryptedContent != "" {
+		c.reasoningByEnc[r.EncryptedContent] = reasonRef{r, k}
+	}
 	c.mark(unit{uAPI, k}, agentimport.LineMapped)
 	return nil
 }

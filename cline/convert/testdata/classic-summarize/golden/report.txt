@@ -1,9 +1,10 @@
-cline: 31 elements and files: mapped 22 kept 0 dropped 9 malformed 0
+cline: 32 elements and files: mapped 22 kept 1 dropped 9 malformed 0
+  gap      agentimport/context-replace                       1  from API message 11 Cline sends "result missing" in place of the 1 outputs of message 2's calls, whose results the range deleted; the session keeps the outputs
   gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
   gap      agentimport/usage-detail                          7  cache writes are folded into input_tokens; the request record's usage and cost are cline:usage (at ui_messages.json:2, ui_messages.json:4, ui_messages.json:6, ui_messages.json:8, ui_messages.json:10)
   dropped  cline/ui-restated                                 9  a say task UI message restates the API history, or is a prompt carrying nothing (at ui_messages.json:1, ui_messages.json:3, ui_messages.json:5, ui_messages.json:7, ui_messages.json:9)
   lossy    cline/call-without-result                         1  the last response's calls toolu_7 have no result: the task ended before they were answered
-  lossy    cline/deleted-range                               2  from API message 10, requests leave out API messages 3 to 8: the compaction's summary is a copy of API message 1 and its pinned items copies of 2, the messages after it kept from first_kept, as Cline sends them
+  lossy    cline/deleted-range                               1  from API message 11 requests leave out API messages 3 to 10; an omit config entry names their items, and messages 1 and 2 stay where they are
   kept     cline/history-item                                1  the task's index entry is the header member cline:history_item
   kept     cline/members                                     7  the message's members modelInfo are cline:message (at api_conversation_history.json:2, api_conversation_history.json:4, api_conversation_history.json:6, api_conversation_history.json:8, api_conversation_history.json:10)
-  repaired cline/result-missing                              2  the range cut the results of this message's calls; Cline sends "result missing" for each, first in the message after the cut, which the compaction's pinned items hold (at api_conversation_history.json:2, api_conversation_history.json:2)
+  kept     cline/ui-record                                   1  a say checkpoint_created UI message is a custom entry (at ui_messages.json:13)

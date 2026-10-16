@@ -123,25 +123,47 @@ by `ContextManager.getAndAlterTruncatedMessages`:
    written, with `conversationHistoryIndex`, the last API index then).
    The first UI message carrying a new range was written while the
    request using it streamed, so its index names the user message that
-   request sent.
+   request sent; `summarize_task` and `condense` set the range while
+   their own response streams, for the request after it, which grows
+   it by 2 to hide the call and its result.
 2. **The first message after the cut loses its tool results**, whose
    calls the range deleted.
-3. **Context edits** replace a block's text from their time on, the
-   latest per block: the truncation notice into message 1, `[Continue
-   assisting the user!]` into message 0, and a notice in place of a
-   file read a later read repeats.
+3. **Context edits** replace a block's text, the latest per block,
+   from the request after the one whose record's time they carry: the
+   truncation notice into message 1, `[Continue assisting the user!]`
+   into message 0, and a notice in place of a file read a later read
+   repeats.
 4. **Tool pairing.** Each call of a response gets a result in the next
-   message: results first in call order, a missing one `result
-   missing`.
+   message: results first in call order, the last result for an ID, a
+   missing one `result missing`. Message 1's calls lose their results
+   to the range, so every truncated request sends `result missing` for
+   them.
 5. **Per provider**, thinking blocks with no signature are left out,
    and Cline's own members stripped.
 
-The conversion rebuilds 1, 2 and 4 exactly, as below. 3 the session
-format cannot hold: an item can be left out of context but not
-replaced in place. Each edit is a custom entry where it was made, with
-an `agentimport/context-replace` finding naming the block and what
-replaced it; the session keeps the original text. 5 is an `omit`
-config entry after the response.
+The deleted range is a filter over a history the file keeps whole,
+which is what the session format's `omit` is: at the request that
+first applied a range, a `config` entry's `omit.items` names the item
+entries of the messages it leaves out, and of the first message
+after it the tool results; messages 0 and 1 stay where they are, so
+the context is the request in its order, with nothing copied. A range
+that grows adds what it newly hides; a reset (a checkpoint restore)
+clears the omit and names again the reasoning still left out. 4 is
+written as Cline sends it, except that the outputs of message 1's
+calls stay in context with their own text where Cline sends `result
+missing`. That and 3 the session format cannot hold: an item can be
+left out of context but not replaced in place. Each context edit is a
+custom entry where it first applied, and both are reported
+`agentimport/context-replace`; the session keeps the original text.
+5 is an `omit` config entry after the response.
+
+On the summarise path with native tools, the range that hides the
+`summarize_task` call also makes the message holding its result (the
+continuation prompt with the summary) the first after the cut, and
+Cline strips that result: from the next request on, the model never
+sees the summary. The conversion rebuilds what Cline sends, so the
+summary's output is omitted; this is Cline's behaviour, not a
+converter's loss. In the XML era the result is user text and stays.
 
 ### Roo
 
@@ -169,48 +191,52 @@ here), drops images for models without image input, and strips
 plain-text reasoning unless the model preserves it (an `omit` config
 entry here).
 
-## Compactions
+## Roo's summaries and markers
 
-Every change of what requests send (a new classic range, a Roo summary
-or marker) is placed where it happened: classic's at the first UI
-message carrying the range, Roo's at the time of its UI record
-(`condense_context`, `sliding_window_truncation`, matched by
-`condenseId` or `truncationId`, else in order). A fresh-start summary
-was the last message when written, so it is placed where it stands;
-with no UI record an older summary is placed after the 3 messages Roo
-kept after it, and a marker at the end of the messages it kept,
-reported `cline/event-placed`.
+Every Roo summary or marker is placed where it happened, at the time
+of its UI record (`condense_context`, `sliding_window_truncation`),
+matched by `condenseId` or `truncationId` first, every one, and the
+rest paired in order. A fresh-start summary was the last message when
+written, so it is placed where it stands; with no UI record an older
+summary is placed after the 3 messages Roo kept after it, and a marker
+at the end of the messages it kept, reported `cline/event-placed`.
 
 At that point the converter works out the list of messages the
 requests after it sent, as the release that wrote the file built it
 from what existed then (summaries and markers written later, and tags
 they added, ignored), and writes it as a `compaction`:
 
-- `first_kept` is the first message of the longest run at the end of
-  the list that is the end of the path; when there is none, a custom
-  marker written for it, which puts nothing in context;
-- the messages before that run, which the request sent ahead of it
-  (classic's messages 0 and 1, Roo's first message and summary or
-  marker), are copied unedited: the first item into `summary`, the
-  rest into `pinned`, so the context holds them in the order sent. A
-  Roo summary or marker is not written where it stands; it is in the
-  compaction, its members as `cline:message`;
-- `config` is the settings in force, with `omit` naming what stays
-  omitted in the kept run and, for classic, the tool results of the
-  first message after the cut; a cut message written later gets an
-  `omit` config entry after it;
-- for classic, `pinned` also holds the `result missing` output Cline
-  sends for each call of message 1, whose results the range deleted;
-- `tokens_before` is a Roo UI record's `prevContextTokens`; the record
-  is `cline:ui`, the event `cline:event` (kind, range or era, how it
-  was placed).
+- `summary` is a user message of the text the requests carried in the
+  summaries and markers among them (a sliding window's earlier marker
+  stays in context beside a later one); a summary or marker is not
+  written where it stands;
+- `pinned` holds the item entries the requests sent with them: the
+  first message Roo 3.35 and earlier, and 3.36 to 3.42, sent ahead of
+  an assistant-role summary, the first message ahead of a marker, and
+  the calls (and encrypted reasoning) a 3.36 to 3.42 summary carries
+  for the results it kept, which are the entries written for those
+  calls; the synthetic plain reasoning such a summary starts with is
+  left out, as Roo leaves plain reasoning out;
+- `first_kept` is the first message kept after them; when none is, a
+  custom marker written for it, which puts nothing in context;
+- `config` is the settings in force, its `omit` naming what stays
+  omitted in the kept run and what the requests left out of it;
+- `tokens_before` is the UI record's `prevContextTokens`; the record is
+  `cline:ui`, the event `cline:event`, the summary's own members
+  `cline:message`.
 
-So a classic compaction's summary is a copy of the task's first
-message, not a summary: the request kept it. Context edits on messages
-0 and 1 apply in the requests but not in the copies (lossy,
-`cline/pinned-unedited`). Classic's summarise path (`summarize_task`,
-`/compact`) ends as a range like any other: its summary is the tool
-result the call got, already on the path.
+The session format puts the summary first and pinned items after it.
+Roo before 3.43 sent the first message ahead of an assistant-role
+summary (so the request starts with the user, as Anthropic and Bedrock
+require), and a marker after the first message: the compaction holds
+them in the other order, and an assistant summary as a user message,
+since a request may not start with the assistant. That is the gap
+`agentimport/fold-head`. After a fresh-start summary, Roo leaves out a
+result whose call is before the summary; it is omitted.
+
+Before 3.36 Roo's sliding window deleted the messages it hid and wrote
+no marker: the file is the context with a gap the converter cannot
+see.
 
 ## Mapping
 
@@ -241,7 +267,8 @@ classic's by the API index they carry, Roo's and the edits by time.
 | UI `api_req_started` | its request's usage on the response it produced, matched by `conversationHistoryIndex` (classic) or time; `api_req_retried` after it count `attempts` | the record minus its `request` text is `cline:usage`; one with no response a custom entry, or dropped when it holds nothing |
 | other UI messages | dropped when they restate the API history or are prompts carrying nothing (`say` text, tool, command, completion; `ask` followup, tool, resume); else a custom entry `{"ui_message": …}` | a restating message carrying a checkpoint is kept; partial messages dropped |
 | `context_history.json` update | a custom entry `{"context_edit": …}` where it was made | gap `agentimport/context-replace` |
-| a range, summary or marker | a `compaction`, as above | |
+| a classic range | a `config` delta whose `omit.items` names what it leaves out, as above | |
+| a Roo summary or marker | a `compaction`, as above | |
 
 ### Usage
 
@@ -321,7 +348,8 @@ every converter can report are in [README.md](README.md).
 
 | Code | Kind | Meaning |
 | --- | --- | --- |
-| `agentimport/context-replace` | gap | A classic context edit replaces a block's text in later requests; the session keeps the original and the edit is a custom entry. |
+| `agentimport/context-replace` | gap | A classic context edit replaces a block's text in later requests, or Cline sends `result missing` for message 1's calls after a range; the session keeps the original and an edit is a custom entry. |
+| `agentimport/fold-head` | gap | A Roo request sent a message ahead of the summary it folded the history into, or the summary as an assistant message; the compaction puts its summary, as a user message, first. |
 | `agentimport/reasoning-provider` | gap | A reasoning signature (Anthropic's, Gemini's, OpenAI's encrypted reasoning) is in `encrypted_content`, tagged `cline:provider`. |
 | `agentimport/tool-error` | gap | A tool result's `is_error` is `cline:is_error`. |
 | `agentimport/usage-detail` | gap | Cache writes are folded into the input tokens; the request record's counts and cost are `cline:usage`. |
@@ -334,13 +362,14 @@ every converter can report are in [README.md](README.md).
 | `cline/roo-subtask-failed` | dropped | A sub-task that could not be converted. |
 | `cline/roo-subtask-missing` | dropped | A sub-task whose directory is not beside the parent's, cannot be read, or is not read (`Options.Alone`). |
 | `cline/roo-subtask-nesting` | dropped | A sub-task nested past 32 tasks. |
-| `cline/summary-content` | dropped | A Roo summary or marker holds content other than text and images, which is left out of the compaction. |
+| `cline/summary-content` | dropped | A Roo summary or marker holds content the compaction cannot carry: a block other than text, images, calls and reasoning, or a call or reasoning item no earlier message wrote. |
+| `cline/special-unsent` | dropped | A Roo summary or marker the requests after it do not send. |
 | `cline/ui-partial` | dropped | A UI message still streaming when the file was written. |
 | `cline/ui-restated` | dropped | A UI message that restates the API history or is a prompt carrying nothing. |
 | `cline/unreached` | dropped | A unit the converter did not reach; a bug if it occurs. |
 | `cline/call-without-result` | lossy | A call no result answers: the next response came, or the task ended, first. |
-| `cline/compaction-empty` | lossy | The requests after a change sent nothing written so far; no compaction is written. |
-| `cline/deleted-range` | lossy | A classic deleted range: a compaction whose summary and pinned items copy messages 0 and 1. |
+| `cline/compaction-empty` | lossy | The summaries and markers the requests sent hold no text; no compaction is written. |
+| `cline/deleted-range` | lossy | A classic deleted range: an omit config entry names what requests leave out from here; the context edits and `result missing` of truncated requests are reported apart. |
 | `cline/empty-message` | lossy | An assistant message with no content is a response with no items. |
 | `cline/empty-response` | lossy | The model returned nothing; Cline stored `Failure: I did not provide a response.`, which later requests send; the response failed. |
 | `cline/event-placed` | lossy | A compaction placed by a rule, since nothing recorded when it happened. |
@@ -354,7 +383,6 @@ every converter can report are in [README.md](README.md).
 | `cline/no-model` | lossy | Nothing names the model. |
 | `cline/no-response-id` | lossy | A message with no response ID; the response gets `resp_<n>`. |
 | `cline/no-timestamp` | lossy | The task holds no timestamp; `created_at` is `Options.CreatedAt` or the epoch. |
-| `cline/pinned-unedited` | lossy | A compaction holds message 0 or 1 unedited where the requests sent it edited. |
 | `cline/range-invalid` | lossy | A deleted range that is not two counts in order is ignored. |
 | `cline/rejection` | lossy | A refused call: a reject decision precedes its output. |
 | `cline/result-malformed` | lossy | A tool result whose content is neither text nor blocks is an empty output. |
@@ -362,6 +390,7 @@ every converter can report are in [README.md](README.md).
 | `cline/results-first` | lossy | A user message held content before its tool results; the outputs are written first, as sent. |
 | `cline/rewound` | lossy | A checkpoint restore deleted messages here; nothing of them can be recovered. |
 | `cline/roo-condense` | lossy | A Roo summary, its era guessed: a compaction as that release sent it. |
+| `cline/roo-condensed-result` | lossy | Roo leaves out a result whose call is before the last fresh-start summary; it is omitted. |
 | `cline/roo-no-first-message` | lossy | No user message precedes an assistant-role summary; Roo's stand-in is not written. |
 | `cline/roo-no-model` | lossy | Roo records no model ID. |
 | `cline/roo-plain-reasoning` | lossy | Roo's plain-text reasoning, left out of requests, is omitted after the response. |

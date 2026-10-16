@@ -56,8 +56,24 @@ type conv struct {
 	outputs [][]string
 	// special marks a Roo summary or truncation marker, written into
 	// the compaction its event makes rather than where it stands.
-	special      map[int]bool
-	specialItems map[int][]openresponses.Item
+	special map[int]bool
+	// itemEntries are each element's item entries, callsAt its calls'
+	// IDs; outputCall maps an output entry to its call.
+	itemEntries [][]string
+	callsAt     [][]string
+	outputCall  map[string]*call
+	// callByNative is the last call written by native ID, and
+	// reasoningByEnc the reasoning items by their encrypted content, so
+	// a summary that carries them pins the entries written for them.
+	callByNative   map[string]*call
+	reasoningByEnc map[string]reasonRef
+	// condensed holds the calls a fresh-start summary put out of
+	// context, whose later results Roo leaves out.
+	condensed map[string]bool
+	// omitNow is the omit set in force; reasonOmits the reasoning
+	// omitted whatever a range does.
+	omitNow     map[string]bool
+	reasonOmits []string
 
 	// pending holds the calls of the last assistant message, by native
 	// ID, and calls the same in order; pendingFrom is that message.
@@ -88,35 +104,49 @@ type conv struct {
 	childIDs map[string]bool
 }
 
-// call is a function call an assistant message made.
+// call is a function call an assistant message made: element elem
+// wrote item as entry.
 type call struct {
 	native string
 	id     string
 	name   string
 	entry  string
 	output bool
+	item   *openresponses.FunctionCall
+	elem   int
+}
+
+// reasonRef is a reasoning item element elem wrote.
+type reasonRef struct {
+	item openresponses.Item
+	elem int
 }
 
 func newConv(fam *family, t *cline.Task, tgt target, prefix string, depth int, report *agentimport.Report) *conv {
 	n := len(t.API.Elems)
 	return &conv{
 		fam: fam, t: t, tgt: tgt, prefix: prefix, depth: depth, report: report,
-		roo:          t.Variant == cline.Roo,
-		disp:         map[unit]agentimport.Disposition{},
-		items:        make([][]openresponses.Item, n),
-		first:        make([]string, n),
-		outputs:      make([][]string, n),
-		special:      map[int]bool{},
-		specialItems: map[int][]openresponses.Item{},
-		pending:      map[string]*call{},
-		pendingFrom:  -2,
-		respIDs:      map[string]bool{},
-		reqs:         map[int]*uiReq{},
-		failed:       map[int]bool{},
-		edits:        map[[2]int][]*cline.ContextUpdate{},
-		cut:          -1,
-		omitted:      map[string]int{},
-		childIDs:     map[string]bool{},
+		roo:            t.Variant == cline.Roo,
+		disp:           map[unit]agentimport.Disposition{},
+		items:          make([][]openresponses.Item, n),
+		first:          make([]string, n),
+		outputs:        make([][]string, n),
+		special:        map[int]bool{},
+		itemEntries:    make([][]string, n),
+		callsAt:        make([][]string, n),
+		outputCall:     map[string]*call{},
+		callByNative:   map[string]*call{},
+		reasoningByEnc: map[string]reasonRef{},
+		omitNow:        map[string]bool{},
+		pending:        map[string]*call{},
+		pendingFrom:    -2,
+		respIDs:        map[string]bool{},
+		reqs:           map[int]*uiReq{},
+		failed:         map[int]bool{},
+		edits:          map[[2]int][]*cline.ContextUpdate{},
+		cut:            -1,
+		omitted:        map[string]int{},
+		childIDs:       map[string]bool{},
 	}
 }
 

@@ -80,6 +80,9 @@ func (c *conv) assistant(k int, m *cline.Message) error {
 			return "", err
 		}
 		c.written(k, id, item)
+		if r, ok := item.(*openresponses.ReasoningItem); ok && r.EncryptedContent != "" {
+			c.reasoningByEnc[r.EncryptedContent] = reasonRef{r, k}
+		}
 		return id, nil
 	}
 	signature := func(sig, provider string) error {
@@ -228,12 +231,7 @@ func (c *conv) assistant(k int, m *cline.Message) error {
 		c.apiAt(agentimport.Lossy, "cline/empty-message", k, "an assistant message with no content is a response with no items")
 	}
 	if len(omit) > 0 {
-		for _, id := range omit {
-			c.omitted[id] = k
-		}
-		cfg := &agentsession.ConfigEntry{Omit: &agentsession.Omit{Items: omit}}
-		cfg.Timestamp = ts
-		if _, err := c.appendEntry(cfg); err != nil {
+		if err := c.addOmit(k, omit, ts, true); err != nil {
 			return err
 		}
 	}
@@ -271,7 +269,9 @@ func (c *conv) toolUse(k int, m *cline.Message, b *cline.Block, respID string, t
 		return err
 	}
 	c.written(k, eid, item)
-	p := &call{native: b.ID, id: id, name: b.Name, entry: eid}
+	p := &call{native: b.ID, id: id, name: b.Name, entry: eid, item: item, elem: k}
+	c.callByNative[b.ID] = p
+	c.callsAt[k] = append(c.callsAt[k], id)
 	if _, dup := c.pending[b.ID]; !dup {
 		c.pending[b.ID] = p
 	}
