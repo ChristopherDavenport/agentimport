@@ -166,11 +166,17 @@ history:
   entries: a resume strips both (`_strip_background_review_harness`).
   An assistant tool-call turn whose content is a bare `[marker]` has no
   text (`_strip_stale_tool_call_markers`).
-- **Repair.** At the leaf, the outputs of no call before them and the
-  calls no output answers are left out by `omit`, as
-  `repair_message_sequence` drops and prunes them. It also merges
-  consecutive user turns and consecutive assistant turns; that is
-  reported, not done.
+- **Repair.** A tool row's result pairs with a call of the assistant
+  turn just before it, named by any of the call's aliases (`call_id`,
+  `id`, `response_item_id`, each part of `a|b`, trimmed:
+  `tool_call_id_variants`); an assistant or a user turn starts a new
+  run (`_drop_stray_tool_results`). At the leaf, a result that pairs
+  with no such call, and then a call the run of results right after it
+  does not answer (`_prune_unanswered_tool_calls`), are left out by
+  `omit`, as Hermes drops and prunes them. Before the leaf, a result
+  names the latest call of its alias, as Hermes sent it then. Hermes
+  also merges consecutive user turns and consecutive assistant turns;
+  that is reported, not done.
 - **Not reproduced.** What Hermes adds per request and does not store:
   the ephemeral system prompt, prefill messages, per-turn notes, the
   gateway's timestamps on user text and a Telegram channel's block of

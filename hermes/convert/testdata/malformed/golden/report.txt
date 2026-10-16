@@ -3,7 +3,7 @@ hermes: 20 rows: mapped 17 kept 0 dropped 1 malformed 2
   dropped  hermes/orphan                                     1  a message row that belongs to no session it can be converted with is left out: its session has no row in sessions that can be read
   dropped  hermes/system-prompt                              4  the session row holds no system prompt; the settings carry the model alone
   dropped  hermes/tools                                      4  Hermes does not store the session's tool definitions; the settings carry no tools
-  lossy    hermes/alternation                                1  1 user messages follow another in the context Hermes resumes with; a resume merges each into the one before (repair_message_sequence), which is not reproduced
+  lossy    hermes/alternation                                1  1 user messages follow another in the context Hermes resumes with; Hermes merges consecutive plain-text user turns into one before it sends (repair_message_sequence, or the request's own pass), which is not reproduced
   lossy    hermes/created-at                                 1  the session row holds no start time Hermes accepts; created_at is its first message's
   lossy    hermes/parent-missing                             1  the session's parent, gone_parent, has no row in the database; parent_session names it
   lossy    hermes/subagent-unlinked                          1  the session is a sub-agent of cyc_one, linked to no call (no delegate_task call of the parent was running when it started); its session names the parent in parent_session alone

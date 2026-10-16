@@ -3,7 +3,7 @@ hermes: 22 rows: mapped 22 kept 0 dropped 0 malformed 0
   gap      agentimport/provenance                            1  the import is recorded in the header's agentimport:source member
   dropped  hermes/system-prompt                              1  the session row holds no system prompt; the settings carry the model alone
   dropped  hermes/tools                                      1  Hermes does not store the session's tool definitions; the settings carry no tools
-  lossy    hermes/alternation                                1  1 user messages follow another in the context Hermes resumes with; a resume merges each into the one before (repair_message_sequence), which is not reproduced
+  lossy    hermes/alternation                                1  1 user messages follow another in the context Hermes resumes with; Hermes merges consecutive plain-text user turns into one before it sends (repair_message_sequence, or the request's own pass), which is not reproduced
   lossy    hermes/compaction                                 2  an in-place compaction: Hermes archived the rows before it and resumes from the head it protected, copied, the summary and the rows after it
   lossy    hermes/copied-row                                 2  the row is a copy Hermes wrote of an earlier assistant turn, kept by a compaction, a continuation or a branch: a response entry marked hermes:copied, the model call the turn it copies made; Hermes records no usage per response, so none moves off the entry
   lossy    hermes/inactive-rows                              1  2 runs of rows Hermes took out of context (a rewind, an undo, or the originals of rows a compaction carried) are each a branch from the row before them; rows of two rewinds in a row read as one branch

@@ -129,3 +129,46 @@ INSERT INTO messages (session_id, role, content, reasoning, reasoning_details, t
 		"user: q3", "reasoning text bare", "assistant: c",
 	})
 }
+
+// TestToolPairing (F2): a result pairs only with the calls of the
+// assistant turn just before it, by any alias of the call (call_id, id,
+// response_item_id, each part of "a|b", trimmed), and a call is kept
+// only when the run of tool rows right after it answers it, as
+// _drop_stray_tool_results and _prune_unanswered_tool_calls do.
+func TestToolPairing(t *testing.T) {
+	res := convertScript(t, `
+INSERT INTO sessions (id, source, model, started_at) VALUES ('p1', 'cli', 'm', 1760000000.0);
+INSERT INTO sessions (id, source, model, model_config, parent_session_id, started_at) VALUES ('k1', 'subagent', 'm', '{"_delegate_from":"p1"}', 'p1', 1760000020.5);
+INSERT INTO messages (session_id, role, content, tool_calls, tool_call_id, timestamp) VALUES
+  ('p1', 'user', 'start', NULL, NULL, 1760000001.0),
+  ('p1', 'assistant', '', '[{"id":"c1","call_id":"c1","type":"function","function":{"name":"x","arguments":"{}"}}]', NULL, 1760000002.0),
+  ('p1', 'user', 'go on', NULL, NULL, 1760000003.0),
+  ('p1', 'tool', 'late', NULL, 'c1', 1760000004.0),
+  ('p1', 'assistant', '', '[{"id":"call_1","call_id":"call_1","response_item_id":"fc_1","type":"function","function":{"name":"x","arguments":"{}"}},{"id":"call_2","call_id":"call_2","response_item_id":"fc_2","type":"function","function":{"name":"x","arguments":"{}"}},{"id":"call_3","call_id":"call_3","response_item_id":"fc_3","type":"function","function":{"name":"x","arguments":"{}"}}]', NULL, 1760000010.0),
+  ('p1', 'tool', 'one', NULL, 'fc_1', 1760000011.0),
+  ('p1', 'tool', 'two', NULL, 'call_2|fc_2', 1760000012.0),
+  ('p1', 'tool', 'three', NULL, ' call_3', 1760000013.0),
+  ('p1', 'assistant', '', '[{"id":"call_9","call_id":"call_9","response_item_id":"fc_9","type":"function","function":{"name":"delegate_task","arguments":"{\"goal\":\"g\"}"}}]', NULL, 1760000020.0),
+  ('p1', 'tool', '{"results":[]}', NULL, 'fc_9', 1760000030.0),
+  ('p1', 'assistant', 'done', NULL, NULL, 1760000031.0),
+  ('k1', 'user', 'g', NULL, NULL, 1760000021.0),
+  ('k1', 'assistant', 'ok', NULL, NULL, 1760000022.0);
+`, Options{})
+	p := sessionOf(t, res, "p1")
+	sameLines(t, "leaf", leaf(t, p), []string{
+		"user: start", "user: go on",
+		"call call_1 x", "call call_2 x", "call call_3 x",
+		"output call_1 one", "output call_2 two", "output call_3 three",
+		"call call_9 delegate_task", `output call_9 {"results":[]}`,
+		"assistant: done",
+	})
+	links := 0
+	for _, e := range p.Entries() {
+		if l, ok := e.(*agentsession.LinkEntry); ok && l.Rel == agentsession.RelSubsession && l.CallID == "call_9" {
+			links++
+		}
+	}
+	if links != 1 {
+		t.Errorf("%d subsession links for call_9, want 1", links)
+	}
+}

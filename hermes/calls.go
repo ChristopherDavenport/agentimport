@@ -1,3 +1,8 @@
+// Portions of this file are ported from NousResearch/hermes-agent
+// (https://github.com/NousResearch/hermes-agent) at 848fc0ad8b,
+// Copyright (c) 2025 Nous Research, licensed under the MIT License;
+// they have been modified. See THIRD_PARTY_NOTICES.md.
+
 package hermes
 
 import (
@@ -75,6 +80,45 @@ func (c *ToolCall) PairingID() string {
 		return v
 	}
 	return ""
+}
+
+// Aliases are every spelling that names the call, as Hermes pairs a
+// result with it (agent/message_sanitization.py
+// tool_call_id_variants): its call_id, id and response_item_id,
+// trimmed, and each part of one of the form "a|b".
+func (c *ToolCall) Aliases() []string {
+	var rid string
+	if raw, ok := c.Extra["response_item_id"]; ok {
+		_ = json.Unmarshal(raw, &rid)
+	}
+	return expandAliases(c.CallID, c.ID, rid)
+}
+
+// ResultAliases are the spellings a tool row's tool_call_id names a
+// call by (tool_result_id_variants).
+func ResultAliases(id string) []string { return expandAliases(id) }
+
+// expandAliases is _expand_tool_id_variants.
+func expandAliases(values ...string) []string {
+	var out []string
+	seen := map[string]bool{}
+	add := func(v string) {
+		if v != "" && !seen[v] {
+			seen[v] = true
+			out = append(out, v)
+		}
+	}
+	for _, v := range values {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			continue
+		}
+		add(v)
+		for _, part := range strings.Split(v, "|") {
+			add(strings.TrimSpace(part))
+		}
+	}
+	return out
 }
 
 // Name is the function's name.

@@ -51,6 +51,9 @@ type walk struct {
 	rowKept bool
 	// unitOf names the row each item entry came from.
 	unitOf map[string]string
+	// callAliases and outAliases hold the aliases a call entry is named
+	// by and an output entry names its call by.
+	callAliases, outAliases map[string][]string
 	// indexed says a row's display index was reported left out.
 	indexed bool
 }
@@ -67,7 +70,7 @@ type pendingCompaction struct {
 }
 
 func newWalk(sc *sconv, msgs []*hermes.Message) *walk {
-	w := &walk{sc: sc, start: map[int]bool{}, summary: map[int]int{}, copied: map[int]bool{}, unitOf: map[string]string{}}
+	w := &walk{sc: sc, start: map[int]bool{}, summary: map[int]int{}, copied: map[int]bool{}, unitOf: map[string]string{}, callAliases: map[string][]string{}, outAliases: map[string][]string{}}
 	for _, m := range msgs {
 		if m.Err != nil {
 			sc.mark(m.Unit, agentimport.LineMalformed)
@@ -282,12 +285,12 @@ func (w *walk) run() error {
 	w.mainAt = sc.at
 	inRun := false
 	var runAt string
-	var saved map[string]string
+	var saved *pairing
 	runs := 0
 	for i, m := range w.rows {
 		if w.class[i] == inactive {
 			if !inRun {
-				inRun, runAt, saved = true, w.mainAt, clonePairs(sc.pairs)
+				inRun, runAt, saved = true, w.mainAt, sc.pairing.clone()
 				runs++
 			}
 			sc.at = runAt
@@ -299,7 +302,7 @@ func (w *walk) run() error {
 		}
 		if inRun {
 			inRun = false
-			sc.pairs = saved
+			sc.pairing = saved
 		}
 		sc.at = w.mainAt
 		if w.start[i] {
@@ -314,7 +317,7 @@ func (w *walk) run() error {
 		w.mainAt = sc.at
 	}
 	if inRun {
-		sc.pairs = saved
+		sc.pairing = saved
 	}
 	sc.at = w.mainAt
 	if w.pending != nil {
@@ -325,14 +328,6 @@ func (w *walk) run() error {
 		sc.addf(agentimport.Lossy, "hermes/inactive-rows", "", "%d runs of rows Hermes took out of context (a rewind, an undo, or the originals of rows a compaction carried) are each a branch from the row before them; rows of two rewinds in a row read as one branch", runs)
 	}
 	return w.repair()
-}
-
-func clonePairs(m map[string]string) map[string]string {
-	out := make(map[string]string, len(m))
-	for k, v := range m {
-		out[k] = v
-	}
-	return out
 }
 
 // row converts one row.
@@ -527,6 +522,7 @@ func (w *walk) user(i int) error {
 		return sc.custom(m.Time, m.Unit, "hermes/review-harness", "a background-review harness prompt an older Hermes wrote into the session (a resume strips it)", rowData(m))
 	}
 	w.skipReply = false
+	sc.pairing.turn()
 	used := []string{}
 	var msg *openresponses.Message
 	if m.Content.Structured && !m.HasAPIContent {

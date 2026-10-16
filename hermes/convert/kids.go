@@ -18,8 +18,8 @@ import (
 // its first message holds, as Hermes sends a child its goal as that
 // message.
 type kids struct {
-	// calls are the delegate_task calls, by row and native call ID;
-	// current the latest of each native ID the walk met.
+	// calls are the delegate_task calls, by row and pairing ID;
+	// current each one the walk wrote, by the call ID it gave it.
 	calls   map[callKey]*delegateCall
 	current map[string]*delegateCall
 	// bound marks the children a call ran; failed those that could not
@@ -49,6 +49,8 @@ type delegateCall struct {
 // findKids binds the session's sub-agents to the calls that ran them.
 func (sc *sconv) findKids(msgs []*hermes.Message) *kids {
 	k := &kids{calls: map[callKey]*delegateCall{}, current: map[string]*delegateCall{}, bound: map[*record]bool{}, failed: map[*record]bool{}}
+	// open maps an alias of a delegate_task call of the current
+	// assistant turn to the call, as Hermes pairs a result.
 	open := map[string]*delegateCall{}
 	var byRow [][]*delegateCall
 	for _, m := range msgs {
@@ -57,6 +59,7 @@ func (sc *sconv) findKids(msgs []*hermes.Message) *kids {
 		}
 		switch m.Role {
 		case hermes.RoleAssistant:
+			open = map[string]*delegateCall{}
 			var row []*delegateCall
 			for _, c := range m.ToolCalls {
 				if c.Name() != "delegate_task" {
@@ -64,16 +67,25 @@ func (sc *sconv) findKids(msgs []*hermes.Message) *kids {
 				}
 				dc := &delegateCall{row: m, goals: goals(c.ArgumentsText())}
 				k.calls[callKey{m.ID, c.PairingID()}] = dc
-				open[c.PairingID()] = dc
+				for _, a := range c.Aliases() {
+					if open[a] == nil {
+						open[a] = dc
+					}
+				}
 				row = append(row, dc)
 			}
 			if len(row) > 0 {
 				byRow = append(byRow, row)
 			}
+		case hermes.RoleUser:
+			open = map[string]*delegateCall{}
 		case hermes.RoleTool:
-			if dc := open[m.ToolCallID]; dc != nil && dc.output == nil {
-				dc.output = m
-				dc.delegationID, dc.background = delegation(m.Content.String())
+			for _, a := range hermes.ResultAliases(m.ToolCallID) {
+				if dc := open[a]; dc != nil && dc.output == nil {
+					dc.output = m
+					dc.delegationID, dc.background = delegation(m.Content.String())
+					break
+				}
 			}
 		}
 	}
@@ -152,13 +164,13 @@ func (sc *sconv) firstUserText(rec *record) string {
 }
 
 // called records that the walk wrote a delegate_task call.
-func (k *kids) called(native, callID string, row *hermes.Message) {
-	dc := k.calls[callKey{row.ID, native}]
+func (k *kids) called(c *hermes.ToolCall, callID string, row *hermes.Message) {
+	dc := k.calls[callKey{row.ID, c.PairingID()}]
 	if dc == nil {
 		return
 	}
 	dc.callID = callID
-	k.current[native] = dc
+	k.current[callID] = dc
 }
 
 // usable lists the children of a call this conversion converts now.
@@ -181,8 +193,8 @@ func (sc *sconv) usable(dc *delegateCall, unit string) []*record {
 // the foreground, and writes a subsession link to each before the
 // call's output, returning their leaves, which the output names in
 // parents.
-func (sc *sconv) linkBefore(native, callID string, out *hermes.Message) ([]agentsession.EntryRef, error) {
-	dc := sc.kids.current[native]
+func (sc *sconv) linkBefore(callID string, out *hermes.Message) ([]agentsession.EntryRef, error) {
+	dc := sc.kids.current[callID]
 	if dc == nil || dc.output != out || dc.background {
 		return nil, nil
 	}
@@ -223,8 +235,8 @@ func (sc *sconv) linkBefore(native, callID string, out *hermes.Message) ([]agent
 // linkAfter writes, after a call's output, a peer link to each child a
 // background call ran: the output is Hermes' handle of the run, and the
 // child's answer comes later, as a user message of its own.
-func (sc *sconv) linkAfter(native, callID string, out *hermes.Message, text string) error {
-	dc := sc.kids.current[native]
+func (sc *sconv) linkAfter(callID string, out *hermes.Message) error {
+	dc := sc.kids.current[callID]
 	if dc == nil || dc.output != out || !dc.background {
 		return nil
 	}

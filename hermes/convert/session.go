@@ -33,9 +33,9 @@ type sconv struct {
 
 	// at is the entry the next one follows.
 	at string
-	// pairs maps a native call ID to the call ID the latest call of it
-	// was given, and callEntry the call's entry.
-	pairs     map[string]string
+	// pairing pairs a tool row with a call, and callEntry names each
+	// call's entry.
+	pairing   *pairing
 	callEntry map[string]string
 
 	kids     *kids
@@ -46,7 +46,7 @@ func newSconv(fam *family, rec *record, tgt target, depth int) *sconv {
 	r := agentimport.NewReport(Source)
 	r.Unit = Unit
 	return &sconv{fam: fam, rec: rec, tgt: tgt, depth: depth, report: r, slim: fam.opts.Slim,
-		disp: map[string]agentimport.Disposition{}, pairs: map[string]string{}, callEntry: map[string]string{}}
+		disp: map[string]agentimport.Disposition{}, pairing: newPairing(), callEntry: map[string]string{}}
 }
 
 // sessions returns the session, then its children's, each after its

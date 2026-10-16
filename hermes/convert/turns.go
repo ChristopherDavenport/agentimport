@@ -26,6 +26,7 @@ func (w *walk) assistant(i int) error {
 		w.skipReply = false
 		return sc.custom(m.Time, m.Unit, "hermes/review-harness", "the curator's reply to a background-review harness prompt (a resume strips it with the prompt)", rowData(m))
 	}
+	sc.pairing.turn()
 	summaryRow := isSummary(m)
 	copied := w.copied[i]
 	respID := ""
@@ -165,10 +166,12 @@ func (w *walk) assistant(i int) error {
 		if renamed {
 			sc.addf(agentimport.Repaired, "hermes/call-id", m.Unit, "call ID %q is empty, malformed or used before in the session; the call is %s, the native ID kept in %s:call_id", native, callID, Source)
 		}
-		sc.pairs[native] = callID
+		aliases := c.Aliases()
+		sc.pairing.call(callID, aliases)
+		w.callAliases[id] = aliases
 		sc.callEntry[callID] = id
 		if c.Name() == "delegate_task" {
-			sc.kids.called(native, callID, m)
+			sc.kids.called(c, callID, m)
 		}
 	}
 	sc.mark(m.Unit, agentimport.LineMapped)
@@ -243,9 +246,10 @@ func (w *walk) tool(i int) error {
 	sc := w.sc
 	m := w.rows[i]
 	native := m.ToolCallID
-	callID, paired := sc.pairs[native]
-	if !paired {
-		callID = native
+	aliases := hermes.ResultAliases(native)
+	callID, paired := sc.pairing.result(aliases)
+	if callID == "" {
+		callID = strings.TrimSpace(native)
 		if !wellFormedCall(callID) {
 			callID = fmt.Sprintf("orphan_%d", m.ID)
 		}
@@ -279,21 +283,22 @@ func (w *walk) tool(i int) error {
 	var refs []agentsession.EntryRef
 	if paired {
 		var err error
-		if refs, err = sc.linkBefore(native, callID, m); err != nil {
+		if refs, err = sc.linkBefore(callID, m); err != nil {
 			return err
 		}
 	}
 	w.used = []string{"tool_call_id"}
-	_, _, err := w.item(&openresponses.FunctionCallOutput{CallID: callID, Output: data}, m, "", nil, func(e *agentsession.ItemEntry) error {
+	id, _, err := w.item(&openresponses.FunctionCallOutput{CallID: callID, Output: data}, m, "", nil, func(e *agentsession.ItemEntry) error {
 		e.Parents = refs
 		return nil
 	})
 	if err != nil {
 		return err
 	}
+	w.outAliases[id] = aliases
 	sc.mark(m.Unit, agentimport.LineMapped)
 	if paired {
-		if err := sc.linkAfter(native, callID, m, data.String()); err != nil {
+		if err := sc.linkAfter(callID, m); err != nil {
 			return err
 		}
 	}
@@ -316,54 +321,142 @@ func wellFormedCall(id string) bool {
 }
 
 // repair leaves out of the context Hermes resumes with what its
-// repair_message_sequence drops before it sends: outputs of no call
-// before them in that context, and calls no output answers.
-// Consecutive user turns, which it merges into one, are reported, not
-// merged.
+// repair_message_sequence drops before it sends: a tool result that
+// pairs with no call of the assistant turn just before it
+// (_drop_stray_tool_results), then a call the run of tool results right
+// after it does not answer (_prune_unanswered_tool_calls). Consecutive
+// user turns, which it merges into one, are reported, not merged.
 func (w *walk) repair() error {
 	sc := w.sc
 	ctx, err := sc.b.S.ContextAt(sc.at)
 	if err != nil {
 		return err
 	}
-	answered := map[string]bool{}
-	made := map[string]bool{}
-	var omit []string
+	// The context's items, a turn per row: items of one row are one
+	// message Hermes holds.
+	type turn struct {
+		role  string
+		calls []*agentsession.ItemEntry
+		out   *agentsession.ItemEntry
+	}
+	var turns []*turn
+	lastUnit := ""
 	for k, it := range ctx.Items {
 		e, ok := ctx.ItemEntries[k].(*agentsession.ItemEntry)
+		unit := ""
+		if ok {
+			unit = w.unitOf[e.ID]
+		}
+		role := "assistant"
 		switch it := it.(type) {
-		case *openresponses.FunctionCall:
-			made[it.CallID] = true
+		case *openresponses.Message:
+			role = string(it.Role)
 		case *openresponses.FunctionCallOutput:
-			if made[it.CallID] {
-				answered[it.CallID] = true
+			role = "tool"
+		}
+		if !ok || unit == "" || unit != lastUnit || role == "tool" || len(turns) == 0 || turns[len(turns)-1].role != role {
+			turns = append(turns, &turn{role: role})
+		}
+		lastUnit = unit
+		cur := turns[len(turns)-1]
+		switch it.(type) {
+		case *openresponses.FunctionCall:
+			if ok {
+				cur.calls = append(cur.calls, e)
+			}
+		case *openresponses.FunctionCallOutput:
+			if ok {
+				cur.out = e
+			}
+		}
+	}
+	var omit []string
+	// Pass 1: results of no call of the turn before.
+	var kept []*turn
+	known := map[string]int{}
+	matched := map[int]bool{}
+	group := 0
+	for _, t := range turns {
+		switch t.role {
+		case "assistant", "user":
+			known, matched = map[string]int{}, map[int]bool{}
+			for _, c := range t.calls {
+				for _, a := range w.callAliases[c.ID] {
+					if _, ok := known[a]; !ok {
+						known[a] = group
+					}
+				}
+				for _, a := range []string{c.Item.(*openresponses.FunctionCall).CallID} {
+					if _, ok := known[a]; !ok {
+						known[a] = group
+					}
+				}
+				group++
+			}
+		case "tool":
+			if t.out == nil {
+				break
+			}
+			aliases := w.outAliases[t.out.ID]
+			if len(aliases) == 0 {
+				aliases = []string{t.out.Item.(*openresponses.FunctionCallOutput).CallID}
+			}
+			best := -1
+			for _, a := range aliases {
+				if g, ok := known[a]; ok && !matched[g] && (best < 0 || g < best) {
+					best = g
+				}
+			}
+			if best < 0 {
+				omit = append(omit, t.out.ID)
+				sc.addf(agentimport.Repaired, "hermes/orphan-output", w.unitOf[t.out.ID], "the output names %s, no call of the assistant turn just before it in the context Hermes resumes with; a resume drops it (_drop_stray_tool_results), and it is left out of that context", strings.Join(aliases, ", "))
 				continue
 			}
-			if ok {
-				omit = append(omit, e.ID)
-				sc.addf(agentimport.Repaired, "hermes/orphan-output", w.unitOf[e.ID], "the output names call %s, which no call before it in the context Hermes resumes with made; a resume drops it (repair_message_sequence), and it is left out of that context", it.CallID)
+			matched[best] = true
+		}
+		kept = append(kept, t)
+	}
+	// Pass 2: calls the run of results right after them does not
+	// answer.
+	for i, t := range kept {
+		if len(t.calls) == 0 {
+			continue
+		}
+		answered := map[string]bool{}
+		for _, f := range kept[i+1:] {
+			if f.role != "tool" {
+				break
+			}
+			if f.out == nil {
+				continue
+			}
+			for _, a := range w.outAliases[f.out.ID] {
+				answered[a] = true
+			}
+			answered[f.out.Item.(*openresponses.FunctionCallOutput).CallID] = true
+		}
+		for _, c := range t.calls {
+			fc := c.Item.(*openresponses.FunctionCall)
+			hit := answered[fc.CallID]
+			for _, a := range w.callAliases[c.ID] {
+				hit = hit || answered[a]
+			}
+			if !hit {
+				omit = append(omit, c.ID)
+				sc.addf(agentimport.Repaired, "hermes/unanswered-call", w.unitOf[c.ID], "call %s has no output in the run of tool results right after it in the context Hermes resumes with; a resume prunes it (_prune_unanswered_tool_calls), and it is left out of that context", fc.CallID)
 			}
 		}
 	}
 	prevUser := false
 	merged := 0
-	for k, it := range ctx.Items {
-		e, ok := ctx.ItemEntries[k].(*agentsession.ItemEntry)
-		if fc, isCall := it.(*openresponses.FunctionCall); isCall && ok && !answered[fc.CallID] {
-			omit = append(omit, e.ID)
-			sc.addf(agentimport.Repaired, "hermes/unanswered-call", w.unitOf[e.ID], "call %s has no output in the context Hermes resumes with; a resume prunes it (repair_message_sequence), and it is left out of that context", fc.CallID)
+	for _, t := range kept {
+		if t.role == "user" && prevUser {
+			merged++
 		}
-		user := false
-		if msg, isMsg := it.(*openresponses.Message); isMsg && msg.Role == openresponses.RoleUser {
-			user = true
-			if prevUser {
-				merged++
-			}
-		}
-		prevUser = user
+		prevUser = t.role == "user"
 	}
 	if merged > 0 {
-		sc.addf(agentimport.Lossy, "hermes/alternation", sc.rec.s.Unit, "%d user messages follow another in the context Hermes resumes with; a resume merges each into the one before (repair_message_sequence), which is not reproduced", merged)
+		sc.addf(agentimport.Lossy, "hermes/alternation", sc.rec.s.Unit, "%d user messages follow another in the context Hermes resumes with; Hermes merges consecutive plain-text user turns into one before it sends (repair_message_sequence, or the request's own pass), which is not reproduced", merged)
 	}
 	if len(omit) == 0 {
 		return nil
