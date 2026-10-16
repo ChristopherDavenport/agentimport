@@ -23,6 +23,8 @@ does not list.
 - [opencode.md](opencode.md): OpenCode's data directory, its storage
   files and its database's V1 and V2 tables. Its report counts records:
   each storage file and each row of the session tables.
+- [hermes.md](hermes.md): Hermes Agent's database, `state.db`. Its
+  report counts rows: each row of `sessions` and of `messages`.
 
 ## Codes every converter can report
 

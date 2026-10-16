@@ -3,7 +3,7 @@
 Converters from other coding agents' session logs into the
 [Agent Session Format](https://github.com/ChristopherDavenport/agentsession):
 Claude Code, pi, Codex, classic Cline and Roo Code, the Cline SDK
-(Cline 4), OpenHands, OpenCode, and ATIF,
+(Cline 4), OpenHands, OpenCode, Hermes Agent, and ATIF,
 Harbor's trajectory format, which many more agents write. Each conversion returns the sessions it made
 and a report that accounts for every native line and lists every
 difference between the two formats by a stable code, so nothing is
@@ -25,8 +25,10 @@ Each file's source is told from its name and first lines, an ATIF
 document by its `schema_version`, a Cline or Roo task by its files'
 names in a task directory, an OpenHands conversation by its directory
 or its files, an OpenCode store by its data directory, a file in it or
-its database, a Cline SDK session by its directory or a file in it;
-`-from claudecode|pi|codex|atif|cline|clinesdk|openhands|opencode`
+its database, a Cline SDK session by its directory or a file in it, a
+Hermes database by its tables or the home or profile directory
+holding it;
+`-from claudecode|pi|codex|atif|cline|clinesdk|openhands|opencode|hermes`
 names it instead. A Claude Code session, and a
 Codex rollout, is converted with its sub-agents, each a session of its
 own linked to its parent; a Codex sub-agent's rollout given beside an
@@ -41,7 +43,10 @@ conversion holds them. An OpenCode store, a data directory such as
 each with its sub-agents; its database is copied and read, never
 written. A Cline SDK session directory converts with the sub-agents
 and team tasks whose histories it holds, linked to their calls with
-the help of Cline's `sessions.db`, likewise copied and read. A session already in
+the help of Cline's `sessions.db`, likewise copied and read. A Hermes
+database, `~/.hermes/state.db` or a profile's, converts whole: every
+session, each with the continuations its compressions started and the
+sub-agents it ran; it too is copied and read. A session already in
 the store is kept as it is, listed, and is no failure, unless `-force`
 replaces it; the other sessions of the same conversion are written all
 the same, so converting a tree again adds what is new since. `-slim` drops what the model never saw rather than keep it
@@ -51,10 +56,10 @@ refused; decompress it with `zstd -d` first.
 
 Each source is two packages: one that reads the native format as it
 is, importing the standard library alone, and a `convert` package that
-writes `agentsession` sessions. OpenCode and the Cline SDK have a
-third, `opencode/sqlite` and `clinesdk/sqlite`, the packages that
-import a database driver (`modernc.org/sqlite`, SQLite in Go, no cgo),
-both through `internal/sqlite`.
+writes `agentsession` sessions. OpenCode, the Cline SDK and Hermes have
+a third, `opencode/sqlite`, `clinesdk/sqlite` and `hermes/sqlite`, the
+packages that import a database driver (`modernc.org/sqlite`, SQLite
+in Go, no cgo), all through `internal/sqlite`.
 
 | Source | Format package | Converter | What maps and what does not |
 | --- | --- | --- | --- |
@@ -66,6 +71,7 @@ both through `internal/sqlite`.
 | Cline SDK (Cline 4: CLI, VS Code from 4.0, JetBrains) | `clinesdk`, `clinesdk/sqlite` | `clinesdk/convert` | [docs/formats/clinesdk.md](docs/formats/clinesdk.md) |
 | OpenHands (SDK conversations: CLI, agent server, Agent Canvas) | `openhands` | `openhands/convert` | [docs/formats/openhands.md](docs/formats/openhands.md) |
 | OpenCode (storage files, its database's V1 and V2 tables) | `opencode`, `opencode/sqlite` | `opencode/convert` | [docs/formats/opencode.md](docs/formats/opencode.md) |
+| Hermes Agent (its `state.db`: CLI, TUI, gateway, cron, sub-agents) | `hermes`, `hermes/sqlite` | `hermes/convert` | [docs/formats/hermes.md](docs/formats/hermes.md) |
 
 What the session format itself cannot hold, across all sources, is in
 [docs/incompatibilities.md](docs/incompatibilities.md).
