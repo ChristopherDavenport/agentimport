@@ -9,9 +9,10 @@ build:
 	$(GO) build ./...
 
 # The module must build from agentsession, openresponses and the
-# standard library alone, but for opencode/sqlite, which alone imports
-# modernc.org/sqlite to read OpenCode's database; the format packages
-# from the standard library alone, which TestImportBoundary checks.
+# standard library alone, but for the */sqlite packages, which alone
+# import modernc.org/sqlite to read OpenCode's and Cline's databases;
+# the format packages from the standard library alone, which
+# TestImportBoundary checks.
 deps:
 	@GO="$(GO)" scripts/check-deps.sh
 
