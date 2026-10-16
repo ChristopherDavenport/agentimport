@@ -159,8 +159,9 @@ history:
   time (`substitute_api_content`, `agent/turn_context.py`), else the
   content through `sanitize_context(...).strip()`, which takes out its
   injected memory blocks. Every text is stripped, as the request's
-  closing pass strips it. The content Hermes shows, when it differs, is
-  kept in the row's columns.
+  closing pass strips it. The content Hermes stores, whenever the text
+  sent differs from it, is kept in the row's columns
+  (`hermes/api-content`, `hermes/sanitized-content`).
 - **Harness turns.** A background-review harness prompt an older build
   wrote into the session, and the assistant reply right after it, are
   custom entries, as a resume strips both
@@ -283,7 +284,7 @@ Every column of `messages` at schema version 31:
 | `id` | the order of the walk; `hermes:row`; a response's ID, `row-<id>` |
 | `session_id` | the session the row is converted with |
 | `role` | the kind of entry (Mapping above) |
-| `content` | the item's text or parts, unless `api_content` is sent in its place; then `hermes:columns` |
+| `content` | the item's text or parts; when the text sent is not the content stored (`api_content` in its place, memory blocks taken out, white space stripped, a stale marker blanked), the stored content is kept in `hermes:columns` too |
 | `tool_call_id` | the output's `call_id`, through the call it names |
 | `tool_calls` | `function_call` items; entries that are not objects keep the column in `hermes:columns` |
 | `tool_name` | `hermes:columns` (the call's name is on the call) |
@@ -441,6 +442,7 @@ finding:
 | `hermes/reasoning-text` | lossy | Reasoning from the row's text columns, a reasoning item's content. |
 | `hermes/reset` | lossy | A reset child: a new conversation, with no `parent_session`. |
 | `hermes/review-harness` | kept | A background-review harness prompt or its reply, a custom entry, out of context. |
+| `hermes/sanitized-content` | lossy | The item is the text Hermes sends, not the content it stores (memory blocks taken out, white space stripped, a stale marker blanked); the stored content is kept in `hermes:columns`. |
 | `hermes/schema-version` | lossy | The database records no schema version, or one newer than 31. |
 | `hermes/session-failed` | dropped | A session could not be converted; its rows are dropped. |
 | `hermes/session-id` | lossy | The session's ID is derived, as the native one is not a store name or is taken. |

@@ -289,3 +289,40 @@ INSERT INTO messages (session_id, role, content, tool_call_id, timestamp, active
 		t.Error("the rewound assistant is no item")
 	}
 }
+
+// TestStoredContentKept (F6): when the text Hermes sends differs from
+// the content it stores, sanitized of its memory blocks, stripped, or a
+// stale marker blanked, the stored content is kept in the row's columns
+// and reported.
+func TestStoredContentKept(t *testing.T) {
+	res := convertScript(t, `
+INSERT INTO sessions (id, source, model, started_at) VALUES ('sc', 'cli', 'm', 1760000000.0);
+INSERT INTO messages (session_id, role, content, tool_calls, tool_call_id, timestamp) VALUES
+  ('sc', 'user', 'Bob: <memory-context>likes Go</memory-context>why?', NULL, NULL, 1760000001.0),
+  ('sc', 'assistant', '[terminal]', '[{"id":"c","call_id":"c","type":"function","function":{"name":"terminal","arguments":"{}"}}]', NULL, 1760000002.0),
+  ('sc', 'tool', '  out  ', NULL, 'c', 1760000003.0),
+  ('sc', 'assistant', 'same', NULL, NULL, 1760000004.0);
+`, Options{})
+	s := sessionOf(t, res, "sc")
+	kept := map[string]string{}
+	for _, e := range s.Entries() {
+		row := member(e, "row")
+		if row == nil {
+			continue
+		}
+		var cols map[string]json.RawMessage
+		_ = json.Unmarshal(member(e, "columns"), &cols)
+		var content string
+		_ = json.Unmarshal(cols["content"], &content)
+		kept[string(row)] = content
+	}
+	want := map[string]string{"1": "Bob: <memory-context>likes Go</memory-context>why?", "2": "[terminal]", "3": "  out  ", "4": ""}
+	for row, c := range want {
+		if kept[row] != c {
+			t.Errorf("row %s keeps content %q, want %q", row, kept[row], c)
+		}
+	}
+	if n := codes(res.Report)["hermes/sanitized-content"]; n != 3 {
+		t.Errorf("%d hermes/sanitized-content findings, want 3", n)
+	}
+}

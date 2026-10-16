@@ -49,6 +49,9 @@ type walk struct {
 	// base ones, and rowKept says its members are written.
 	used    []string
 	rowKept bool
+	// keepContent says the row's text item is not its stored content,
+	// which its columns then keep.
+	keepContent bool
 	// unitOf names the row each item entry came from.
 	unitOf map[string]string
 	// callAliases and outAliases hold the aliases a call entry is named
@@ -337,7 +340,7 @@ func (w *walk) run() error {
 func (w *walk) row(i int) error {
 	m := w.rows[i]
 	sc := w.sc
-	w.used, w.rowKept = nil, false
+	w.used, w.rowKept, w.keepContent = nil, false, false
 	for _, p := range m.Problems {
 		sc.addf(agentimport.Repaired, "hermes/mistyped", m.Unit, "column %s does not hold what Hermes writes; it is kept as written and read as Hermes reads it", p)
 	}
@@ -378,8 +381,8 @@ func (w *walk) rowMembers(e agentsession.Entry, m *hermes.Message, used ...strin
 		return err
 	}
 	drop := append(append([]string(nil), baseColumns...), used...)
-	if slices.Contains(used, "api_content") && m.Content.Text != m.APIContent {
-		// The content Hermes shows, which api_content replaced.
+	if w.keepContent {
+		// The content Hermes stores, which the item's text is not.
 		drop = slices.DeleteFunc(drop, func(c string) bool { return c == "content" })
 	}
 	if !w.indexed && (!isNullColumn(m.Cols, "display_identity") || !isNullColumn(m.Cols, "display_order")) {
@@ -541,10 +544,8 @@ func (w *walk) user(i int) error {
 		text, sidecar := sentText(m)
 		if sidecar {
 			used = append(used, "api_content")
-			if m.Content.Text != m.APIContent {
-				sc.addf(agentimport.Lossy, "hermes/api-content", m.Unit, "the row's api_content, what Hermes sent, is the item; the content it shows is kept in the row's columns")
-			}
 		}
+		w.sentDiffers(m, text, sidecar)
 		msg = openresponses.UserText(text)
 	}
 	if isSummary(m) {
@@ -580,9 +581,11 @@ func delegationID(m *hermes.Message) string {
 func (w *walk) system(i int) error {
 	sc := w.sc
 	m := w.rows[i]
-	text, _ := sentText(m)
+	text, sidecar := sentText(m)
 	if m.Content.Structured {
 		text = strip(m.Content.String())
+	} else {
+		w.sentDiffers(m, text, sidecar)
 	}
 	w.used = nil
 	if _, _, err := w.item(openresponses.SystemText(text), m, "", nil, nil); err != nil {
@@ -631,4 +634,23 @@ func (h *harnessState) next(m *hermes.Message) int {
 	}
 	h.prev = false
 	return harnessNone
+}
+
+// sentDiffers notes a row whose sent text is not the content Hermes
+// stores: api_content sent in its place, or the content as the loader
+// and the request's closing pass give it (sanitize_context, strip, a
+// stale marker blanked). The stored content is then kept in the row's
+// columns.
+func (w *walk) sentDiffers(m *hermes.Message, text string, sidecar bool) {
+	if text == m.Content.Text {
+		return
+	}
+	w.keepContent = true
+	if sidecar {
+		if m.Content.Text != m.APIContent {
+			w.sc.addf(agentimport.Lossy, "hermes/api-content", m.Unit, "the row's api_content, what Hermes sent, is the item; the content it shows is kept in the row's columns")
+		}
+		return
+	}
+	w.sc.addf(agentimport.Lossy, "hermes/sanitized-content", m.Unit, "the item is the text Hermes sends, the stored content as its loader and the request's closing pass give it (memory blocks taken out, white space stripped, a stale marker blanked); the stored content is kept in the row's columns")
 }

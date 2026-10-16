@@ -6,7 +6,8 @@ hermes: 15 rows: mapped 12 kept 3 dropped 0 malformed 0
   lossy    hermes/api-content                                1  the row's api_content, what Hermes sent, is the item; the content it shows is kept in the row's columns
   lossy    hermes/denial-text                                1  the output is the text Hermes' approval gate gives a refusal; it is a reject decision by the user, told by the text alone
   lossy    hermes/observed                                   1  an observed group-chat message; a Telegram channel that gathers observed messages into one block sends them that way, which is not reproduced
-  kept     hermes/members                                    8  kept in hermes:columns
+  lossy    hermes/sanitized-content                          2  the item is the text Hermes sends, the stored content as its loader and the request's closing pass give it (memory blocks taken out, white space stripped, a stale marker blanked); the stored content is kept in the row's columns
+  kept     hermes/members                                    9  kept in hermes:columns
   kept     hermes/review-harness                             2  a background-review harness prompt an older Hermes wrote into the session (a resume strips it), which is not context, is a custom entry
   kept     hermes/session-meta                               1  the gateway's session_meta row, bookkeeping, which is not context, is a custom entry
   kept     hermes/session-row                                1  the session row's columns the header has no place for are in the header's hermes:session member

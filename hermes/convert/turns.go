@@ -72,14 +72,12 @@ func (w *walk) assistant(i int) error {
 		text, sidecar := sentText(m)
 		if sidecar {
 			used = append(used, "api_content")
-			if m.Content.Text != m.APIContent {
-				sc.addf(agentimport.Lossy, "hermes/api-content", m.Unit, "the row's api_content, what Hermes sent, is the item; the content it shows is kept in the row's columns")
-			}
 		}
 		if len(m.ToolCalls) > 0 && !sidecar && staleMarkerRE.MatchString(text) {
 			sc.addf(agentimport.Repaired, "hermes/stale-marker", m.Unit, "the assistant's content is a bare tool marker an older Hermes stored, which a resume blanks; the turn has no text")
 			text = ""
 		}
+		w.sentDiffers(m, text, sidecar)
 		switch {
 		case text != "":
 			msg = openresponses.AssistantText(text)
@@ -262,6 +260,7 @@ func (w *walk) tool(i int) error {
 		}
 	} else {
 		text, _ := sentText(m)
+		w.sentDiffers(m, text, false)
 		data = openresponses.FunctionCallOutputData{Text: text}
 	}
 	if paired && strings.Contains(data.String(), notConsented) {
