@@ -1,3 +1,8 @@
+// Portions of this file are ported from openai/codex
+// (https://github.com/openai/codex) at 7ae83199, Copyright 2025 OpenAI,
+// licensed under the Apache License 2.0; they have been modified. See
+// THIRD_PARTY_NOTICES.md.
+
 package convert
 
 import (

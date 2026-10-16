@@ -1,3 +1,8 @@
+// Portions of this file are ported from anomalyco/opencode
+// (https://github.com/anomalyco/opencode) at a448d5b, Copyright (c)
+// 2025 opencode, licensed under the MIT License; they have been
+// modified. See THIRD_PARTY_NOTICES.md.
+
 package convert
 
 import (

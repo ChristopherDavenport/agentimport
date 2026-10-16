@@ -77,3 +77,9 @@ make check
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+MIT; see [LICENSE](LICENSE). Some files port code of the programs
+whose logs they read, under those programs' MIT and Apache 2.0
+licenses; [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) lists them.

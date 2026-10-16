@@ -1,3 +1,9 @@
+// Portions of this file are ported from OpenHands/software-agent-sdk
+// (https://github.com/OpenHands/software-agent-sdk) at d5995133 and
+// earlier tags, Copyright (c) 2025 All Hands AI and Copyright (c) 2026
+// OpenHands contributors, licensed under the MIT License; they have
+// been modified. See THIRD_PARTY_NOTICES.md.
+
 package convert
 
 import (

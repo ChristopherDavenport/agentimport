@@ -7,6 +7,11 @@ versions may break the API.
 
 ## Unreleased
 
+- Added: `THIRD_PARTY_NOTICES.md`, the license notices for the code
+  ported from OpenHands, OpenCode, Cline, Roo Code, Codex and pi, and
+  credits for the behaviour matched from the AI SDK and Harbor. Each
+  file holding a ported portion names its source in a comment at its
+  top. The README gains a License section.
 - Added: the Cline SDK (Cline 4: its CLI, the VS Code extension from
   4.0, JetBrains), which keeps each session in a directory under
   `~/.cline/data/sessions` and indexes them in SQLite. `clinesdk` reads
