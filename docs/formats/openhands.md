@@ -167,8 +167,14 @@ which a session cannot hold. The steps:
    Responses reasoning item only from 1.43, below); adjacent plain user
    messages are merged into one from 1.26.
 5. **Send time.** A tool result's text over 50,000 characters is cut in
-   the middle; images go only to a vision model; prompt-cache markers;
-   for the Responses API the system message is the `instructions`.
+   the middle (before 1.11.1 every text was, a person's and the system
+   prompt's too, which the session keeps whole and reports for files it
+   takes for 1.0 to 1.11.4); images go only to a vision model, which
+   the files do not record, so the session keeps them; prompt-cache
+   markers; for the Responses API the system message is the
+   `instructions`, and each part of a tool result its own
+   `function_call_output` with the call's ID
+   (`openhands/responses-output-split`).
 
 The conversion writes the events where they are on the path and
 reconciles the session's context with OpenHands' view at each request
@@ -294,9 +300,12 @@ entry takes the token usage whose `response_id` is its
 which are litellm's and count cache reads and writes, `cached_tokens`
 the cache reads, `output_tokens` and `reasoning_tokens`; cache writes
 (gap `agentimport/usage-detail`), the context window and the per-turn
-tokens are `openhands:usage`. An `ACPAgent` counts the cache apart, so
-reads and writes are folded into its input as providers/anthropic
-does. The condenser's call is its compaction's `usage`. A token usage
+tokens are `openhands:usage`. An `ACPAgent` passes on the wrapped
+agent's counts, which leave the cache out of the input (Anthropic's) or
+count it in (OpenAI's): cache reads larger than the input can only be
+apart, and then reads and writes are folded into the input as
+providers/anthropic does; otherwise the input is taken to count them
+(`openhands/acp-usage`). The condenser's call is its compaction's `usage`. A token usage
 no event names (a title, a refused condensation, an ACP turn, whose
 usage carries the ACP session's ID) is a custom entry with a top-level
 `usage` at the end of the leaf's path, as RFC 0001 records a paid call
@@ -387,6 +396,7 @@ every converter can report are in [README.md](README.md).
 | `openhands/subagent-unreadable` | dropped | A sub-agent directory, or the `subagents` directory, that cannot be read. |
 | `openhands/subagents-alone` | dropped | Sub-agents not converted, with `Options.Alone`. |
 | `openhands/unreached` | dropped | An event the converter did not reach; a bug if it occurs. |
+| `openhands/acp-usage` | lossy | An ACP agent's cache reads, not larger than its input, are taken as counted in it, as an OpenAI-style agent's are. |
 | `openhands/acp-agent` | lossy | The agent is an `ACPAgent`, which records an external agent's tool calls rather than the model's context. |
 | `openhands/batch-reasoning` | lossy | OpenHands before 1.43 sent a response of several calls without its Responses reasoning item; in a file older than 1.31 the item is the response's output and an omit leaves it out of later requests. |
 | `openhands/bad-system-prompt` | lossy | A system prompt that is missing or not text; the instructions are empty. |
@@ -411,6 +421,7 @@ every converter can report are in [README.md](README.md).
 | `openhands/output-path` | lossy | An output names a file the tool saved, rebuilt from its directory and hash. |
 | `openhands/output-truncation` | lossy | An output is cut as the tool, or OpenHands at send time, cut it. |
 | `openhands/pending-call` | lossy | A call nothing answers; OpenHands sends it once it is run or rejected, and the session reads it as pending. |
+| `openhands/responses-output-split` | lossy | For the Responses API OpenHands sends each part of a tool result as its own `function_call_output`; the session holds one output of parts. |
 | `openhands/rejected` | lossy | A call rejected by the user, a hook or OpenHands: a reject decision before the output. |
 | `openhands/session-id` | lossy | The session ID is derived from the conversation's. |
 | `openhands/split-batch` | lossy | An output written between the calls of a response; the session writes the calls together. |
@@ -423,7 +434,7 @@ every converter can report are in [README.md](README.md).
 | `openhands/timestamp-zone` | lossy | Timestamps with no zone are read in `Options.Location`. |
 | `openhands/tools-unrecorded` | lossy | Tool definitions with no parameter schema; the config carries names and descriptions. |
 | `openhands/usage-joined` | lossy | No usage is recorded for a response. |
-| `openhands/version-guess` | lossy | The release the conversation is taken for, and what tells it: the way its view is built, chat tool params (1.0 to 1.6). |
+| `openhands/version-guess` | lossy | A shape whose meaning depends on the release, which no file records: the way the view is built and what tells it, chat tool params (1.0 to 1.6), a long text cut before 1.11.1, the Responses reasoning item of a response of several calls (sent from 1.43). |
 | `openhands/reload-guess` | lossy | From 1.17 OpenHands enforces its view only on a reload: a reload the files do not show would have left an event out here, or an answer whose call waited across another event suggests one; the session follows the live run. |
 | `openhands/view-enforced` | lossy | OpenHands leaves an event out of the context while building the view, at a request before 1.17 or at a reload the files show from 1.17; an omit leaves out its items. |
 | `openhands/child-usage` | kept, or dropped | The sub-agents' copies of their metrics are in `openhands:stats` and not counted. |

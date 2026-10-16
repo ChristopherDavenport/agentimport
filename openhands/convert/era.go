@@ -255,3 +255,14 @@ func (c *conv) probableResume(i int, cl *call) {
 		return
 	}
 }
+
+// longText reports a text OpenHands before 1.11.1 cut when it sent it:
+// those releases cut every text over 50,000 characters, a person's and
+// the system prompt among them, where later ones cut tool results
+// alone.
+func (c *conv) longText(i int, s string) {
+	if c.era > eraSeq || len([]rune(s)) <= textContentLimit {
+		return
+	}
+	c.at(agentimport.Lossy, "openhands/version-guess", i, "OpenHands before 1.11.1 cut every text over %d characters when it sent it, this one among them, and later releases cut tool results alone; the text is kept whole", textContentLimit)
+}

@@ -95,7 +95,15 @@ func (c *conv) usageOf(u *openhands.TokenUsage) (*openresponses.Usage, map[strin
 	read := openhands.Count(u.CacheReadTokens)
 	write := openhands.Count(u.CacheWriteTokens)
 	if c.acp {
-		in += read + write
+		// An ACP agent passes on the wrapped agent's counts:
+		// Anthropic's leave the cache out of the input, OpenAI's count
+		// it in. A cache read larger than the input can only be apart,
+		// as OpenHands' cache_hit_rate reads it.
+		if read > in {
+			in += read + write
+		} else if read > 0 {
+			c.addf(agentimport.Lossy, "openhands/acp-usage", openhands.FileBaseState, 0, "an ACP agent's cache reads are not larger than its input, so the input is taken to count them, as an OpenAI-style agent's does; an Anthropic-style agent's would leave them out")
+		}
 	}
 	out := openhands.Count(u.CompletionTokens)
 	use := &openresponses.Usage{

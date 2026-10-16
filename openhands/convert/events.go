@@ -31,6 +31,7 @@ func (c *conv) systemPrompt(i int) error {
 	text := ""
 	if sp.SystemPrompt != nil && sp.SystemPrompt.Err == nil {
 		text = sp.SystemPrompt.Text
+		c.longText(i, text)
 		if r := partRest(sp.SystemPrompt); r != nil {
 			raw, _ := json.Marshal(r)
 			members["system_prompt"] = raw
@@ -217,6 +218,7 @@ func (c *conv) message(i int) error {
 		}
 	} else {
 		c.mergeNote(i)
+		c.longText(i, textOf(lm.Content))
 		parts, pm := c.inputParts(i, lm.Content, "message")
 		ext, xm := c.inputParts(i, m.ExtendedContent, "extended content")
 		parts = append(parts, ext...)
@@ -667,6 +669,9 @@ func (c *conv) functionCall(j int, a *openhands.ActionEvent) (*openresponses.Fun
 // IDs.
 func (c *conv) recordCall(j int, a *openhands.ActionEvent, fc *openresponses.FunctionCall, entry string) {
 	cl := &call{id: fc.CallID, name: fc.Name, entry: entry, event: j, hasAction: c.info[j].hasAction}
+	if a.ToolCall != nil {
+		cl.origin = a.ToolCall.Origin
+	}
 	if a.ToolCall != nil && a.ToolCall.ID != "" {
 		cl.native = a.ToolCall.ID
 		c.calls[a.ToolCall.ID] = append(c.calls[a.ToolCall.ID], cl)
@@ -795,6 +800,9 @@ func (c *conv) output(i int) error {
 	refs, at, err := c.linkChildren(i, at, cl)
 	if err != nil {
 		return err
+	}
+	if cl.origin == "responses" && len(parts) > 1 {
+		c.at(agentimport.Lossy, "openhands/responses-output-split", i, "for the Responses API OpenHands sends each part of a tool result as a function_call_output of its own, %d here; the session holds one output of %d parts", len(parts), len(parts))
 	}
 	out := c.outputData(i, parts)
 	e := c.itemEntry(i, &openresponses.FunctionCallOutput{CallID: cl.id, Output: out, Status: openresponses.StatusCompleted}, "")

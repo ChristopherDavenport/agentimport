@@ -109,6 +109,8 @@ type call struct {
 	hasAction bool
 	// answers are the events that answered the call, on any branch.
 	answers []int
+	// origin is the API family the call came from.
+	origin string
 }
 
 // ancestor reports whether event a is event b or one before it on b's

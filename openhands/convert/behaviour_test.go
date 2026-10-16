@@ -414,3 +414,44 @@ func TestBatchReasoningBefore143(t *testing.T) {
 		t.Error("the left-out reasoning item is not reported")
 	}
 }
+
+// TestSendForms reports what the send forms of a release change: a
+// Responses tool result of several parts sent as several outputs, a
+// long text SDK 1.0 to 1.9 cut, and an ACP agent's cache reads read as
+// counted in its input when they are not larger than it.
+func TestSendForms(t *testing.T) {
+	split := convertEvents(t, stateLive,
+		userEv("e0000000", "", "go"),
+		strings.Replace(actionEv("e1000000", "", "c1", "r1", ""), `"origin":"completion"`, `"origin":"responses"`, 1),
+		strings.Replace(obsEv("e2000000", "", "c1", "bad"), `"metadata"`, `"is_error":true,"metadata"`, 1),
+	)
+	if !codes(split.Report)["openhands/responses-output-split"] {
+		t.Error("a Responses result of two parts is not reported")
+	}
+
+	long := strings.Repeat("x", 50_001)
+	old := convertEvents(t, `{"id":"s","agent":{"kind":"Agent"}}`,
+		strings.Replace(userEv("e0000000", "", long), `"role":"user"`, `"role":"user","cache_enabled":false`, 1))
+	found := false
+	for _, f := range old.Report.Findings {
+		found = found || f.Code == "openhands/version-guess" && f.Line == 1
+	}
+	if !found {
+		t.Error("a long user text 1.0 to 1.9 cut is not reported")
+	}
+
+	acp := convertEvents(t, `{"id":"s","agent":{"kind":"ACPAgent"},"invoked_skills":[],"stats":{"usage_to_metrics":{"agent":{"token_usages":[{"prompt_tokens":1000,"cache_read_tokens":400,"completion_tokens":5,"response_id":"x"}]}}}}`,
+		userEv("e0000000", "", "go"))
+	for _, e := range acp.Sessions[0].Entries() {
+		if ce, ok := e.(*agentsession.CustomEntry); ok {
+			var d struct {
+				Usage struct {
+					InputTokens int `json:"input_tokens"`
+				} `json:"usage"`
+			}
+			if json.Unmarshal(ce.Data, &d) == nil && d.Usage.InputTokens != 1000 {
+				t.Errorf("ACP input %d, want 1000: reads not larger than the input are in it", d.Usage.InputTokens)
+			}
+		}
+	}
+}
