@@ -1,0 +1,42 @@
+session 0 20261003_080000_cc0003
+  request of row-2:
+    user: Build the parser.
+  request of row-4:
+    user: Build the parser.
+    assistant: Starting on the parser.
+    user: Add tests.
+  request of row-7:
+    user: Build the parser.
+    assistant: Starting on the parser.
+    user: Add tests.
+    call call_a write_file
+    output call_a written
+    user: Run them.
+  request of row-14:
+    user: Build the parser.
+    assistant: Starting on the parser.
+    assistant: [CONTEXT COMPACTION — REFERENCE ONLY] Earlier tu
+    user: Run them.
+    assistant: They pass.
+    user: Now the lexer.
+  request of row-16:
+    user: Build the parser.
+    assistant: Starting on the parser.
+    assistant: [CONTEXT COMPACTION — REFERENCE ONLY] Earlier tu
+    user: Run them.
+    assistant: They pass.
+    user: Now the lexer.
+    assistant: Lexer done.
+    user: Delete everything.
+  request of row-18:
+    user: Build the parser.
+    assistant: Starting on the parser.
+    assistant: [CONTEXT COMPACTION — REFERENCE ONLY] Earlier tu
+    user: Run them.
+    assistant: They pass.
+    user: Now the lexer.
+    assistant: Lexer done.
+    user: Add docs.
+  request of row-21:
+    user: [CONTEXT COMPACTION — REFERENCE ONLY] Earlier tu
+    user: Ship it.

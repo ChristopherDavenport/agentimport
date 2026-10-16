@@ -1,0 +1,19 @@
+hermes: 20 rows: mapped 17 kept 0 dropped 1 malformed 2
+  gap      agentimport/provenance                            4  the import is recorded in the header's agentimport:source member
+  dropped  hermes/orphan                                     1  a message row that belongs to no session it can be converted with is left out: its session has no row in sessions that can be read
+  dropped  hermes/system-prompt                              4  the session row holds no system prompt; the settings carry the model alone
+  dropped  hermes/tools                                      4  Hermes does not store the session's tool definitions; the settings carry no tools
+  lossy    hermes/alternation                                1  1 user messages follow another in the context Hermes resumes with; a resume merges each into the one before (repair_message_sequence), which is not reproduced
+  lossy    hermes/created-at                                 1  the session row holds no start time Hermes accepts; created_at is its first message's
+  lossy    hermes/parent-missing                             1  the session's parent, gone_parent, has no row in the database; parent_session names it
+  lossy    hermes/subagent-unlinked                          1  the session is a sub-agent of cyc_one, linked to no call (no delegate_task call of the parent was running when it started); its session names the parent in parent_session alone
+  kept     hermes/content-part                               1  2 content parts Open Responses does not define are carried as extension parts
+  kept     hermes/members                                    5  kept in hermes:columns
+  kept     hermes/reasoning-carrier                          1  1 entries of reasoning_details no item holds, such as a provider's native carrier, are kept in the row's columns
+  kept     hermes/session-row                                4  the session row's columns the header has no place for are in the header's hermes:session member
+  repaired hermes/call-id                                    2  call ID "dup" is empty, malformed or used before in the session; the call is dup_1, the native ID kept in hermes:call_id
+  repaired hermes/call-malformed                             1  1 entries of the row's tool_calls are not objects; Hermes cannot send them, and they are kept in the row's columns
+  repaired hermes/malformed                                  2  a session row that cannot be read is skipped: the row has no id
+  repaired hermes/mistyped                                   5  column started_at does not hold what Hermes writes; it is kept as written and read as absent
+  repaired hermes/parent-cycle                               1  the session's parents form a cycle; it is converted with no parent
+  repaired hermes/reasoning-malformed                        1  1 entries of the row's reasoning_details are not objects; they are kept as written

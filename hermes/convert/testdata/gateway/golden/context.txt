@@ -1,0 +1,12 @@
+session 0 20261009_020000_ii0022
+  model: openai/gpt-5.5
+  user: Alice: the build is red
+  user: Bob: why is it red?
+  user: Reminder: be brief.
+  user: [2026-10-09 02:00] Carol: fix it
+  call call_t terminal
+  output call_t {"error":"BLOCKED: User denied this command throug
+  assistant: Understood, I will not delete it.
+  user: Dave: still red
+  user: Dave: hello?
+  assistant: Checking the log.

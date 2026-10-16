@@ -1,0 +1,8 @@
+hermes: 10 rows: mapped 10 kept 0 dropped 0 malformed 0
+  gap      agentimport/provenance                            2  the import is recorded in the header's agentimport:source member
+  dropped  hermes/system-prompt                              2  the session row holds no system prompt; the settings carry the model alone
+  dropped  hermes/tools                                      2  Hermes does not store the session's tool definitions; the settings carry no tools
+  lossy    hermes/subagent-peer                              1  the call ran sub-agent session 20261006_050010_ff0015 in the background: a peer, linked after the call's output, which is Hermes' handle of the run; tied to the call by when it started
+  kept     hermes/delegation-delivery                        1  a background delegation's result, deleg_01, delivered as a user message
+  kept     hermes/members                                    3  kept in hermes:columns
+  kept     hermes/session-row                                2  the session row's columns the header has no place for are in the header's hermes:session member

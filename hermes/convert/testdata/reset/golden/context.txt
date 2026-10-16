@@ -1,0 +1,12 @@
+session 0 20261008_030000_hh0019
+  model: openai/gpt-5.5
+  user: hello
+  assistant: hi
+session 1 20261008_030200_hh0020
+  model: openai/gpt-5.5
+  user: new topic
+  assistant: sure
+session 2 20261008_030400_hh0021
+  model: openai/gpt-5.5
+  user: fresh start
+  assistant: ready

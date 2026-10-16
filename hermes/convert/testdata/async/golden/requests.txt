@@ -1,0 +1,18 @@
+session 0 20261006_050000_ff0014
+  request of row-2:
+    user: Audit the deps in the background.
+  request of row-4:
+    user: Audit the deps in the background.
+    assistant: Dispatching an auditor.
+    call call_bg delegate_task
+    output call_bg {"status":"dispatched","mode":"background","count"
+  request of row-6:
+    user: Audit the deps in the background.
+    assistant: Dispatching an auditor.
+    call call_bg delegate_task
+    output call_bg {"status":"dispatched","mode":"background","count"
+    assistant: The auditor is running.
+    user: [Async delegation deleg_01 finished] No vulnerable
+session 1 20261006_050010_ff0015
+  request of row-8:
+    user: Audit the deps.

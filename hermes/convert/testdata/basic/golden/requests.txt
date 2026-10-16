@@ -1,0 +1,8 @@
+session 0 20261001_100000_aa0001
+  request of row-2:
+    user: What does the README say?
+  request of row-4:
+    user: What does the README say?
+    assistant: Let me read it.
+    call toolu_01 read_file
+    output toolu_01 # App …

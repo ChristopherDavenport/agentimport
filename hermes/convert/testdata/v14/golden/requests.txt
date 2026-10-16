@@ -1,0 +1,15 @@
+session 0 20250601_100000_jj0023
+  request of row-2:
+    user: Summarise the project.
+  request of row-4:
+    user: Summarise the project.
+    reasoning text I should delegate.
+    call toolu_d delegate_task
+    output toolu_d {"results":[{"task_index":0,"status":"completed","
+session 1 f1366b7a-210b-5328-813e-c305fd12e164
+  request of row-9:
+    user: Read the docs.
+session 2 20250601_100140_jj0025
+  request of row-7:
+    user: [CONTEXT SUMMARY]: the project is a parser.
+    user: Thanks.

@@ -212,6 +212,46 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+## Hermes Agent
+
+- Repository: https://github.com/NousResearch/hermes-agent
+- License: MIT
+- Copyright: Copyright (c) 2025 Nous Research (the LICENSE at
+  `848fc0ad8b`)
+- Read at: `848fc0ad8b` (2026-10-16, just past `v0.22.2`)
+
+| File | Kind | Ported from |
+| --- | --- | --- |
+| `hermes/lineage.go` | translated | the session-lineage predicates: `_is_explicit_fork_child_row` (`hermes_state_messages.py`), `_is_compression_child_row` (`hermes_state_compression.py`), `_BRANCH_CHILD_SQL`, `_legacy_reset_child_sql`, `_ephemeral_child_sql` and `_RESET_END_REASONS` (`hermes_state_common.py`) |
+| `hermes/convert/text.go` | translated | `sanitize_context` and its patterns (`agent/memory_manager.py`), `_is_background_review_harness_message`, `_REVIEW_HARNESS_PREFIXES` and `_STALE_TOOL_CALL_MARKER_RE` (`hermes_state.py`), the openings of `SUMMARY_PREFIX` and `LEGACY_SUMMARY_PREFIX` (`agent/context_compressor.py`) and a sentence of the approval gate's refusals (`tools/approval.py`) |
+| `hermes/testdata/schema-v31.sql` | strings only | the `CREATE TABLE` statements of `SCHEMA_SQL` (`hermes_state_common.py`) for the tables a conversion reads |
+
+The MIT License, as in the LICENSE at `848fc0ad8b`.
+
+```text
+MIT License
+
+Copyright (c) 2025 Nous Research
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
 ## Credits
 
 These converters match the behaviour of code they were written against,

@@ -1,0 +1,15 @@
+hermes: 15 rows: mapped 12 kept 3 dropped 0 malformed 0
+  gap      agentimport/provenance                            1  the import is recorded in the header's agentimport:source member
+  dropped  hermes/system-prompt                              1  the session row holds no system prompt; the settings carry the model alone
+  dropped  hermes/tools                                      1  Hermes does not store the session's tool definitions; the settings carry no tools
+  lossy    hermes/alternation                                1  4 user messages follow another in the context Hermes resumes with; a resume merges each into the one before (repair_message_sequence), which is not reproduced
+  lossy    hermes/api-content                                1  the row's api_content, what Hermes sent, is the item; the content it shows is kept in the row's columns
+  lossy    hermes/denial-text                                1  the output is the text Hermes' approval gate gives a refusal; it is a reject decision by the user, told by the text alone
+  lossy    hermes/observed                                   1  an observed group-chat message; a Telegram channel that gathers observed messages into one block sends them that way, which is not reproduced
+  kept     hermes/members                                    8  kept in hermes:columns
+  kept     hermes/review-harness                             2  a background-review harness prompt an older Hermes wrote into the session (a resume strips it), which is not context, is a custom entry
+  kept     hermes/session-meta                               1  the gateway's session_meta row, bookkeeping, which is not context, is a custom entry
+  kept     hermes/session-row                                1  the session row's columns the header has no place for are in the header's hermes:session member
+  repaired hermes/orphan-output                              1  the output names call call_gone, which no call before it in the context Hermes resumes with made; a resume drops it (repair_message_sequence), and it is left out of that context
+  repaired hermes/stale-marker                               1  the assistant's content is a bare tool marker an older Hermes stored, which a resume blanks; the turn has no text
+  repaired hermes/unanswered-call                            1  call call_l has no output in the context Hermes resumes with; a resume prunes it (repair_message_sequence), and it is left out of that context

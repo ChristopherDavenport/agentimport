@@ -1,0 +1,16 @@
+session 0 20250601_100000_jj0023
+  model: anthropic/claude-3.7-sonnet
+  user: Summarise the project.
+  reasoning text I should delegate.
+  call toolu_d delegate_task
+  output toolu_d {"results":[{"task_index":0,"status":"completed","
+  assistant: It is a parser.
+session 1 f1366b7a-210b-5328-813e-c305fd12e164
+  model: anthropic/claude-3.7-sonnet
+  user: Read the docs.
+  assistant: docs read
+session 2 20250601_100140_jj0025
+  model: anthropic/claude-3.7-sonnet
+  user: [CONTEXT SUMMARY]: the project is a parser.
+  user: Thanks.
+  assistant: You are welcome.
