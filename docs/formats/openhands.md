@@ -285,6 +285,10 @@ rejected, and a session reads it as pending.
   session holds.
 - **Content.** `cache_prompt` flags that are set, and other part
   members, are kept in `openhands:event` by position.
+- **Defaults.** An event member that is null, `[]` or `{}`, the
+  defaults OpenHands writes, carries nothing and is not kept in
+  `openhands:event`; every other member the session has no place for
+  is.
 - **Secrets.** OpenHands masks registered secrets in the model's text
   but not in tool outputs or user messages, and keeps its secret
   registry (encrypted or masked) in the state. The converter redacts
