@@ -82,7 +82,6 @@ type conv struct {
 	pendingFrom int
 	model       string
 	respIDs     map[string]bool
-	compacts    int
 
 	events []*event
 	side   []*sideRecord
