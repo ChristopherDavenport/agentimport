@@ -233,3 +233,26 @@ func TestContinuationSettings(t *testing.T) {
 		t.Errorf("successor's model %q, instructions %q", ctx.Settings.Model, ctx.Settings.Instructions)
 	}
 }
+
+// TestCodexProfile checks the Codex adapter's shapes: no instructions
+// from its system steps, and a custom tool call and its output marked.
+func TestCodexProfile(t *testing.T) {
+	res := convertFixture(t, fixtures(t)["codex"], Options{})
+	s := reread(t, res.Sessions[0])
+	ctx, err := s.Context()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ctx.Settings.Instructions != "" {
+		t.Errorf("instructions %q", ctx.Settings.Instructions)
+	}
+	n := 0
+	for _, e := range s.Entries() {
+		if string(e.Base().Unknown["atif:tool_kind"]) == `"custom"` {
+			n++
+		}
+	}
+	if n != 2 {
+		t.Errorf("%d entries marked custom, want the call and its output", n)
+	}
+}

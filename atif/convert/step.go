@@ -280,9 +280,15 @@ func (c *docConv) systemStep(i int, s *atif.Step) (int, error) {
 	var entries []agentsession.Entry
 	if hasContent(s.Message) {
 		m := &openresponses.Message{Role: openresponses.RoleSystem, Content: c.inputParts(i, s.Message)}
+		if c.agentName() == "codex" {
+			m.Role = openresponses.RoleDeveloper
+			c.addf(agentimport.Lossy, "atif/developer-message", i+1,
+				"Harbor's Codex adapter writes Codex's developer messages, and any other role it does not know, as system steps, and its Codex resume sends them back as developer messages; the step is a developer message")
+		} else {
+			c.addf(agentimport.Lossy, "atif/system-message", i+1,
+				"a system step after the conversation started is a system message; Harbor's own readers send it as a user or developer message, or drop it")
+		}
 		entries = append(entries, agentsession.NewItemEntry(m))
-		c.addf(agentimport.Lossy, "atif/system-message", i+1,
-			"a system step after the conversation started is a system message; Harbor's own readers send it as a user or developer message, or drop it")
 	}
 	more, err := c.results(i, s, nil, nil)
 	if err != nil {
@@ -616,8 +622,21 @@ func (c *docConv) agentStep(i int, s *atif.Step) error {
 			continue
 		}
 		id, renamed := c.b.Calls.Assign(tc.ToolCallID)
-		fc := &openresponses.FunctionCall{CallID: id, Name: tc.FunctionName, Arguments: c.arguments(line, tc)}
+		fc := &openresponses.FunctionCall{CallID: id, Name: tc.FunctionName}
 		e := item(fc)
+		custom, input := c.customCall(s, tc)
+		if custom {
+			if err := c.b.Member(e, "tool_kind", "custom"); err != nil {
+				return err
+			}
+			c.addf(agentimport.Kept, "atif/custom-tool-call", line,
+				"Codex's custom tool call %q is a function call marked %s:tool_kind \"custom\", as the codex converter writes one; its free-form input is the arguments {\"input\": …}", tc.ToolCallID, Source)
+		}
+		if input != "" {
+			fc.Arguments = input
+		} else {
+			fc.Arguments = c.arguments(line, tc)
+		}
 		if renamed {
 			if err := c.b.Member(e, "call_id", tc.ToolCallID); err != nil {
 				return err
@@ -645,7 +664,7 @@ func (c *docConv) agentStep(i int, s *atif.Step) error {
 			}
 		}
 		entries = append(entries, e)
-		cl := &call{id: id, native: tc.ToolCallID, step: i}
+		cl := &call{id: id, native: tc.ToolCallID, step: i, custom: custom}
 		c.calls = append(c.calls, cl)
 		local[tc.ToolCallID] = append(local[tc.ToolCallID], cl)
 		order = append(order, cl)
@@ -680,6 +699,30 @@ func (c *docConv) agentStep(i int, s *atif.Step) error {
 	}
 	c.mark(i, agentimport.LineMapped)
 	return nil
+}
+
+// customCall reports whether Harbor's Codex adapter recorded a tool
+// call as a Responses custom tool call (tool_call_details, item_type),
+// and returns the arguments {"input": …} of its free-form input when the
+// adapter kept it, which it parses into the call's arguments when it
+// reads as JSON.
+func (c *docConv) customCall(s *atif.Step, tc *atif.ToolCall) (bool, string) {
+	if c.agentName() != "codex" {
+		return false, ""
+	}
+	d := object(object(object(s.Ext)["tool_call_details"])[tc.ToolCallID])
+	if str(d["item_type"]) != "custom_tool_call" {
+		return false, ""
+	}
+	var raw string
+	if json.Unmarshal(d["raw_arguments"], &raw) != nil {
+		return true, ""
+	}
+	args, err := json.Marshal(map[string]string{"input": raw})
+	if err != nil {
+		return true, ""
+	}
+	return true, string(args)
 }
 
 // stepConfig returns a config delta when an agent step's model or

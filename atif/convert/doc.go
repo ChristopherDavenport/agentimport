@@ -144,6 +144,8 @@ type call struct {
 	id, native string
 	step       int
 	answered   bool
+	// custom marks a Codex custom tool call.
+	custom bool
 }
 
 func (c *docConv) addf(kind agentimport.Kind, code string, line int, format string, args ...any) {
@@ -551,7 +553,10 @@ func (c *docConv) firstConfig() error {
 	c.leading = map[int]bool{}
 	var parts []agentsession.InstructionPart
 	var notes []json.RawMessage
-	if !c.exporter {
+	// Codex sends what Harbor's adapter writes as system steps as
+	// developer messages, among the input (codex.py, the resume); they
+	// are not the instructions.
+	if !c.exporter && c.agentName() != "codex" {
 		for i, s := range c.t.Steps {
 			if c.moved[i] {
 				continue

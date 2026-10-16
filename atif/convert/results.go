@@ -148,6 +148,11 @@ func (c *docConv) output(i int, s *atif.Step, r *atif.Result, cl *call) ([]agent
 		out.Output.Text = r.Content.Text
 	}
 	e := agentsession.NewItemEntry(out)
+	if cl.custom {
+		if err := c.b.Member(e, "tool_kind", "custom"); err != nil {
+			return nil, err
+		}
+	}
 	var entries, after []agentsession.Entry
 	linked := false
 	if rec, ok := c.spawnedBy[cl.native]; ok && !c.sidechains[rec.agent].done {

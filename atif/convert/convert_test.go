@@ -270,6 +270,12 @@ func TestContexts(t *testing.T) {
 			"user: Summary: asked for a plan; gave three steps.", "assistant: Step one.",
 			"user: Next.", "user: tool out", "assistant: Step two.",
 		}},
+		// Codex: a system step is a developer message, not the
+		// instructions; a custom tool call's input is its arguments.
+		{"codex", 0, []string{
+			"developer: Developer instructions.", "user: Apply the patch.", "reasoning",
+			`call call_1 apply_patch {"input":"*** Begin Patch\n*** End Patch"}`, "output call_1 Done!",
+		}},
 		// A continuation starts from its copied history.
 		{"continuation", 1, []string{
 			"user: Do the task.", "assistant: Step one done.", "user: Handoff: continue with step two.", "assistant: Step two done.",

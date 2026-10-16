@@ -115,7 +115,10 @@ follows the Responses shape the session format holds:
   as the SFT export sends it;
 - system steps before the first user or agent step are the
   instructions, a setting the session format carries across a
-  compaction; a later one is a system message;
+  compaction; a later one is a system message. Harbor's Codex adapter
+  writes Codex's developer messages as system steps, so in its
+  documents every system step is a developer message, where Codex put
+  it;
 - RFC 0001's context-management convention is applied as its one
   normative statement of context: after a system step with
   `extra.context_management.boundary` `replace`, the context is the
@@ -318,6 +321,7 @@ every converter can report are in [README.md](README.md).
 | `atif/subagent-unlinked` | lossy | An embedded trajectory no reference names is a session with `parent_session` alone. |
 | `atif/synthetic-tool-calls` | lossy | Terminus 2 parsed its calls from the model's text and rewrote its message. |
 | `atif/sidechain` | lossy | Claude Code sub-agent steps the adapter interleaved with the main session's are the sub-agent's own session: a subsession or peer of the call whose result names the agent, or one with `parent_session` alone. |
+| `atif/developer-message` | lossy | A system step of Harbor's Codex adapter, which writes Codex's developer messages as system steps, is a developer message, as its Codex resume sends it. |
 | `atif/system-message` | lossy | A system step after the conversation started is a system message. |
 | `atif/system-prompt` | lossy | A system step before the first user or agent step is the instructions. |
 | `atif/tool-definition` | lossy | A tool definition that is not a chat-completions function tool is kept in `atif:tool_definitions`, not in the settings. |
@@ -327,6 +331,7 @@ every converter can report are in [README.md](README.md).
 | `atif/audio` | kept | An audio part is an `atif.audio` part. |
 | `atif/compaction-marker` | kept | A custom marker entry is the `first_kept` of a compaction that keeps nothing. |
 | `atif/context-management` | kept | A context-management step of a type and boundary the RFC does not define is a custom entry. |
+| `atif/custom-tool-call` | kept | A Codex custom tool call, by the adapter's `tool_call_details`, is a function call and output marked `atif:tool_kind: "custom"`, its free-form input the arguments `{"input": …}`. |
 | `atif/duplicate-result` | kept | A second result for an answered call is a custom entry. |
 | `atif/exporter-records` | kept, or dropped | The exporter's records of entries that are not items are `atif:extra`. |
 | `atif/extra` | kept, or dropped | An `extra` object is `atif:extra` on the entry made from its owner, or a header member. |
