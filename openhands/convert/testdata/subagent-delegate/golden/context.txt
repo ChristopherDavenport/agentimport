@@ -6,11 +6,11 @@ session 0 0000000c-0000-4000-9000-000000000001
   call call_d delegate
   output call_d lodging: Hotel A …
   assistant: Hotel A and Cafe B.
-session 1 5fdfb9af-a0f7-552d-985e-a327d1189c36
+session 1 0000000c-0000-4000-9000-000000000002
   instructions: You are a careful coding agent.
   user: Find a hotel.
   assistant: Hotel A
-session 2 a2302224-58f7-5261-81c0-17b203bcff9d
+session 2 0000000c-0000-4000-9000-000000000003
   instructions: You are a careful coding agent.
   user: Find a restaurant.
   assistant: Cafe B

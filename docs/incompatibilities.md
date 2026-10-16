@@ -31,7 +31,6 @@ module's choices rather than the format's limits.
 | `atif/compaction-unrecorded` | ATIF | A compaction whose summary is not recorded: a replace boundary with no results' content and no user step after it. `compaction` needs a `summary`. | A custom entry holding the step; the context keeps everything before it. |
 | `atif/context-pruning` | ATIF | Pruning that does not name what it removed: a `truncate` or `pruning` boundary says older turns were dropped, not which. `omit.items` needs the entries named. | A custom entry holding the step; the context keeps everything. |
 | `atif/deterministic-dispatch` | ATIF | A function call no model produced: ATIF's `llm_call_count: 0` step, a harness dispatching a tool by rule. A `function_call` item is model output and belongs to a response. | Function call items with no response entry, marked `atif:llm_call_count: 0`. |
-| `openhands/resumed-subagent` | OpenHands | One sub-agent answering several calls: OpenHands' `task` tool resumes a sub-agent's conversation for a later call, and its `delegate` tool sends later calls to sub-agents an earlier call started. A `subsession` is derived from, and spawned by, one call; a `peer` is a callee that outlives the call, and does not say the same session answered an earlier call as a subsession. | The first call's sub-agent is a subsession; each later call gets a `peer` link after its output naming the same session. |
 
 Rows are added by the converters as they find more; a test checks
 that every `gap` code a converter emits is in this table.

@@ -24,8 +24,9 @@ versions may break the API.
   out; rejections and refused calls are reject decisions, an
   interrupted call an answer, a critic's result an eval outcome.
   Sub-agents under `subagents/` are matched to their task or delegate
-  call by prompt and time: the first call a subsession, a call resuming
-  one a peer link and the new gap `openhands/resumed-subagent`. A fork
+  calls by prompt and time: a task sub-agent one call waited for is a
+  subsession, one that a later call resumed, or a delegate sub-agent,
+  outlives its calls and is a peer of each. A fork
   names its source in `parent_session`. The command detects a
   conversation by its directory or files, `-from openhands` names it,
   and a sub-agent's directory given beside its parent is skipped when

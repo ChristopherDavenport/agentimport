@@ -291,10 +291,14 @@ its text, and which it falls between the call and its answer in time
 (`sender`, the parent's display name, is not in the parent's files and
 is kept, not matched). Every match is reported.
 
+Which link a sub-agent gets follows its lifetime, as
+`docs/plans/new-source.md` decides for every source:
+
 | Native | Session |
 | --- | --- |
-| the first call that sends a sub-agent its prompt | a `subsession`: the sub-agent's own session `SubsessionID(parent, call_id)` (with `/<child id>` for the second sub-agent of one delegate call) with `parent_session` and `spawned_by`, the link before the output, the output's `parents` naming the sub-agent's last entry before its next prompt, or its leaf |
-| a later call resuming the same sub-agent (`resume`, or a later `delegate`) | a `peer` link after the output, naming the sub-agent's session and the call: gap `openhands/resumed-subagent`, since one sub-agent answers several calls and a subsession is derived from one |
+| a `task` sub-agent that one call started and waited for, and no other call reached | a `subsession`: the sub-agent's own session `SubsessionID(parent, call_id)` with `parent_session` and `spawned_by`, the link before the output, the output's `parents` naming the sub-agent's leaf |
+| a `task` sub-agent a later call resumed (`resume`), so that it answers several calls | a `peer` of every call that reached it: a link after each call's output naming the sub-agent's session; the session keeps its own ID and names the parent in `parent_session` alone, with no `spawned_by`, since it outlives the first call |
+| a `delegate` sub-agent, which a `spawn` call started idle and `delegate` calls reach | a `peer` of each `delegate` call that sent it a task, as above |
 | a sub-agent no call matches, or two calls could have sent | its own session with its own ID, `parent_session` naming the parent alone (`openhands/subagent-unlinked`) |
 | a sub-agent directory converted on its own | `parent_session` the directory's parent conversation |
 
@@ -338,7 +342,6 @@ every converter can report are in [README.md](README.md).
 | `agentimport/reasoning-provider` | gap | A reasoning signature (Anthropic's, OpenAI's encrypted reasoning) is in `encrypted_content`, tagged `openhands:provider`. |
 | `agentimport/tool-error` | gap | A tool result's `is_error`, or an agent error, is `openhands:is_error`. |
 | `agentimport/usage-detail` | gap | Cache writes, counted in the prompt tokens, are `openhands:usage`. |
-| `openhands/resumed-subagent` | gap | A call resumed a sub-agent an earlier call started; a peer link after its output names it. |
 | `openhands/bad-content` | dropped | A content part that is not an object or not text or an image, or extended content on an assistant message. |
 | `openhands/bad-file-name` | dropped | A file of `events/` whose name is not an event file's. |
 | `openhands/bad-metrics` | dropped | A usage ID's metrics that are not an object. |
@@ -381,7 +384,7 @@ every converter can report are in [README.md](README.md).
 | `openhands/session-id` | lossy | The session ID is derived from the conversation's. |
 | `openhands/split-batch` | lossy | An output written between the calls of a response; the session writes the calls together. |
 | `openhands/subagent-alone` | lossy | A sub-agent converted on its own names its parent in `parent_session` alone. |
-| `openhands/subagent-match` | lossy | A sub-agent matched to its call by prompt and time. |
+| `openhands/subagent-match` | lossy | A sub-agent matched to its calls by prompt and time: a subsession, or a peer when it outlives a call. |
 | `openhands/subagent-unlinked` | lossy | A sub-agent no call is linked to; `parent_session` alone. |
 | `openhands/summary-event` | lossy | A condensation summary written as an event, which OpenHands only synthesizes. |
 | `openhands/summary-restated` | lossy | Earlier summaries OpenHands still sends are restated in the compaction's summary. |

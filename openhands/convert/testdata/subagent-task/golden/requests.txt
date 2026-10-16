@@ -11,7 +11,7 @@ session 0 0000000b-0000-4000-9000-000000000001
     output call_t1 Task ID: task_00000001 …
     call call_t2 task
     output call_t2 Task ID: task_00000001 …
-session 1 91769da5-b784-59d4-b6a6-8a990a89aba1
+session 1 0000000b-0000-4000-9000-000000000002
   request of chatcmpl-c1:
     user: List the packages.
   request of chatcmpl-c2:

@@ -32,22 +32,28 @@ type child struct {
 	sid string
 	// failed says the conversion failed and was reported.
 	failed bool
+	// peer says the sub-agent outlives a call that messaged it: it
+	// answered several calls, or a delegate call, whose sub-agents a
+	// spawn command started and later calls reach.
+	peer bool
 }
 
 // answer is one call a sub-agent answered: the call's prompt was its
 // user message msg. first says it started the sub-agent.
 type answer struct {
-	child *child
-	call  string
-	msg   int
-	first bool
-	n     int
+	child    *child
+	call     string
+	msg      int
+	first    bool
+	n        int
+	delegate bool
 }
 
 // spawn is a parent call that sends a sub-agent a prompt: a task call,
 // or a delegate call with one task per sub-agent.
 type spawn struct {
-	native string
+	native   string
+	delegate bool
 	texts  []string
 	start  time.Time
 	end    time.Time
@@ -117,6 +123,7 @@ func (c *conv) spawns() []*spawn {
 			if act.Command != "delegate" {
 				continue
 			}
+			s.delegate = true
 			for _, k := range sortedKeys(keysOf(act.Tasks)) {
 				s.texts = append(s.texts, act.Tasks[k])
 			}
@@ -179,13 +186,15 @@ func (c *conv) matchChild(ch *child, spawns []*spawn) {
 			ch.answers = nil
 			return
 		}
-		a := &answer{child: ch, call: cands[0].native, msg: k, first: len(ch.answers) == 0}
+		a := &answer{child: ch, call: cands[0].native, msg: k, first: len(ch.answers) == 0, delegate: cands[0].delegate}
 		ch.answers = append(ch.answers, a)
+		ch.peer = ch.peer || a.delegate
 	}
 	if len(ch.answers) == 0 {
 		ch.why = "no task or delegate call sent it a prompt it received"
 		return
 	}
+	ch.peer = ch.peer || len(ch.answers) > 1
 	for _, a := range ch.answers {
 		list := c.kids.byCall[a.call]
 		if a.first {
@@ -235,14 +244,14 @@ func (c *conv) convertChild(ch *child, tgt target) bool {
 	return true
 }
 
-// linkChildren converts the sub-agents call cl started and writes their
-// subsession links before its output, returning the entries of the
-// sub-agents the output came from: each one's last entry before the
-// next prompt it was sent, or its leaf.
+// linkChildren converts the sub-agents call cl started and waited for,
+// which no other call reached, and writes their subsession links before
+// its output, returning the entries of the sub-agents the output came
+// from: each one's leaf.
 func (c *conv) linkChildren(i int, at string, cl *call) ([]agentsession.EntryRef, string, error) {
 	var refs []agentsession.EntryRef
 	for _, a := range c.kids.byCall[cl.native] {
-		if !a.first {
+		if !a.first || a.child.peer {
 			continue
 		}
 		ch := a.child
@@ -276,32 +285,22 @@ func (c *conv) linkChildren(i int, at string, cl *call) ([]agentsession.EntryRef
 	return refs, at, nil
 }
 
-// answerEntry is the sub-agent's entry an answer ends on: its last
-// before the next prompt it was sent, or its leaf.
+// answerEntry is the entry of a sub-agent the call it answered waited
+// for: its leaf, as it answered no other call.
 func (c *conv) answerEntry(a *answer) string {
-	cv := a.child.cv
-	k := slices.Index(a.child.answers, a)
-	if k+1 < len(a.child.answers) {
-		next := a.child.answers[k+1].msg
-		for j := next - 1; j >= 0; j-- {
-			if t := cv.tail[j]; t != "" {
-				return t
-			}
-		}
-		return ""
-	}
-	return cv.b.Resume()
+	return a.child.cv.b.Resume()
 }
 
 // peerChildren writes, after a call's output, a peer link to each
-// sub-agent the call resumed: a sub-agent that answers several calls
-// outlives the first.
+// sub-agent the call messaged that outlives it: one that answers
+// several calls, or a delegate call's, which a spawn command started.
+// Its session names this one in parent_session alone.
 func (c *conv) peerChildren(i int, at string, cl *call) (string, error) {
 	for _, a := range c.kids.byCall[cl.native] {
-		if a.first {
+		ch := a.child
+		if !ch.peer {
 			continue
 		}
-		ch := a.child
 		if ch.failed {
 			continue
 		}
@@ -317,7 +316,11 @@ func (c *conv) peerChildren(i int, at string, cl *call) (string, error) {
 			return "", err
 		}
 		at = id
-		c.at(agentimport.Gap, "openhands/resumed-subagent", i, "call %s resumed sub-agent %s, which an earlier call started: one sub-agent answers several calls, which a subsession, derived from one call, cannot say; it is a peer link after the output", cl.id, ch.name)
+		why := "answers several calls"
+		if a.delegate {
+			why = "is a delegate sub-agent, which a spawn command started and delegate calls reach"
+		}
+		c.at(agentimport.Lossy, "openhands/subagent-match", i, "sub-agent %s is matched to call %s by its prompt and time, as OpenHands records no link; it %s, so it outlives the call and is a peer, linked after the output", ch.name, cl.id, why)
 	}
 	return at, nil
 }

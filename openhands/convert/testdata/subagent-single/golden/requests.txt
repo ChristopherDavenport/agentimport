@@ -1,0 +1,10 @@
+session 0 00000013-0000-4000-9000-000000000001
+  request of chatcmpl-o1:
+    user: Find the entry point with a helper.
+  request of chatcmpl-o2:
+    user: Find the entry point with a helper.
+    call call_one task
+    output call_one Task ID: task_00000001 …
+session 1 99f38720-6e58-5598-8025-50d00face20b
+  request of chatcmpl-oc:
+    user: Where is main?

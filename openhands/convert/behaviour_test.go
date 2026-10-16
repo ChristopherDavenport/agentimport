@@ -13,11 +13,43 @@ import (
 	"github.com/ChristopherDavenport/agentsession"
 )
 
-// TestSubagentLinks checks the task fixture's links: the first call's
-// sub-agent a subsession whose header agrees with its link, the call
-// resuming it a peer link after its output naming the same session.
+// TestSubagentLinks checks the task fixture's links: a sub-agent that
+// answers two calls outlives the first, so it is a peer of both, linked
+// after each output, and its session names the parent in parent_session
+// alone.
 func TestSubagentLinks(t *testing.T) {
 	res := convertFixture(t, fixtures(t)["subagent-task"], Options{})
+	if len(res.Sessions) != 2 {
+		t.Fatalf("%d sessions, want 2", len(res.Sessions))
+	}
+	parent, child := res.Sessions[0], res.Sessions[1]
+	var rels []string
+	var prev agentsession.Entry
+	for _, e := range parent.Entries() {
+		if l, ok := e.(*agentsession.LinkEntry); ok {
+			if l.Session != child.ID() {
+				t.Errorf("link names %s, not the child", l.Session)
+			}
+			if it, ok := prev.(*agentsession.ItemEntry); !ok || it.Item.ItemType() != "function_call_output" {
+				t.Errorf("the %s link does not follow its call's output", l.Rel)
+			}
+			rels = append(rels, l.Rel+" "+l.CallID)
+		}
+		prev = e
+	}
+	if got, want := strings.Join(rels, ", "), "peer call_t1, peer call_t2"; got != want {
+		t.Errorf("links %s, want %s", got, want)
+	}
+	if h := child.Header(); h.ParentSession != parent.ID() || h.SpawnedBy != "" || h.ID != "0000000b-0000-4000-9000-000000000002" {
+		t.Errorf("child header id %q parent %q spawned_by %q", h.ID, h.ParentSession, h.SpawnedBy)
+	}
+}
+
+// TestSubagentSubsession checks a sub-agent only one call reached and
+// waited for: a subsession, its header agreeing with its link, the link
+// before the output, the output naming the sub-agent's leaf.
+func TestSubagentSubsession(t *testing.T) {
+	res := convertFixture(t, fixtures(t)["subagent-single"], Options{})
 	if len(res.Sessions) != 2 {
 		t.Fatalf("%d sessions, want 2", len(res.Sessions))
 	}
@@ -26,19 +58,21 @@ func TestSubagentLinks(t *testing.T) {
 	if err := parent.VerifyLinks(func(id string) (*agentsession.Session, error) { return byID[id], nil }); err != nil {
 		t.Fatal(err)
 	}
-	var rels []string
+	var link *agentsession.LinkEntry
 	for _, e := range parent.Entries() {
-		if l, ok := e.(*agentsession.LinkEntry); ok {
-			if l.Session != child.ID() {
-				t.Errorf("link names %s, not the child", l.Session)
+		switch e := e.(type) {
+		case *agentsession.LinkEntry:
+			link = e
+		case *agentsession.ItemEntry:
+			if e.Item.ItemType() == "function_call_output" && (link == nil || len(e.Parents) != 1 || e.Parents[0].Session != child.ID()) {
+				t.Errorf("the output follows link %v and names %v", link, e.Parents)
 			}
-			rels = append(rels, l.Rel+" "+l.CallID)
 		}
 	}
-	if got, want := strings.Join(rels, ", "), "subsession call_t1, peer call_t2"; got != want {
-		t.Errorf("links %s, want %s", got, want)
+	if link == nil || link.Rel != agentsession.RelSubsession || link.CallID != "call_one" {
+		t.Errorf("link %+v, want a subsession of call_one", link)
 	}
-	if h := child.Header(); h.ParentSession != parent.ID() || h.SpawnedBy != "call_t1" {
+	if h := child.Header(); h.SpawnedBy != "call_one" || h.ParentSession != parent.ID() {
 		t.Errorf("child header parent %q spawned_by %q", h.ParentSession, h.SpawnedBy)
 	}
 }
