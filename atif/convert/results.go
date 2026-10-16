@@ -425,7 +425,7 @@ func (c *docConv) spawn(i int, s *atif.Step, ref *atif.Ref, callID string) (chil
 				"sub-agent file %s cannot be read (%s); the reference is kept and no session is made for it", ref.TrajectoryPath, agentimport.ErrorText(rerr))
 			return "", "", false, nil
 		}
-		c.fam.done[real] = true
+		c.fam.take(real)
 		in = docInput{t: f.Doc, file: f, name: c.fam.display(real), dir: filepath.Dir(real), real: real}
 		key = "file/" + c.fam.display(real)
 	default:
@@ -476,7 +476,7 @@ func (fam *family) child(in docInput, t target, report *agentimport.Report, from
 		// Its root is the other document's.
 		units--
 	}
-	drop := func() {
+	drop := func(units int) {
 		for range units {
 			report.Line(agentimport.LineDropped)
 		}
@@ -485,7 +485,7 @@ func (fam *family) child(in docInput, t target, report *agentimport.Report, from
 	// nest without end; this bound holds whatever names a document.
 	key := in.key()
 	if fam.depth >= maxDepth || fam.active[key] {
-		drop()
+		drop(units)
 		why := fmt.Sprintf("nests %d documents deep, past the %d the conversion follows", fam.depth+1, maxDepth)
 		if fam.active[key] {
 			why = "is one the conversion is converting already, which names itself through it"
@@ -502,12 +502,22 @@ func (fam *family) child(in docInput, t target, report *agentimport.Report, from
 	}()
 	sub := agentimport.NewReport(Source)
 	sub.Unit = Unit
+	taken, held := len(fam.taken), len(fam.held)
 	sessions, leaf, err := fam.one(in, t, sub)
 	if err == nil && in.real != "" {
 		fam.held = append(fam.held, in.real)
 	}
 	if err != nil {
-		drop()
+		// The files the document named went with it: their sessions
+		// are not returned and their units are in sub, which is not
+		// merged.
+		fam.held = fam.held[:held]
+		for _, p := range fam.taken[taken:] {
+			if f := fam.files[p]; f != nil {
+				units += f.Units()
+			}
+		}
+		drop(units)
 		report.Addf(agentimport.Dropped, "atif/subagent-failed", in.name, 0,
 			"the document named from %s could not be converted (%s); its %d units are left out", displayName(from), agentimport.ErrorText(err), units)
 		return nil, "", err
@@ -588,7 +598,7 @@ func (c *docConv) continuation() error {
 			"the continuation %s cannot be read (%s); it is the header member %s:continued_trajectory_ref", ref, agentimport.ErrorText(err), Source)
 		return nil
 	}
-	c.fam.done[real] = true
+	c.fam.take(real)
 	name := c.fam.display(real)
 	t := target{parent: c.tgt.id, native: f.Doc.SessionID, created: c.last}
 	t.id, t.derived = c.fam.claim(f.Doc.SessionID, c.tgt.id, "continuation/"+name)

@@ -129,8 +129,9 @@ type family struct {
 	fileErrs map[string]error
 	done     map[string]bool
 	embedded map[*atif.Trajectory]bool
-	// held lists the files the conversion converted.
-	held []string
+	// held lists the files the conversion converted; taken those it
+	// began to convert, in order.
+	held, taken []string
 	// active holds the documents being converted, by docInput.key, and
 	// depth how many are below the main one.
 	active map[string]bool
@@ -170,6 +171,12 @@ func (fam *family) run(f *atif.File, path string) (*agentimport.Result, error) {
 		fam.opts.Converted.add(fam.held)
 	}
 	return &agentimport.Result{Report: fam.report, Sessions: sessions}, nil
+}
+
+// take marks a file as converting, so it converts once.
+func (fam *family) take(real string) {
+	fam.done[real] = true
+	fam.taken = append(fam.taken, real)
 }
 
 // mainID is the main session's ID: the document's session_id, or its
