@@ -247,10 +247,13 @@ content is a summary, whole or merged into the first tail row after
 (`_is_context_summary_message`): a row written before the column
 existed reads 0 in it.
 
-Each generation after the first starts with a `compaction` entry whose
+Each generation after the first starts, on the main line, with a
+`compaction` entry whose
 `first_kept` keeps nothing before it and whose `summary` is the
 generation's first item; the rest of the generation's rows are entries
-after it. The context is the generation's rows in Hermes' order. When
+after it. The context is the generation's rows in Hermes' order. A generation whose first item is
+no message, of which no summary can be made, starts instead with a
+`config` entry whose `omit` leaves out every item before it. When
 Hermes kept a head, that first item is the head's, verbatim, and the
 summary row follows it: the session format puts a compaction's summary
 first, so this is `agentimport/fold-head`. The head and the tail are
@@ -449,7 +452,7 @@ finding:
 | `hermes/call-malformed` | repaired | Entries of `tool_calls` that are not objects; they are kept in the row's columns. |
 | `hermes/child-alone` | lossy | A child session converted on its own, by `Alone`, the bound on nesting or its parent's failure; no link names it. |
 | `hermes/codex-messages` | lossy | The turn is the message items of `codex_message_items`, as the Codex route replays them, not its content, which is kept in `hermes:columns`. |
-| `hermes/compaction` | lossy | An in-place compaction, a `compaction` entry whose summary is its generation's first item. |
+| `hermes/compaction` | lossy | An in-place compaction, a `compaction` entry whose summary is its generation's first item; when that item is no message (a call, an output), no compaction is written, and the items before it are left out by `omit`. |
 | `hermes/compaction-empty` | lossy | A generation of in-place compaction holds no item; no compaction is written and the rows before stay in context. |
 | `hermes/content-part` | kept | Content parts Open Responses does not define, carried as extension parts. |
 | `hermes/continuation` | lossy | A compression continued the session in a child: a `continued_in` link. |

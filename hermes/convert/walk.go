@@ -40,8 +40,11 @@ type walk struct {
 	// Hermes resumes with; a run of inactive rows hangs off it as a
 	// branch of its own.
 	mainAt string
-	// pending is a compaction waiting for its summary, the next item.
+	// pending is a compaction waiting for its summary, the next item on
+	// the main line; inRun says the walk is on a branch of rows out of
+	// context.
 	pending *pendingCompaction
+	inRun   bool
 	// harness is the state of the background-review harness strip on
 	// the line being walked.
 	harness harnessState
@@ -330,6 +333,7 @@ func (w *walk) run() error {
 	var savedHarness harnessState
 	runs := 0
 	for i, m := range w.rows {
+		w.inRun = w.class[i] == inactive
 		if w.class[i] == inactive {
 			if !inRun {
 				inRun, runAt, saved = true, w.mainAt, sc.pairing.clone()
@@ -363,6 +367,7 @@ func (w *walk) run() error {
 	if inRun {
 		sc.pairing = saved
 	}
+	w.inRun = false
 	sc.at = w.mainAt
 	if w.pending != nil {
 		sc.addf(agentimport.Lossy, "hermes/compaction-empty", w.pending.row.Unit, "a compaction's rows hold no item to start its context with; the rows before it stay in context")
@@ -455,9 +460,17 @@ func (w *walk) rowMembers(e agentsession.Entry, m *hermes.Message, used ...strin
 // the item.
 func (w *walk) item(it openresponses.Item, m *hermes.Message, respID string, vis *bool, prep func(e *agentsession.ItemEntry) error) (string, *agentsession.ItemEntry, error) {
 	sc := w.sc
-	if w.pending != nil {
-		id, err := w.compaction(it, m)
-		return id, nil, err
+	if w.pending != nil && !w.inRun {
+		switch it.(type) {
+		case *openresponses.Message, *openresponses.Compaction:
+			id, err := w.compaction(it, m)
+			return id, nil, err
+		}
+		// No summary can be made of a call or an output: the rows
+		// before the generation are left out by omit instead.
+		if err := w.fold(it, m); err != nil {
+			return "", nil, err
+		}
 	}
 	e := agentsession.NewItemEntry(it)
 	e.Timestamp = m.Time
@@ -524,6 +537,45 @@ func (w *walk) compaction(summary openresponses.Item, m *hermes.Message) (string
 		sc.addf(agentimport.Gap, "agentimport/fold-head", p.row.Unit, "Hermes' compacted context starts with the head it protected, copied before the summary: the compaction's summary is the head's first item, verbatim, and the summary row follows it")
 	}
 	return id, nil
+}
+
+// fold starts a generation whose first item is no message: every item
+// in context is left out by omit, and the item follows as an entry.
+func (w *walk) fold(it openresponses.Item, m *hermes.Message) error {
+	sc := w.sc
+	p := w.pending
+	w.pending = nil
+	ctx, err := sc.b.S.ContextAt(sc.at)
+	if err != nil {
+		return err
+	}
+	var ids []string
+	seen := map[string]bool{}
+	held := false
+	for _, e := range ctx.ItemEntries {
+		ie, ok := e.(*agentsession.ItemEntry)
+		if !ok {
+			held = true
+			continue
+		}
+		if !seen[ie.ID] {
+			seen[ie.ID] = true
+			ids = append(ids, ie.ID)
+		}
+	}
+	if len(ids) > 0 {
+		cfg := &agentsession.ConfigEntry{Omit: &agentsession.Omit{Items: ids}}
+		cfg.Timestamp = m.Time
+		if _, err := sc.append(cfg); err != nil {
+			return err
+		}
+	}
+	what := "an in-place compaction whose first item is a " + it.ItemType() + ", of which no summary can be made: the items before it are left out by omit"
+	if held {
+		what += "; an earlier compaction's summary, which omit cannot reach, stays in context"
+	}
+	sc.addf(agentimport.Lossy, "hermes/compaction", p.row.Unit, "%s", what)
+	return nil
 }
 
 // keepNone returns the entry a compaction that keeps nothing before it

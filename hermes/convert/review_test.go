@@ -595,3 +595,41 @@ func TestRowsReleased(t *testing.T) {
 		_ = res
 	}
 }
+
+// TestGenerationStart (F17): a generation whose first item is a call
+// starts with no summary item made of it, the call keeps its entry,
+// and a generation whose first row makes no item does not start on a
+// branch of rows out of context.
+func TestGenerationStart(t *testing.T) {
+	res := convertScript(t, `
+INSERT INTO sessions (id, source, model, started_at) VALUES ('g1', 'cli', 'm', 1760000000.0), ('g2', 'telegram', 'm', 1760000000.0);
+INSERT INTO messages (session_id, role, content, tool_calls, tool_call_id, timestamp, active, compacted) VALUES
+  ('g1', 'user', 'old', NULL, NULL, 1760000001.0, 0, 1),
+  ('g1', 'assistant', 'old answer', NULL, NULL, 1760000002.0, 0, 1),
+  ('g1', 'assistant', '', '[{"id":"c","call_id":"c","type":"function","function":{"name":"x","arguments":"{}"}}]', NULL, 1760000003.0, 1, 0),
+  ('g1', 'tool', '{"error":"BLOCKED: User denied this. The user has NOT consented to this action."}', NULL, 'c', 1760000004.0, 1, 0),
+  ('g1', 'user', 'next', NULL, NULL, 1760000005.0, 1, 0),
+  ('g2', 'user', 'old', NULL, NULL, 1760000001.0, 0, 1),
+  ('g2', 'assistant', 'old answer', NULL, NULL, 1760000002.0, 0, 1),
+  ('g2', 'session_meta', NULL, NULL, NULL, 1760000003.0, 1, 0),
+  ('g2', 'assistant', 'rewound', NULL, NULL, 1760000004.0, 0, 0),
+  ('g2', 'user', 'next', NULL, NULL, 1760000005.0, 1, 0);
+`, Options{})
+	g1 := sessionOf(t, res, "g1")
+	sameLines(t, "g1 leaf", leaf(t, g1), []string{"call c x", `output c {"error":"BLOCKED: User denied this. The user has `, "user: next"})
+	for _, e := range g1.Entries() {
+		if c, ok := e.(*agentsession.CompactionEntry); ok {
+			if _, isMsg := c.Summary.(*openresponses.Message); !isMsg {
+				t.Errorf("a compaction's summary is a %s", c.Summary.ItemType())
+			}
+		}
+		if d, ok := e.(*agentsession.DecisionEntry); ok {
+			if target, ok := g1.Entry(d.Target); !ok {
+				t.Error("the decision names no entry")
+			} else if _, isItem := target.(*agentsession.ItemEntry); !isItem {
+				t.Errorf("the decision names a %s", target.EntryType())
+			}
+		}
+	}
+	sameLines(t, "g2 leaf", leaf(t, sessionOf(t, res, "g2")), []string{"user: next"})
+}
