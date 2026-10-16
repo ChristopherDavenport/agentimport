@@ -427,33 +427,58 @@ func (c *conv) critic(i int, at string, raw json.RawMessage, target string) (str
 
 // batchOf returns the actions of the response event i starts: it and
 // the actions of the same llm_response_id that follow it on its chain,
-// past the outputs written between them. split says an output came
-// between two of them.
-func (c *conv) batchOf(i int) (batch []int, split bool) {
+// past the outputs written between them and the events that never
+// enter the view, a state update or a hook's record, which OpenHands'
+// view does not hold, so it sends the actions as one message. split
+// says an output came between two of them, and first is how many
+// actions precede the first such output, the group OpenHands sends as
+// one message.
+func (c *conv) batchOf(i int) (batch []int, split bool, first int) {
 	resp := c.info[i].respID
 	batch = []int{i}
+	first = 1
 	calls := map[string]bool{c.info[i].toolCallID: true}
+	// onChain holds the events the chain from i runs through; an
+	// artifact stamped with a parent is off it, as its parent's later
+	// children are not its own.
+	onChain := map[int]bool{i: true}
 	between := false
 	for j := i + 1; j < len(c.c.Events); j++ {
-		if c.parent[j] != j-1 || c.c.Events[j].Err != nil || c.info[j].bad != nil {
+		if !onChain[c.parent[j]] {
+			if c.treeArtifact(j) {
+				continue
+			}
 			break
 		}
 		in := c.info[j]
-		if in.kind == openhands.KindAction && in.respID == resp && resp != "" {
+		e := c.c.Events[j]
+		switch {
+		case e.Err != nil:
+			onChain[j] = true
+			continue
+		case c.treeArtifact(j):
+			continue
+		case in.bad == nil && in.kind == openhands.KindAction && in.respID == resp && resp != "":
 			batch = append(batch, j)
 			calls[in.toolCallID] = true
 			if between {
 				split = true
+			} else {
+				first++
 			}
+			onChain[j] = true
 			continue
-		}
-		if openhands.IsObservationLike(in.kind) && calls[in.toolCallID] {
+		case in.bad == nil && openhands.IsObservationLike(in.kind) && calls[in.toolCallID]:
 			between = true
+			onChain[j] = true
+			continue
+		case !openhands.InContext(in.kind) && in.kind != openhands.KindCondensation && in.kind != openhands.KindCondensationRequest:
+			onChain[j] = true
 			continue
 		}
 		break
 	}
-	return batch, split
+	return batch, split, first
 }
 
 // action writes a response of tool calls: the first action's reasoning
@@ -466,7 +491,7 @@ func (c *conv) action(i int) error {
 	if at, err = c.reconcile(i, at, nil); err != nil {
 		return err
 	}
-	batch, split := c.batchOf(i)
+	batch, split, _ := c.batchOf(i)
 	if split {
 		c.at(agentimport.Lossy, "openhands/split-batch", i, "an output was written between the calls of this response, as for an unknown tool; OpenHands sends the response as several assistant messages around it, the session as one response before the outputs")
 	}

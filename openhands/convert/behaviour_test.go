@@ -1,10 +1,14 @@
 package convert
 
 import (
+	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/ChristopherDavenport/agentimport"
+	"github.com/ChristopherDavenport/agentimport/internal/doccheck"
 	"github.com/ChristopherDavenport/agentimport/openhands"
 	"github.com/ChristopherDavenport/agentsession"
 )
@@ -116,5 +120,89 @@ func TestParentByFileName(t *testing.T) {
 	}
 	if codes["openhands/parent-missing"] || !codes["openhands/id-mismatch"] {
 		t.Errorf("codes %v: want the parent resolved by its file name and the mismatch reported", res.Report.Codes())
+	}
+}
+
+// convertEvents converts a conversation of the events given, in order.
+func convertEvents(t *testing.T, state string, events ...string) *agentimport.Result {
+	t.Helper()
+	files := map[string][]byte{}
+	if state != "" {
+		files[openhands.FileBaseState] = []byte(state)
+	}
+	for k, e := range events {
+		var id struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal([]byte(e), &id); err != nil {
+			t.Fatalf("event %d: %v", k, err)
+		}
+		files[fmt.Sprintf("events/event-%05d-%s.json", k, id.ID)] = []byte(e)
+	}
+	c := openhands.Parse("0123456789abcdef0123456789abcdef", files)
+	res, err := Convert(c, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := res.Report.Lines(), c.Units(); got != want {
+		t.Errorf("the report accounts for %d units; the conversation holds %d", got, want)
+	}
+	doccheck.Check(t, Source, res.Report)
+	return res
+}
+
+// ev builds an event's JSON: its envelope and members.
+func ev(kind, id, parent string, members string) string {
+	p := ""
+	if parent != "" {
+		p = `,"parent_id":"` + parent + `"`
+	}
+	if members != "" {
+		members = "," + members
+	}
+	return `{"kind":"` + kind + `","id":"` + id + `","timestamp":"2026-01-01T00:00:00","source":"agent"` + p + members + `}`
+}
+
+func userEv(id, parent, text string) string {
+	return ev("MessageEvent", id, parent, `"llm_message":{"role":"user","content":[{"type":"text","text":"`+text+`"}]}`)
+}
+
+func actionEv(id, parent, call, resp string, extra string) string {
+	m := `"thought":[],"action":{"kind":"TerminalAction","command":"ls"},"tool_name":"terminal","tool_call_id":"` + call + `","tool_call":{"id":"` + call + `","name":"terminal","arguments":"{}","origin":"completion"},"llm_response_id":"` + resp + `"`
+	if extra != "" {
+		m += "," + extra
+	}
+	return ev("ActionEvent", id, parent, m)
+}
+
+func obsEv(id, parent, call, text string) string {
+	return ev("ObservationEvent", id, parent, `"tool_name":"terminal","tool_call_id":"`+call+`","action_id":"x","observation":{"kind":"TerminalObservation","content":[{"type":"text","text":"`+text+`"}],"metadata":{"exit_code":-1}}`)
+}
+
+// responses lists the response entries of a session by response ID.
+func responses(s *agentsession.Session) []string {
+	var out []string
+	for _, e := range s.Entries() {
+		if r, ok := e.(*agentsession.ResponseEntry); ok {
+			out = append(out, r.ResponseID)
+		}
+	}
+	return out
+}
+
+// TestBatchPastRecords keeps the actions of one response together when
+// an event the view never holds, a state update, is written between
+// them.
+func TestBatchPastRecords(t *testing.T) {
+	res := convertEvents(t, "",
+		userEv("e0000000", "", "go"),
+		actionEv("e1000000", "e0000000", "c1", "r1", ""),
+		ev("ConversationStateUpdateEvent", "e2000000", "e1000000", `"key":"stats","value":{}`),
+		actionEv("e3000000", "e1000000", "c2", "r1", ""),
+		obsEv("e4000000", "e3000000", "c1", "one"),
+		obsEv("e5000000", "e4000000", "c2", "two"),
+	)
+	if got := responses(res.Sessions[0]); len(got) != 1 || got[0] != "r1" {
+		t.Errorf("responses %v, want r1 alone", got)
 	}
 }
