@@ -32,18 +32,6 @@ type Row struct {
 	Unit string
 }
 
-// SpawnRequest is a row of Cline's spawn queue: the task of a
-// spawn_agent call, queued when the call started and claimed by the
-// sub-agent it spawned.
-type SpawnRequest struct {
-	ID            int64
-	RootSessionID string
-	ParentAgentID string
-	Task          string
-	CreatedAt     string
-	ConsumedAt    string
-}
-
 // Index is Cline's index of its sessions, read for one root session
 // and its children.
 type Index interface {
@@ -52,20 +40,15 @@ type Index interface {
 	// Family returns the rows of root and of every session whose
 	// parent is root, or whose ID starts with root and "__".
 	Family(root string) ([]*Row, error)
-	// SpawnRequests returns the spawn queue's rows for root, in the
-	// order they were queued.
-	SpawnRequests(root string) ([]*SpawnRequest, error)
 	// Close releases the index.
 	Close() error
 }
 
-// FileIndex is sessions.index.json and subagent-spawn-queue.json, the
-// index Cline keeps in the sessions directory when it cannot open
-// SQLite. It implements Index.
+// FileIndex is sessions.index.json, the index Cline keeps in the
+// sessions directory when it cannot open SQLite. It implements Index.
 type FileIndex struct {
-	name  string
-	rows  map[string]*Row
-	queue []*SpawnRequest
+	name string
+	rows map[string]*Row
 }
 
 // fileRow is an entry of sessions.index.json: Cline's SessionRow.
@@ -85,8 +68,8 @@ type fileRow struct {
 	Metadata        json.RawMessage `json:"metadata"`
 }
 
-// ReadFileIndex reads sessions.index.json, and subagent-spawn-queue.json
-// beside it when there is one. An entry that does not read is skipped.
+// ReadFileIndex reads sessions.index.json. An entry that does not read
+// is skipped.
 func ReadFileIndex(path string) (*FileIndex, error) {
 	data, err := readLimited(path)
 	if err != nil {
@@ -115,24 +98,6 @@ func ReadFileIndex(path string) (*FileIndex, error) {
 			MessagesPath: deref(r.MessagesPath), Metadata: r.Metadata, Unit: FileIndexName + ":" + r.SessionID,
 		}
 	}
-	queuePath := strings.TrimSuffix(path, FileIndexName) + FileSpawnQueue
-	if data, err := readLimited(queuePath); err == nil {
-		var q struct {
-			Requests []struct {
-				ID            int64  `json:"id"`
-				RootSessionID string `json:"rootSessionId"`
-				ParentAgentID string `json:"parentAgentId"`
-				Task          string `json:"task"`
-				CreatedAt     string `json:"createdAt"`
-				ConsumedAt    string `json:"consumedAt"`
-			} `json:"requests"`
-		}
-		if json.Unmarshal(data, &q) == nil {
-			for _, r := range q.Requests {
-				ix.queue = append(ix.queue, &SpawnRequest{ID: r.ID, RootSessionID: r.RootSessionID, ParentAgentID: r.ParentAgentID, Task: r.Task, CreatedAt: r.CreatedAt, ConsumedAt: r.ConsumedAt})
-			}
-		}
-	}
 	return ix, nil
 }
 
@@ -155,18 +120,6 @@ func (ix *FileIndex) Family(root string) ([]*Row, error) {
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].SessionID < out[j].SessionID })
-	return out, nil
-}
-
-// SpawnRequests returns root's spawn requests, in queue order.
-func (ix *FileIndex) SpawnRequests(root string) ([]*SpawnRequest, error) {
-	var out []*SpawnRequest
-	for _, r := range ix.queue {
-		if r.RootSessionID == root {
-			out = append(out, r)
-		}
-	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out, nil
 }
 

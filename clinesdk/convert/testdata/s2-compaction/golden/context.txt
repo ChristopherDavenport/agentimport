@@ -1,0 +1,7 @@
+session 0 1759316400000_cmp01
+  model: claude-x
+  user: Context summary: …
+  output c2 Created /work/proj/lex.go
+  assistant: Lexer split; now the parser tests.
+  user: Go on
+  assistant: Tests updated.

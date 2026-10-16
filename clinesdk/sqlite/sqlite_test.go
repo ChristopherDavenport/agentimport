@@ -48,10 +48,6 @@ func TestFamily(t *testing.T) {
 		if byID["1759327200000_sub01__agent_9"] != "agent_8" {
 			t.Errorf("agent_9's parent agent is %q", byID["1759327200000_sub01__agent_9"])
 		}
-		reqs, err := db.SpawnRequests("1759327200000_sub01")
-		if err != nil || len(reqs) != 2 || reqs[0].Task != "Survey the lexer" {
-			t.Errorf("requests %+v, %v", reqs, err)
-		}
 		if err := db.Close(); err != nil {
 			t.Fatal(err)
 		}

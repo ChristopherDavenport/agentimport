@@ -1,0 +1,23 @@
+session 0 1759363200000_tm001
+  request of resp_2:
+    user: Get the tests written and run
+  request of resp_4:
+    user: Get the tests written and run
+    call call_a team_run_task
+    output call_a {"agentId":"tester","mode":"async","status":"queue
+  request of resp_6:
+    user: Get the tests written and run
+    call call_a team_run_task
+    output call_a {"agentId":"tester","mode":"async","status":"queue
+    call call_b team_run_task
+    output call_b {"agentId":"tester","mode":"sync","status":"runnin
+session 1 1759363200000_tm001__teamtask__tester__Xa1b2C
+  request of resp_2:
+    user: Write the tests
+session 2 1759363200000_tm001__teamtask__tester__Yc3d4E
+  request of resp_2:
+    user: Write the tests
+  request of resp_4:
+    user: Write the tests
+    assistant: Tests written.
+    user: Run the tests

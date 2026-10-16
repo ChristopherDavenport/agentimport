@@ -1,0 +1,18 @@
+session 0 1759363200000_tm001
+  model: claude-x
+  user: Get the tests written and run
+  call call_a team_run_task
+  output call_a {"agentId":"tester","mode":"async","status":"queue
+  call call_b team_run_task
+  output call_b {"agentId":"tester","mode":"sync","status":"runnin
+  assistant: Tests written and passing.
+session 1 1759363200000_tm001__teamtask__tester__Xa1b2C
+  model: claude-x
+  user: Write the tests
+  assistant: Tests written.
+session 2 1759363200000_tm001__teamtask__tester__Yc3d4E
+  model: claude-x
+  user: Write the tests
+  assistant: Tests written.
+  user: Run the tests
+  assistant: All pass.

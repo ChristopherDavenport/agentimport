@@ -253,11 +253,7 @@ func TestFileIndex(t *testing.T) {
 	dir := t.TempDir()
 	index := `{"version":1,"sessions":{"r":{"sessionId":"r","source":"cli","startedAt":"2026-10-01T10:00:00Z","status":"completed","isSubagent":false},
 "r__a":{"sessionId":"r__a","parentSessionId":"r","parentAgentId":"lead","agentId":"a","isSubagent":true,"prompt":"Do"},"x":{"sessionId":"x"},"bad":7}}`
-	queue := `{"version":1,"nextId":2,"requests":[{"id":1,"rootSessionId":"r","parentAgentId":"lead","task":"Do","createdAt":"t"}]}`
 	if err := os.WriteFile(filepath.Join(dir, FileIndexName), []byte(index), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, FileSpawnQueue), []byte(queue), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	ix, err := OpenFileIndex(filepath.Join(dir, FileIndexName))
@@ -267,9 +263,5 @@ func TestFileIndex(t *testing.T) {
 	rows, _ := ix.Family("r")
 	if len(rows) != 2 || rows[1].ParentAgentID != "lead" || rows[1].Prompt != "Do" {
 		t.Errorf("rows %+v", rows)
-	}
-	reqs, _ := ix.SpawnRequests("r")
-	if len(reqs) != 1 || reqs[0].Task != "Do" {
-		t.Errorf("requests %+v", reqs)
 	}
 }

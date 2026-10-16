@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "updated_at": "2025-10-02T00:00:06.000Z",
+  "agent": "teammate",
+  "sessionId": "1759363200000_tm001__teamtask__tester__Xa1b2C",
+  "taskType": "team",
+  "origin": {
+    "source": "cli",
+    "mode": "team",
+    "sessionId": "1759363200000_tm001__teamtask__tester__Xa1b2C",
+    "parentThreadId": "1759363200000_tm001",
+    "version": "4.1.20"
+  },
+  "messages": [
+    {
+      "id": "k0",
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Write the tests"
+        }
+      ],
+      "ts": 1759363202000
+    },
+    {
+      "id": "k1",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Tests written."
+        }
+      ],
+      "ts": 1759363205000,
+      "modelInfo": {
+        "id": "claude-x",
+        "provider": "anthropic"
+      },
+      "metrics": {
+        "inputTokens": 400,
+        "outputTokens": 30,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 400,
+        "cost": 0.002
+      }
+    }
+  ]
+}

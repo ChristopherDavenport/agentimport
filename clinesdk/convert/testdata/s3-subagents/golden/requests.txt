@@ -1,0 +1,33 @@
+session 0 1759327200000_sub01
+  request of resp_2:
+    user: Plan the refactor with helpers
+  request of resp_5:
+    user: Plan the refactor with helpers
+    call call_s1 spawn_agent
+    call call_s2 spawn_agent
+    output call_s1 {"text":"Lexer surveyed.","iterations":2,"finishRe
+    output call_s2 {"text":"Parser surveyed.","iterations":2,"finishR
+  request of resp_7:
+    user: Plan the refactor with helpers
+    call call_s1 spawn_agent
+    call call_s2 spawn_agent
+    output call_s1 {"text":"Lexer surveyed.","iterations":2,"finishRe
+    output call_s2 {"text":"Parser surveyed.","iterations":2,"finishR
+    call call_t1 team_run_task
+    output call_t1 {"agentId":"reviewer","mode":"async","status":"que
+session 1 2c37d98f-eb28-5383-8320-795f92e8e898
+  request of resp_2:
+    user: Survey the lexer
+session 2 0e59d383-8943-5f66-9867-beec8eb733f4
+  request of resp_2:
+    user: Survey the parser
+  request of resp_4:
+    user: Survey the parser
+    call call_n1 spawn_agent
+    output call_n1 {"text":"Grammar surveyed.","iterations":2,"finish
+session 3 6b74fbe8-64d7-58ca-a604-d8f2e3491e7f
+  request of resp_2:
+    user: Survey the grammar
+session 4 1759327200000_sub01__teamtask__reviewer__Ab3dE9
+  request of resp_2:
+    user: Review the plan

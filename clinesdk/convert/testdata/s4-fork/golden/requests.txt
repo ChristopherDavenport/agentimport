@@ -1,0 +1,20 @@
+session 0 1759334400000_src01
+  request of resp_2:
+    user: Write a README
+  request of resp_4:
+    user: Write a README
+    call w1 editor
+    output w1 Created /work/proj/README.md
+session 1 1759338000000_frk01
+  request of resp_2:
+    user: Write a README
+  request of resp_4:
+    user: Write a README
+    call w1 editor
+    output w1 Created /work/proj/README.md
+  request of resp_6:
+    user: Write a README
+    call w1 editor
+    output w1 Created /work/proj/README.md
+    assistant: README written.
+    user: Now add a usage section

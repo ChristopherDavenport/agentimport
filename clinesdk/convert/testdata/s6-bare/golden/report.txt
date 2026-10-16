@@ -1,0 +1,6 @@
+clinesdk: 3 files and elements: mapped 3 kept 0 dropped 0 malformed 0
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  lossy    clinesdk/no-response-id                           1  Cline records no response ID; the response is resp_2 (at 1759348800000_old01.messages.json:2)
+  lossy    clinesdk/no-stop-reason                           1  Cline records no stop reason; every response is completed
+  lossy    clinesdk/no-system-prompt                         1  the history holds no system prompt; the settings carry the model alone
+  lossy    clinesdk/version                                  1  the file is a bare array of messages, as Cline wrote before its messages file had a version

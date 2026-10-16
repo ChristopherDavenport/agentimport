@@ -1,6 +1,6 @@
-// Package sqlite reads Cline's session index, sessions.db: the sessions
-// table, which alone records which agent spawned a sub-agent, and the
-// spawn queue, yielding them as the clinesdk package's types. It reads
+// Package sqlite reads Cline's session index, sessions.db: its sessions
+// table, which alone records which agent spawned a sub-agent, yielding
+// its rows as the clinesdk package's. It reads
 // a private copy of the database and its write-ahead log, never the
 // database in place (internal/sqlite), so it neither writes beside a
 // database Cline holds open in WAL mode nor waits on its locks. It is
@@ -29,7 +29,6 @@ type DB struct {
 	name    string
 	c       *isqlite.Copy
 	columns map[string]bool
-	queue   bool
 }
 
 // Open copies the database at path and opens the copy. Close removes
@@ -57,7 +56,6 @@ func Open(path string) (*DB, error) {
 		c.Close()
 		return nil, ErrNotCline
 	}
-	d.queue = tables["subagent_spawn_queue"]
 	return d, nil
 }
 
@@ -119,25 +117,6 @@ func (d *DB) Family(root string) ([]*clinesdk.Row, error) {
 		}
 		row.Unit = d.name + ":sessions/" + row.SessionID
 		out = append(out, row)
-	}
-	return out, nil
-}
-
-// SpawnRequests returns the spawn queue's rows for root, in the order
-// they were queued.
-func (d *DB) SpawnRequests(root string) ([]*clinesdk.SpawnRequest, error) {
-	if !d.queue {
-		return nil, nil
-	}
-	rows, err := d.c.Query("SELECT id, root_session_id, parent_agent_id, task, created_at, consumed_at FROM subagent_spawn_queue WHERE root_session_id = ? ORDER BY id", root)
-	if err != nil {
-		return nil, fmt.Errorf("read subagent_spawn_queue: %w", err)
-	}
-	out := make([]*clinesdk.SpawnRequest, 0, len(rows))
-	for _, r := range rows {
-		id, _ := r.Int("id")
-		out = append(out, &clinesdk.SpawnRequest{ID: id, RootSessionID: r.String("root_session_id"), ParentAgentID: r.String("parent_agent_id"),
-			Task: r.String("task"), CreatedAt: r.String("created_at"), ConsumedAt: r.String("consumed_at")})
 	}
 	return out, nil
 }

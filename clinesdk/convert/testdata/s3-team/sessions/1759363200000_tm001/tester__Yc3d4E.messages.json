@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "updated_at": "2025-10-02T00:00:14.500Z",
+  "agent": "teammate",
+  "sessionId": "1759363200000_tm001__teamtask__tester__Yc3d4E",
+  "taskType": "team",
+  "origin": {
+    "source": "cli",
+    "mode": "team",
+    "sessionId": "1759363200000_tm001__teamtask__tester__Yc3d4E",
+    "parentThreadId": "1759363200000_tm001",
+    "version": "4.1.20"
+  },
+  "messages": [
+    {
+      "id": "k0",
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Write the tests"
+        }
+      ],
+      "ts": 1759363202000
+    },
+    {
+      "id": "k1",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Tests written."
+        }
+      ],
+      "ts": 1759363205000,
+      "modelInfo": {
+        "id": "claude-x",
+        "provider": "anthropic"
+      },
+      "metrics": {
+        "inputTokens": 400,
+        "outputTokens": 30,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 400,
+        "cost": 0.002
+      }
+    },
+    {
+      "id": "k2",
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Run the tests"
+        }
+      ],
+      "ts": 1759363210000
+    },
+    {
+      "id": "k3",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "All pass."
+        }
+      ],
+      "ts": 1759363214000,
+      "modelInfo": {
+        "id": "claude-x",
+        "provider": "anthropic"
+      },
+      "metrics": {
+        "inputTokens": 600,
+        "outputTokens": 10,
+        "cacheReadTokens": 400,
+        "cacheWriteTokens": 200,
+        "cost": 0.001
+      }
+    }
+  ]
+}

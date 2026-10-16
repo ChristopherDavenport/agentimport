@@ -1,0 +1,15 @@
+session 0 1759330800000_sub02
+  request of resp_2:
+    user: Plan the refactor with helpers
+  request of resp_5:
+    user: Plan the refactor with helpers
+    call call_s1 spawn_agent
+    call call_s2 spawn_agent
+    output call_s1 {"text":"Lexer surveyed.","iterations":2,"finishRe
+    output call_s2 {"text":"Parser surveyed.","iterations":2,"finishR
+session 1 1759330800000_sub02__agent_a
+  request of resp_2:
+    user: Check the build
+session 2 1759330800000_sub02__agent_b
+  request of resp_2:
+    user: Check the build

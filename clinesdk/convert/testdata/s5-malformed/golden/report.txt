@@ -1,0 +1,20 @@
+clinesdk: 13 files and elements: mapped 7 kept 2 dropped 1 malformed 3
+  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  dropped  clinesdk/file-unread                              1  a file of the session directory the converter does not read
+  dropped  clinesdk/null-block                               2  a content block that is not an object is left out (at 1759345200000_bad01.messages.json:4, 1759345200000_bad01.messages.json:5)
+  lossy    clinesdk/empty-message                            2  a message with no content; Cline sends "ERROR: EMPTY CONTENT" in its place (at 1759345200000_bad01.messages.json:9, 1759345200000_bad01.messages.json:10)
+  lossy    clinesdk/invalid-input                            1  a tool_use input that is not a JSON object is recorded as its JSON text (at 1759345200000_bad01.messages.json:5)
+  lossy    clinesdk/no-response-id                           2  Cline records no response ID; the response is resp_5 (at 1759345200000_bad01.messages.json:5, 1759345200000_bad01.messages.json:10)
+  lossy    clinesdk/no-stop-reason                           1  Cline records no stop reason; every response is completed
+  lossy    clinesdk/no-system-prompt                         1  the history holds no system prompt; the settings carry the model alone
+  lossy    clinesdk/orphan-result                            1  a tool result for zz, which no call before it made or another result answered, is a custom entry; Cline sends it as written (at 1759345200000_bad01.messages.json:6)
+  lossy    clinesdk/request-projection                       1  Cline checks each request's images against its media budget, and a model without image input gets a placeholder; the images are written as stored (at 1759345200000_bad01.messages.json:7)
+  lossy    clinesdk/user-input                               1  Cline sends a user's text trimmed and without its <user_input> or <user_command> wrapper, which names the mode; the item holds the text sent, the block as written is clinesdk:original (at 1759345200000_bad01.messages.json:4)
+  lossy    clinesdk/version                                  1  the messages file's version is 2, not 1; it is read as version 1
+  kept     clinesdk/content-malformed                        1  a message whose content is neither text nor blocks, which Cline cannot send, is a custom entry (at 1759345200000_bad01.messages.json:3)
+  kept     clinesdk/extension-item                           1  a weird block is a cline.weird item (at 1759345200000_bad01.messages.json:5)
+  kept     clinesdk/members                                  1  the text block's members the session has no place for are clinesdk:block (at 1759345200000_bad01.messages.json:5)
+  kept     clinesdk/stale-compaction                         1  Cline does not apply the sidecar to the history (Cline refuses the sidecar: the file is cut short or broken after its last whole member); it is a custom entry after the last message
+  kept     clinesdk/unknown-role                             1  a message of role "system", which Cline does not send, is a custom entry (at 1759345200000_bad01.messages.json:8)
+  repaired clinesdk/malformed                                2  an element that is not a message is skipped: an element that is not an object (at 1759345200000_bad01.messages.json:1, 1759345200000_bad01.messages.json:2)
+  repaired clinesdk/malformed-file                           1  the file is cut short or broken after its last whole member

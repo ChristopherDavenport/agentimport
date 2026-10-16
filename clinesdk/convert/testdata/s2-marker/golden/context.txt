@@ -1,0 +1,5 @@
+session 0 1759356000000_cmp04
+  model: claude-x
+  user: Context summary: …
+  user: Continue after the compaction
+  assistant: Continuing.

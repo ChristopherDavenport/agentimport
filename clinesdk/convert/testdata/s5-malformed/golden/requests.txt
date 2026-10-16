@@ -1,0 +1,10 @@
+session 0 1759345200000_bad01
+  request of resp_5:
+    user: Go
+  request of resp_10:
+    user: Go
+    call c1 shell
+    cline.weird
+    assistant: x
+    output c1 ok
+    user: ERROR: EMPTY CONTENT

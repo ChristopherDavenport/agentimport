@@ -483,7 +483,6 @@ func IndexPaths(sessionDir string) (database, fileIndex string) {
 
 // Names of Cline's index files.
 const (
-	DatabaseName   = "sessions.db"
-	FileIndexName  = "sessions.index.json"
-	FileSpawnQueue = "subagent-spawn-queue.json"
+	DatabaseName  = "sessions.db"
+	FileIndexName = "sessions.index.json"
 )

@@ -13,6 +13,13 @@
   "enable_tools": true,
   "enable_spawn": false,
   "enable_teams": false,
-  "metadata": {},
+  "metadata": {
+    "importedFrom": {
+      "tool": "claude-code",
+      "sourceSessionId": "0b1e5c2a-0000-4000-8000-000000000001",
+      "sourcePath": "/home/u/.claude/projects/p/0b1e5c2a.jsonl",
+      "importedAt": "2025-10-01T12:59:59.000Z"
+    }
+  },
   "messages_path": "/home/u/.cline/data/sessions/1759323600000_cmp03/1759323600000_cmp03.messages.json"
 }
