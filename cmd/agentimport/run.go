@@ -201,9 +201,10 @@ func (r *runner) plan(ins []input) (first []input, wait []planned) {
 // other held converts on its own.
 func planATIF(ins []input) (rest []input, named []planned) {
 	names := map[string]bool{}
+	var index atifconvert.Index
 	for _, in := range ins {
 		if in.source.name == atifconvert.Source {
-			for _, p := range atifconvert.Related(in.path) {
+			for _, p := range index.Related(in.path) {
 				names[p] = true
 			}
 		}

@@ -357,6 +357,21 @@ func realPath(p string) string {
 // ConvertFile would convert with it, those inside its directory. It
 // reads each file once and stops at a cycle.
 func Related(path string) []string {
+	return new(Index).Related(path)
+}
+
+// Index lists related files as Related does, reading each file once
+// across every call, so listing those of many inputs (a continuation
+// chain given file by file) parses each document once rather than once
+// per input naming it. The zero value is ready to use; it is not safe
+// for concurrent use.
+type Index struct {
+	names map[string][]string
+}
+
+// Related is the package's Related, with what each file names read
+// once per Index.
+func (x *Index) Related(path string) []string {
 	root := realPath(filepath.Dir(path))
 	seen := map[string]bool{realPath(path): true}
 	var out []string
@@ -364,11 +379,7 @@ func Related(path string) []string {
 	for len(queue) > 0 {
 		p := queue[0]
 		queue = queue[1:]
-		f, err := atif.ReadFile(p)
-		if err != nil || f.Doc == nil {
-			continue
-		}
-		for _, n := range atif.Names(f.Doc, filepath.Dir(p)) {
+		for _, n := range x.named(p) {
 			real := realPath(n)
 			rel, err := filepath.Rel(root, real)
 			if seen[real] || err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
@@ -383,4 +394,23 @@ func Related(path string) []string {
 		}
 	}
 	return out
+}
+
+// named returns the paths the document at p names, read once.
+func (x *Index) named(p string) []string {
+	// Names resolve against the directory the path is in, which a
+	// symbolic link can make another than the real file's.
+	key := realPath(p) + "\x00" + filepath.Dir(p)
+	if n, ok := x.names[key]; ok {
+		return n
+	}
+	var n []string
+	if f, err := atif.ReadFile(p); err == nil && f.Doc != nil {
+		n = atif.Names(f.Doc, filepath.Dir(p))
+	}
+	if x.names == nil {
+		x.names = map[string][]string{}
+	}
+	x.names[key] = n
+	return n
 }

@@ -256,3 +256,32 @@ func TestCodexProfile(t *testing.T) {
 		t.Errorf("%d entries marked custom, want the call and its output", n)
 	}
 }
+
+// TestIndexReadsOnce checks that an Index reads each file once across
+// calls: a file changed after the first call is listed as first read.
+func TestIndexReadsOnce(t *testing.T) {
+	dir := t.TempDir()
+	chain := map[string]string{"a.json": "b.json", "b.json": "c.json", "c.json": ""}
+	for name, next := range chain {
+		doc := `{"schema_version":"ATIF-v1.7","steps":[]`
+		if next != "" {
+			doc += `,"continued_trajectory_ref":"` + next + `"`
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(doc+"}"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var x Index
+	if got := x.Related(filepath.Join(dir, "a.json")); len(got) != 2 {
+		t.Fatalf("related = %v", got)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "b.json"), []byte(`{"schema_version":"ATIF-v1.7","steps":[]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := x.Related(filepath.Join(dir, "b.json")); len(got) != 1 {
+		t.Errorf("b.json was read again: related = %v", got)
+	}
+	if got := Related(filepath.Join(dir, "b.json")); len(got) != 0 {
+		t.Errorf("a fresh read lists %v", got)
+	}
+}
