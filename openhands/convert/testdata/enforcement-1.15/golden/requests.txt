@@ -1,4 +1,4 @@
-session 0 00000008-0000-4000-9000-000000000001
+session 0 00000008-0000-4000-9000-000000000002
   request of msg_l1:
     user: Investigate the flaky test.
   request of msg_l2:

@@ -1,4 +1,4 @@
-session 0 00000008-0000-4000-9000-000000000001
+session 0 00000008-0000-4000-9000-000000000002
   instructions: You are a careful coding agent.
   user: Investigate the flaky test.
   user: Stop that and summarise.
