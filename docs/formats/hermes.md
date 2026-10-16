@@ -293,7 +293,7 @@ session row.
 | `model`, system prompt | the first `config`: `model`, `instructions` from `system_prompts` by hash, else the row's column; `model_config` in `hermes:model_config` |
 | `title` | `info` name |
 | `git_branch`, `git_repo_root` | `env` with `vcs.system` git, the branch in `vcs.hermes:branch`, the root in `hermes:repo_root` |
-| user row | `message` item, role user; `visible: false` for `display_kind` hidden or `display_metadata.model_only` |
+| user row | `message` item, role user; `visible: false` for `display_kind` hidden or `display_metadata.model_only`; a delegation's delivered report has `source` kind `delegation`, `ref` its `display_metadata.delegation_id` |
 | system row | `message` item, role system, where it stands |
 | assistant row | reasoning items, a `message` item, `function_call` items, then a `response` (`response_id` `row-<id>`); `finish_reason` length or content_filter make it incomplete |
 | tool row | `function_call_output` item of the call its `tool_call_id` names |
@@ -423,6 +423,19 @@ finding:
   child's answer arrives later as a user row naming the delegation. A
   task of the handle's `inline_results`, which ran inline before the
   call returned, is a subsession.
+- That delivered report (a user row whose `display_metadata` names a
+  `delegation_id`, written by `persist_delegation_delivery` or the
+  TUI's `_async_delegation_display_metadata`) names its delegation in
+  the item's `source` trigger: `kind` `delegation`, `ref` the
+  delegation ID, the same one the `peer` link's `hermes:delegation_id`
+  carries (a unit's ID, for a handle of several units), `source`
+  `hermes`, and the row's other facts about the arrival
+  (`task_count`, `completed_count`, `failed_count`,
+  `duration_seconds`, `delivery_notice`, `notification_category`) as
+  the trigger's own members. The members that say how to show the row
+  (`display_text`, `presentation_suppressed`, `model_only`) are not
+  the trigger's; the whole `display_metadata` stays in
+  `hermes:columns`.
 - Any other call waited for its children: each is a **subsession**,
   linked before the output, which names the children's leaves in
   `parents`. A call's only child takes the session ID derived from the
@@ -460,7 +473,7 @@ finding:
 | `hermes/continuation` | lossy | A compression continued the session in a child: a `continued_in` link. |
 | `hermes/copied-row` | lossy | An assistant row Hermes copied (a compaction's head or tail, a continuation's, a branch's): a response entry marked `hermes:copied`, the model call of the turn it copies. |
 | `hermes/created-at` | lossy | The session row has no start time Hermes accepts; `created_at` is its first message's. |
-| `hermes/delegation-delivery` | kept | A background delegation's result, delivered as a user message; its delegation is in the row's columns. |
+| `hermes/delegation-delivery` | kept | A background delegation's result, delivered as a user message; the item's `source` names the delegation in `ref`, the delegation ID the `peer` link's `hermes:delegation_id` carries. |
 | `hermes/denial-text` | lossy | An output carrying the approval gate's refusal; a reject decision, told by the text. |
 | `hermes/display-index` | dropped | `display_identity` and `display_order`, the display index Hermes derives from a row's other columns, are not kept. |
 | `hermes/duplicate-session` | dropped | A second row of one session ID. |

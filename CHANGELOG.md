@@ -23,7 +23,9 @@ versions may break the API.
   split compaction a successor session with a `continued_in` link,
   rewound rows a branch, a branch a session with a `fork_of` link, and a
   delegate_task's sub-agents subsessions, or peers when the call ran
-  them in the background, tied to the call by when they started. Usage,
+  them in the background, tied to the call by when they started; a
+  background run's delivered report names its delegation in the item's
+  `source` (kind `delegation`, `ref` the delegation ID). Usage,
   which Hermes records per session and per model only, is kept in the
   header (`hermes/session-usage`, a gap). The command detects a
   database by its tables, or the home or profile directory holding it

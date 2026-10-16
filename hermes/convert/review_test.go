@@ -229,6 +229,56 @@ INSERT INTO messages (session_id, role, content, tool_calls, tool_call_id, displ
 	})
 }
 
+// TestDeliverySource: a delivered report names its delegation in the
+// item's source, kind delegation and ref the delegation ID the peer
+// link carries (a unit's, for a handle of several), with the row's
+// facts about the arrival as the trigger's own members and its display
+// members left out; a user row naming no delegation has no source.
+func TestDeliverySource(t *testing.T) {
+	res := convertScript(t, `
+INSERT INTO sessions (id, source, model, started_at) VALUES ('ds', 'tui', 'm', 1760000000.0);
+INSERT INTO sessions (id, source, model, model_config, parent_session_id, started_at) VALUES
+  ('k1', 'subagent', 'm', '{"_delegate_from":"ds"}', 'ds', 1760000200.4),
+  ('k2', 'subagent', 'm', '{"_delegate_from":"ds"}', 'ds', 1760000200.5);
+INSERT INTO messages (session_id, role, content, tool_calls, tool_call_id, display_kind, display_metadata, timestamp) VALUES
+  ('ds', 'user', 'audit', NULL, NULL, NULL, NULL, 1760000001.0),
+  ('ds', 'assistant', '', '[{"id":"c2","call_id":"c2","type":"function","function":{"name":"delegate_task","arguments":"{\"tasks\":[{\"goal\":\"One.\"},{\"goal\":\"Two.\"}]}"}}]', NULL, NULL, NULL, 1760000200.0),
+  ('ds', 'tool', '{"status":"dispatched","mode":"background","count":2,"delegation_id":"d2","goals":["One.","Two."],"units":[{"delegation_id":"d2-1","group":"a","task_indexes":[0]},{"delegation_id":"d2-2","group":"b","task_indexes":[1]}]}', NULL, 'c2', NULL, NULL, 1760000200.05),
+  ('ds', 'assistant', 'running', NULL, NULL, NULL, NULL, 1760000200.1),
+  ('ds', 'user', '[d2-1 done] one', NULL, NULL, 'async_delegation_complete', '{"display_text":"Done","delegation_id":"d2-1","task_count":1,"completed_count":1,"failed_count":0,"duration_seconds":12.5}', 1760000250.0),
+  ('ds', 'user', '[d2-2 failed] two', NULL, NULL, 'hidden', '{"delegation_id":"d2-2","task_count":1,"completed_count":0,"failed_count":1,"delivery_notice":"task_failure:1","notification_category":"diagnostic","presentation_suppressed":true}', 1760000260.0),
+  ('k1', 'user', 'One.', NULL, NULL, NULL, NULL, 1760000200.5),
+  ('k2', 'user', 'Two.', NULL, NULL, NULL, NULL, 1760000200.6);
+`, Options{})
+	s := sessionOf(t, res, "ds")
+	sameLines(t, "links", links(s), []string{`peer c2 k1 "d2-1"`, `peer c2 k2 "d2-2"`})
+	var got []string
+	for _, e := range s.Entries() {
+		it, ok := e.(*agentsession.ItemEntry)
+		if !ok {
+			continue
+		}
+		m, ok := it.Item.(*openresponses.Message)
+		if !ok || m.Role != openresponses.RoleUser {
+			continue
+		}
+		src := "none"
+		if it.Source != nil {
+			b, err := json.Marshal(it.Source)
+			if err != nil {
+				t.Fatal(err)
+			}
+			src = string(b)
+		}
+		got = append(got, m.Text()+" "+src)
+	}
+	sameLines(t, "sources", got, []string{
+		"audit none",
+		`[d2-1 done] one {"kind":"delegation","ref":"d2-1","source":"hermes","completed_count":1,"duration_seconds":12.5,"failed_count":0,"task_count":1}`,
+		`[d2-2 failed] two {"kind":"delegation","ref":"d2-2","source":"hermes","completed_count":0,"delivery_notice":"task_failure:1","failed_count":1,"notification_category":"diagnostic","task_count":1}`,
+	})
+}
+
 // TestOutputlessCall (F4): a delegate_task call with no output stops
 // its run at the next turn, so a later call's child is the later
 // call's.

@@ -645,17 +645,64 @@ func (w *walk) user(i int) error {
 	if !m.Content.Structured && msg.Text() == "" && !m.HasAPIContent {
 		sc.addf(agentimport.Lossy, "hermes/empty-turn", m.Unit, "an empty user turn: once a message follows it, Hermes sends %q in its place in each request's copy (repair_empty_non_final_messages); the item stays empty", emptyPlaceholder)
 	}
-	if _, _, err := w.item(msg, m, "", visible(m), nil); err != nil {
+	src, err := delivery(m)
+	if err != nil {
+		return err
+	}
+	prep := func(e *agentsession.ItemEntry) error {
+		e.Source = src
+		return nil
+	}
+	if _, _, err := w.item(msg, m, "", visible(m), prep); err != nil {
 		return err
 	}
 	sc.mark(m.Unit, agentimport.LineMapped)
 	if m.Observed {
 		sc.addf(agentimport.Lossy, "hermes/observed", m.Unit, "an observed group-chat message; a Telegram channel that gathers observed messages into one block sends them that way, which is not reproduced")
 	}
-	if did := delegationID(m); did != "" {
-		sc.addf(agentimport.Kept, "hermes/delegation-delivery", m.Unit, "a background delegation's result, %s, delivered as a user message", did)
+	if src != nil {
+		sc.addf(agentimport.Kept, "hermes/delegation-delivery", m.Unit, "a background delegation's result, delivered as a user message; the item's source names delegation %s in ref, the ID the peer link's %s:delegation_id carries", src.Ref, Source)
 	}
 	return nil
+}
+
+// notArrival are the members of a delivery row's display_metadata the
+// trigger does not take as its own: the delegation ID, which is its
+// ref; the members that say how to show the row, not how it arrived
+// (its card's text, and whether the card is suppressed or model-only,
+// which the item's visible already says); and the members the trigger
+// defines. All of them stay in hermes:columns.
+var notArrival = []string{"delegation_id", "display_text", "presentation_suppressed", "model_only", "kind", "ref", "source"}
+
+// delivery maps a delivered result to the item's source trigger: kind
+// delegation, ref the delegation it belongs to (a unit's ID, for a
+// handle of several units), source "hermes", and the row's other facts
+// about the arrival (task_count, completed_count, failed_count,
+// duration_seconds, delivery_notice, ...) as the trigger's own members;
+// nil for a row naming no delegation.
+func delivery(m *hermes.Message) (*agentsession.Trigger, error) {
+	did := delegationID(m)
+	if did == "" {
+		return nil, nil
+	}
+	t := &agentsession.Trigger{Kind: "delegation", Ref: did, Source: Source}
+	var meta map[string]json.RawMessage
+	if json.Unmarshal(m.DisplayMetadata, &meta) != nil {
+		return t, nil
+	}
+	keys := make([]string, 0, len(meta))
+	for k := range meta {
+		if !slices.Contains(notArrival, k) {
+			keys = append(keys, k)
+		}
+	}
+	slices.Sort(keys)
+	for _, k := range keys {
+		if err := t.SetMember(k, meta[k]); err != nil {
+			return nil, err
+		}
+	}
+	return t, nil
 }
 
 // delegationID reads the delegation a delivered result belongs to.
