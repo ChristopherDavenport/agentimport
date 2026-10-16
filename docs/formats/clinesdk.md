@@ -230,26 +230,34 @@ and nothing before it survives.
 Cline records no call ID for a child. `spawn_agent` waits for its
 sub-agent and returns its result, so a sub-agent is a **subsession**
 of the one call matched to it: the call whose `task` is the sub-agent's
-first message, among the calls of the agent the index names as its
-parent (any history's calls without an index), made before the
-sub-agent started and answered after it. Its session ID is
-`SubsessionID(parent, call_id)`, its header names the parent and the
-call (`spawned_by`), the link comes before the call's output, and the
-output's `parents` name the sub-agent's leaf; the call's `systemPrompt`
-is its instructions when its history holds none. A sub-agent that more
-than one call could have run is left unlinked, its session naming the
-parent in `parent_session` alone.
+first message (Cline runs a sub-agent with its task; the index's
+prompt, which Cline may take first-in-first-out from its spawn queue or
+make up, is read only when the history has no message), among the
+calls of the sub-agent the index names as its parent, else, when the
+index names an agent no sub-agent's history is (the lead's or a
+teammate's runtime agent, which no file records), the root's and the
+team tasks' calls, else, without an index, every history's calls; made
+before the sub-agent started and answered after it, whenever the times
+are known. Its session ID is `SubsessionID(parent, call_id)`, its
+header names the parent and the call (`spawned_by`), the link comes
+before the call's output, and the output's `parents` name the
+sub-agent's leaf; the call's `systemPrompt` is its instructions when
+its history holds none. A sub-agent no one call answers to is left
+unlinked, its session naming the parent in `parent_session` alone.
 
-A team task outlives the `team_run_task` call that queued it, or ran it
-as one of several: it is a **peer** of each call for its agent whose
-`task` is the message that started the task (the index's prompt, else
-the latest such message of its history), linked after the call's
-output, its session under its own ID naming the root in
-`parent_session`. A teammate that continues its conversation copies the
-earlier task's messages into the next task's history: that copy is
-converted as the task's own entries, their usage kept off the
-responses. Children are followed 16 deep; a child reached twice is
-converted once.
+A team task outlives the `team_run_task` call that queued it: it is a
+**peer** of the call for its agent whose `task` is the message that
+started the task (the index's prompt, else the latest such message of
+its history), made before that message and with no later call of the
+same task to the agent before it, which no other task claimed; and of
+a call Cline collapsed onto that one in the same response (its result
+`"status":"joined"`). The links come after the calls' outputs, the
+task's session under its own ID naming the root in `parent_session`. A
+task no one call answers to is left unlinked. A teammate that continues
+its conversation copies the earlier task's messages into the next
+task's history: that copy is converted as the task's own entries,
+their usage kept off the responses. Children are followed 16 deep; a
+child reached twice is converted once.
 
 ### Copied history
 
@@ -306,6 +314,7 @@ converted once.
 | `clinesdk/file-block` | lossy | A file block is the text Cline sends for it. |
 | `clinesdk/fork-copied` | lossy | A fork's first messages are its source's, converted as its own. |
 | `clinesdk/imported-session` | lossy | A session Cline imported from another agent. |
+| `clinesdk/index-prompt` | lossy | The index's prompt for a sub-agent is not its first message; the first message is matched. |
 | `clinesdk/index-unread` | lossy | The index is not read, or cannot be; the session directory is read alone. |
 | `clinesdk/invalid-input` | lossy | A tool_use input that is not a JSON object. |
 | `clinesdk/legacy-copy` | lossy | A classic task carried on: the copy of its history is converted as the session's own. |

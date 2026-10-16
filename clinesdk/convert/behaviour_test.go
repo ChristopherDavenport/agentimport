@@ -274,3 +274,107 @@ func TestUnhashableHistory(t *testing.T) {
 		t.Errorf("codes %s", codes)
 	}
 }
+
+// TestIndexPromptGuess matches sub-agents by their own first messages:
+// the index's prompt can be Cline's first-in-first-out guess on its hook
+// path, or a placeholder.
+func TestIndexPromptGuess(t *testing.T) {
+	files := map[string][]byte{
+		"r.messages.json":       msgs(userMsg("go", 1000), spawn("ca", "Survey A", 2000), spawn("cb", "Survey B", 2001), spawned("ca", 9000), spawned("cb", 9001)),
+		"agent_a.messages.json": msgs(userMsg("Survey A", 3000), reply("a", 3500)),
+		"agent_b.messages.json": msgs(userMsg("Survey B", 3100), reply("b", 3600)),
+	}
+	ix := &fakeIndex{rows: []*clinesdk.Row{
+		{SessionID: "r__agent_a", ParentSessionID: "r", ParentAgentID: "agent_lead", AgentID: "agent_a", Prompt: "Survey B"},
+		{SessionID: "r__agent_b", ParentSessionID: "r", ParentAgentID: "agent_lead", AgentID: "agent_b", Prompt: "Subagent run by agent_lead"},
+	}}
+	res := convertFiles(t, files, Options{Index: ix})
+	got := map[string]string{}
+	for _, s := range res.Sessions[1:] {
+		first := ""
+		if ctx, err := s.Context(); err == nil {
+			first = renderItems(ctx.Items)[0]
+		}
+		got[s.Header().SpawnedBy] = first
+	}
+	if got["ca"] != "user: Survey A" || got["cb"] != "user: Survey B" {
+		t.Errorf("calls ran %v", got)
+	}
+}
+
+// teamRun is a team_run_task call and its result.
+func teamRun(id, task string, ts int, status string) []string {
+	return []string{
+		fmt.Sprintf(`{"role":"assistant","content":[{"type":"tool_use","id":%q,"name":"team_run_task","input":{"agentId":"tester","task":%q,"runMode":"async"}}],"ts":%d}`, id, task, ts),
+		fmt.Sprintf(`{"role":"user","content":[{"type":"tool_result","tool_use_id":%q,"name":"team_run_task","content":"{\"status\":\"%s\"}"}],"ts":%d}`, id, status, ts+10),
+	}
+}
+
+func peerLinks(res *agentimport.Result) map[string][]string {
+	out := map[string][]string{}
+	for _, e := range res.Sessions[0].Entries() {
+		if l, ok := e.(*agentsession.LinkEntry); ok && l.Rel == agentsession.RelPeer {
+			out[l.CallID] = append(out[l.CallID], l.Session)
+		}
+	}
+	return out
+}
+
+// TestTeamTiming links each team task to the one call that started it,
+// told by time when two calls give one agent the same task.
+func TestTeamTiming(t *testing.T) {
+	root := []string{userMsg("go", 500)}
+	root = append(root, teamRun("c1", "Run the tests", 1000, "queued")...)
+	root = append(root, teamRun("c2", "Run the tests", 5000, "queued")...)
+	files := map[string][]byte{
+		"r.messages.json":              msgs(root...),
+		"tester__aaaaaa.messages.json": msgs(userMsg("Run the tests", 2000), reply("fail", 2500)),
+		"tester__bbbbbb.messages.json": msgs(userMsg("Run the tests", 6000), reply("pass", 6500)),
+	}
+	links := peerLinks(convertFiles(t, files, Options{}))
+	if len(links["c1"]) != 1 || len(links["c2"]) != 1 || links["c1"][0] != "r__teamtask__tester__aaaaaa" || links["c2"][0] != "r__teamtask__tester__bbbbbb" {
+		t.Errorf("links %v", links)
+	}
+	// A sync call Cline collapsed onto another of its batch ran the
+	// same task: a peer of both.
+	joined := []string{userMsg("go", 500),
+		`{"role":"assistant","content":[{"type":"tool_use","id":"j1","name":"team_run_task","input":{"agentId":"tester","task":"Lint"}},{"type":"tool_use","id":"j2","name":"team_run_task","input":{"agentId":"tester","task":"Lint"}}],"ts":1000}`,
+		`{"role":"user","content":[{"type":"tool_result","tool_use_id":"j1","name":"team_run_task","content":"{\"status\":\"running\"}"}],"ts":3000}`,
+		`{"role":"user","content":[{"type":"tool_result","tool_use_id":"j2","name":"team_run_task","content":"{\"status\":\"joined\",\"deduped\":true}"}],"ts":3001}`,
+	}
+	links = peerLinks(convertFiles(t, map[string][]byte{"r.messages.json": msgs(joined...), "tester__cccccc.messages.json": msgs(userMsg("Lint", 2000), reply("ok", 2500))}, Options{}))
+	if len(links["j1"]) != 1 || len(links["j2"]) != 1 {
+		t.Errorf("joined links %v", links)
+	}
+}
+
+// TestTeammateSpawn links a sub-agent a teammate spawned: the index
+// names the teammate's runtime agent, which no file records, so the
+// teammate's calls are candidates as well as the lead's.
+func TestTeammateSpawn(t *testing.T) {
+	root := append([]string{userMsg("go", 500)}, teamRun("c1", "Review", 1000, "queued")...)
+	files := map[string][]byte{
+		"r.messages.json":           msgs(root...),
+		"rev__aaaaaa.messages.json": msgs(userMsg("Review", 2000), spawn("n1", "Check style", 2100), spawned("n1", 4000), reply("ok", 4500)),
+		"agent_9.messages.json":     msgs(userMsg("Check style", 2500), reply("styled", 3000)),
+	}
+	files["rev__aaaaaa.messages.json"] = []byte(strings.Replace(string(files["rev__aaaaaa.messages.json"]), `{"version":1,`, `{"version":1,"agent":"teammate","sessionId":"r__teamtask__rev__aaaaaa",`, 1))
+	files["r.messages.json"] = []byte(strings.ReplaceAll(string(files["r.messages.json"]), `"tester"`, `"rev"`))
+	ix := &fakeIndex{rows: []*clinesdk.Row{{SessionID: "r__agent_9", ParentSessionID: "r", ParentAgentID: "agent_3f1c", AgentID: "agent_9"}}}
+	res := convertFiles(t, files, Options{Index: ix})
+	if by := spawnedBy(res); by["n1"] == "" {
+		t.Errorf("the teammate's sub-agent is not linked: %v", by)
+	}
+}
+
+// TestSpawnWindow leaves a sub-agent unlinked when the one call with its
+// task was answered before it started.
+func TestSpawnWindow(t *testing.T) {
+	files := map[string][]byte{
+		"r.messages.json":       msgs(userMsg("go", 1000), spawn("c1", "Dig", 2000), spawned("c1", 3000), reply("done", 3500)),
+		"agent_a.messages.json": msgs(userMsg("Dig", 60000), reply("dug", 61000)),
+	}
+	if by := spawnedBy(convertFiles(t, files, Options{})); by["c1"] != "" {
+		t.Errorf("a sub-agent started after its call's result is linked to it: %v", by)
+	}
+}

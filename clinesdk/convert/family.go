@@ -50,8 +50,9 @@ type hist struct {
 	// tasks are the texts of its user messages, as each request sends
 	// them, by message index; first is the first one's index, -1 when
 	// it has none.
-	tasks map[int]string
-	first int
+	tasks  map[int]string
+	taskTS map[int]time.Time
+	first  int
 	// firstTS is its first message's time.
 	firstTS time.Time
 	// calls are the spawn_agent and team_run_task calls it made.
@@ -81,6 +82,9 @@ type spawnCall struct {
 	system string
 	ts     time.Time
 	outTS  time.Time
+	// joined says a team_run_task call joined another call's run, as
+	// Cline collapses a repeated sync call of one batch.
+	joined bool
 }
 
 type callKey struct {
@@ -199,10 +203,11 @@ func (fam *family) child(i int, f *clinesdk.MessagesFile) *hist {
 // scan reads what matching needs from a history: its user messages'
 // texts and its calls that start children.
 func (fam *family) scan(h *hist) {
-	h.tasks = map[int]string{}
+	h.tasks, h.taskTS = map[int]string{}, map[int]time.Time{}
 	h.first = -1
 	h.own = -1
 	answered := map[string]time.Time{}
+	joined := map[string]bool{}
 	msgs := h.f.Messages
 	for k, m := range msgs {
 		if m.Err != nil || m.DisplayOnly() {
@@ -217,11 +222,15 @@ func (fam *family) scan(h *hist) {
 				if _, ok := answered[b.ToolUseID]; !ok {
 					answered[b.ToolUseID] = ts
 				}
+				if b.Name == "team_run_task" {
+					joined[b.ToolUseID] = joinedRun(b.Content)
+				}
 			}
 		}
 		if m.Role == clinesdk.RoleUser {
 			if text := userText(m); text != "" {
 				h.tasks[k] = text
+				h.taskTS[k] = ts
 				if h.first < 0 {
 					h.first = k
 				}
@@ -248,7 +257,40 @@ func (fam *family) scan(h *hist) {
 	}
 	for _, c := range h.calls {
 		c.outTS = answered[c.native]
+		c.joined = joined[c.native]
 	}
+}
+
+// joinedRun reports whether a team_run_task result says the call joined
+// another's run.
+func joinedRun(content json.RawMessage) bool {
+	v, err := jsjson.Parse(content)
+	if err != nil {
+		return false
+	}
+	if s, ok := v.Text(); ok {
+		if v, err = jsjson.Parse([]byte(s)); err != nil {
+			return false
+		}
+	}
+	status, _ := v.Get("status").Text()
+	return status == "joined"
+}
+
+// placeholder reports whether an index row's prompt is one Cline makes
+// when it has none: a sub-agent's or a team task's.
+func placeholder(prompt string) bool {
+	return strings.HasPrefix(prompt, "Subagent run by ") || strings.HasPrefix(prompt, "Team task for ")
+}
+
+// timely reports whether a child that started at started can have been
+// started by call c: after the call, the call's turn stamped when it
+// ended, and before its result.
+func timely(c *spawnCall, started time.Time) bool {
+	if started.IsZero() {
+		return true
+	}
+	return (c.ts.IsZero() || !started.Before(c.ts.Add(-slack))) && (c.outTS.IsZero() || !started.After(c.outTS))
 }
 
 // userText is the text a user message sends, its text blocks joined;
@@ -280,74 +322,107 @@ const slack = 2 * time.Second
 // call ID for a child: a sub-agent is matched to the spawn_agent call
 // whose task is its first message, among the calls of the agent the
 // index names as its parent when there is an index, made before it
-// started and answered after; a team task to the team_run_task calls
-// for its agent whose task is the message that started it. A sub-agent
-// with more than one such call is left unlinked.
+// started and answered after; a team task to the team_run_task call
+// for its agent whose task is the message that started it, made before
+// that message and after any earlier such call. A child no one call
+// answers to is left unlinked; a call links one child, and a call
+// that joined another's run the child that run was.
 func (fam *family) match() {
 	order := make([]*hist, 0, len(fam.hists))
 	order = append(order, fam.hists[1:]...)
 	sort.SliceStable(order, func(i, j int) bool { return order[i].firstTS.Before(order[j].firstTS) })
 	claimed := map[callKey]bool{}
+	var teams []*hist
 	for _, h := range order {
 		if h.kind == clinesdk.AgentTeammate {
-			fam.matchTeam(h)
+			teams = append(teams, h)
 			continue
 		}
-		if h.first < 0 {
-			h.why = "it has no user message to match a call's task with"
-			continue
+		fam.matchSub(h, claimed)
+	}
+	fam.matchTeams(teams, claimed)
+}
+
+// matchSub links a sub-agent to its spawn_agent call.
+func (fam *family) matchSub(h *hist, claimed map[callKey]bool) {
+	task := ""
+	if h.first >= 0 {
+		task = h.tasks[h.first]
+	}
+	if prompt := fam.prompt(h); prompt != "" {
+		switch {
+		case task == "":
+			task = prompt
+		case prompt != task:
+			fam.report.Addf(agentimport.Lossy, "clinesdk/index-prompt", h.f.Name, 0, "the index's prompt for the sub-agent is not its first message, which Cline runs it with; the first message is matched")
 		}
-		task := h.tasks[h.first]
-		if h.row != nil && h.row.Prompt != "" {
-			task = clinesdk.NormalizeUserInput(h.row.Prompt)
-		}
-		var cands []*spawnCall
-		for _, p := range fam.parentsOf(h) {
-			for _, c := range p.calls {
-				if c.name == "spawn_agent" && c.task == task && !claimed[callKey{c.hist, c.native}] {
-					cands = append(cands, c)
-				}
+	}
+	if task == "" {
+		h.why = "it has no user message to match a call's task with"
+		return
+	}
+	var cands, early []*spawnCall
+	for _, p := range fam.parentsOf(h) {
+		for _, c := range p.calls {
+			if c.name != "spawn_agent" || c.task != task || claimed[callKey{c.hist, c.native}] {
+				continue
 			}
-		}
-		if len(cands) > 1 && !h.firstTS.IsZero() {
-			var timely []*spawnCall
-			for _, c := range cands {
-				if (c.ts.IsZero() || !h.firstTS.Before(c.ts.Add(-slack))) && (c.outTS.IsZero() || !h.firstTS.After(c.outTS)) {
-					timely = append(timely, c)
-				}
+			if !timely(c, h.firstTS) {
+				early = append(early, c)
+				continue
 			}
-			if len(timely) > 0 {
-				cands = timely
-			}
+			cands = append(cands, c)
 		}
-		switch len(cands) {
-		case 0:
-			h.why = "no spawn_agent call of its parent has its first message as its task"
-		case 1:
-			c := cands[0]
-			k := callKey{c.hist, c.native}
-			claimed[k] = true
-			fam.sub[k] = h.i
-			h.linked = true
-		default:
-			h.why = fmt.Sprintf("%d spawn_agent calls have its first message as their task, and their times do not tell them apart", len(cands))
+	}
+	switch len(cands) {
+	case 0:
+		h.why = "no spawn_agent call of its parent has its first message as its task"
+		if len(early) > 0 {
+			h.why = fmt.Sprintf("%d spawn_agent calls have its first message as their task, and it started outside the time each of them ran", len(early))
 		}
+	case 1:
+		c := cands[0]
+		k := callKey{c.hist, c.native}
+		claimed[k] = true
+		fam.sub[k] = h.i
+		h.linked = true
+	default:
+		h.why = fmt.Sprintf("%d spawn_agent calls have its first message as their task, and their times do not tell them apart", len(cands))
 	}
 }
 
-// parentsOf lists the histories whose calls may have spawned h: the
-// one whose agent the index names as h's parent, else every other
-// history.
+// prompt is the index's prompt for a child, "" when it has none or one
+// Cline made up.
+func (fam *family) prompt(h *hist) string {
+	if h.row == nil || h.row.Prompt == "" || placeholder(h.row.Prompt) {
+		return ""
+	}
+	return clinesdk.NormalizeUserInput(h.row.Prompt)
+}
+
+// parentsOf lists the histories whose calls may have spawned h: those
+// of the sub-agent the index names as h's parent; when it names an
+// agent no sub-agent's history is, the lead's or a teammate's, whose
+// runtime agent IDs no file records, the root's and the team tasks';
+// without an index, every other history.
 func (fam *family) parentsOf(h *hist) []*hist {
+	var out []*hist
 	if h.row != nil && h.row.ParentAgentID != "" {
-		for _, p := range fam.hists {
-			if p != h && p.i != 0 && p.agent == h.row.ParentAgentID {
-				return []*hist{p}
+		for _, p := range fam.hists[1:] {
+			if p != h && p.kind == clinesdk.AgentSubagent && p.agent == h.row.ParentAgentID {
+				out = append(out, p)
 			}
 		}
-		return []*hist{fam.hists[0]}
+		if len(out) > 0 {
+			return out
+		}
+		for _, p := range fam.hists {
+			if p != h && (p.i == 0 || p.kind == clinesdk.AgentTeammate) {
+				out = append(out, p)
+			}
+		}
+		return out
 	}
-	var out []*hist
 	for _, p := range fam.hists {
 		if p != h {
 			out = append(out, p)
@@ -356,59 +431,109 @@ func (fam *family) parentsOf(h *hist) []*hist {
 	return out
 }
 
-// matchTeam links a team task to the team_run_task calls that started
-// it: the calls for its agent whose task is the message that started
-// it, the index's prompt for it, else the latest user message of the
-// history that is such a call's task.
-func (fam *family) matchTeam(h *hist) {
-	var calls []*spawnCall
-	for _, p := range fam.hists {
-		if p == h {
-			continue
-		}
-		for _, c := range p.calls {
-			if c.name == "team_run_task" && (c.agent == "" || c.agent == h.agent) {
-				calls = append(calls, c)
-			}
-		}
-	}
-	own := ""
-	if h.row != nil && h.row.Prompt != "" {
-		own = clinesdk.NormalizeUserInput(h.row.Prompt)
-	}
+// own finds the message that started a team task: the index's prompt
+// for it, else the latest of its user messages that is the task of a
+// team_run_task call for its agent.
+func (fam *family) own(h *hist, calls []*spawnCall) {
 	keys := make([]int, 0, len(h.tasks))
 	for k := range h.tasks {
 		keys = append(keys, k)
 	}
 	sort.Ints(keys)
-	for i := len(keys) - 1; i >= 0 && h.own < 0; i-- {
+	prompt := fam.prompt(h)
+	for i := len(keys) - 1; i >= 0; i-- {
 		text := h.tasks[keys[i]]
-		if own != "" && text != own {
+		if prompt != "" {
+			if text == prompt {
+				h.own = keys[i]
+				return
+			}
 			continue
 		}
 		for _, c := range calls {
 			if c.task == text {
 				h.own = keys[i]
-				break
+				return
 			}
 		}
-		if own != "" && h.own < 0 {
-			h.own = keys[i]
+	}
+}
+
+// matchTeams links each team task to the team_run_task call that
+// started it, in the order the tasks started: a call for its agent
+// whose task is the task's message, made before the message and not
+// followed by another such call before it, which no task claimed.
+func (fam *family) matchTeams(teams []*hist, claimed map[callKey]bool) {
+	var calls []*spawnCall
+	for _, p := range fam.hists {
+		for _, c := range p.calls {
+			if c.name == "team_run_task" && c.agent != "" {
+				calls = append(calls, c)
+			}
 		}
 	}
-	if h.own < 0 {
-		h.why = "no team_run_task call for its agent has one of its messages as its task"
-		return
+	sort.SliceStable(calls, func(i, j int) bool { return calls[i].ts.Before(calls[j].ts) })
+	for _, h := range teams {
+		var mine []*spawnCall
+		for _, c := range calls {
+			if c.agent == h.agent && c.hist != h.i {
+				mine = append(mine, c)
+			}
+		}
+		fam.own(h, mine)
 	}
-	for _, c := range calls {
-		if c.task == h.tasks[h.own] {
+	sort.SliceStable(teams, func(i, j int) bool { return teams[i].taskTS[teams[i].own].Before(teams[j].taskTS[teams[j].own]) })
+	for _, h := range teams {
+		if h.own < 0 {
+			h.why = "no team_run_task call for its agent has one of its messages as its task"
+			continue
+		}
+		text, started := h.tasks[h.own], h.taskTS[h.own]
+		var cands []*spawnCall
+		for i, c := range calls {
+			if c.agent != h.agent || c.hist == h.i || c.task != text || c.joined || claimed[callKey{c.hist, c.native}] {
+				continue
+			}
+			if !started.IsZero() && !c.ts.IsZero() {
+				if started.Before(c.ts.Add(-slack)) {
+					continue
+				}
+				// A later call of the same task to the agent started
+				// before this task did: this task is that call's.
+				later := false
+				for _, d := range calls[i+1:] {
+					if d.agent == c.agent && d.task == c.task && !d.joined && !d.ts.IsZero() && d.ts.After(c.ts) && !started.Before(d.ts.Add(-slack)) {
+						later = true
+						break
+					}
+				}
+				if later {
+					continue
+				}
+			}
+			cands = append(cands, c)
+		}
+		switch len(cands) {
+		case 0:
+			h.why = "no team_run_task call for its agent, made before the message that started it, has that message as its task"
+		case 1:
+			c := cands[0]
 			k := callKey{c.hist, c.native}
+			claimed[k] = true
 			fam.peers[k] = append(fam.peers[k], h.i)
 			h.linked = true
+			// A call that joined this call's run, in the same
+			// response, ran the same task.
+			for _, d := range calls {
+				if d.joined && d.hist == c.hist && d.msg == c.msg && d.agent == c.agent {
+					dk := callKey{d.hist, d.native}
+					claimed[dk] = true
+					fam.peers[dk] = append(fam.peers[dk], h.i)
+				}
+			}
+		default:
+			h.why = fmt.Sprintf("%d team_run_task calls for its agent have the message that started it as their task, and their times do not tell them apart", len(cands))
 		}
-	}
-	if !h.linked {
-		h.why = "no team_run_task call for its agent has the message that started it as its task"
 	}
 }
 
@@ -465,10 +590,16 @@ func kindName(h *hist) string {
 // names one and it converted, else the root's.
 func (fam *family) parentSID(h *hist) string {
 	if h.row != nil && h.row.ParentAgentID != "" {
+		var found *hist
+		n := 0
 		for _, p := range fam.hists[1:] {
-			if p != h && p.agent == h.row.ParentAgentID && p.sc != nil {
-				return p.sc.tgt.id
+			if p != h && p.kind == clinesdk.AgentSubagent && p.agent == h.row.ParentAgentID && p.sc != nil {
+				found = p
+				n++
 			}
+		}
+		if n == 1 {
+			return found.sc.tgt.id
 		}
 	}
 	if root := fam.hists[0]; root.sc != nil {
