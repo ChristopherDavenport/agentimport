@@ -3,6 +3,7 @@ package convert
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -50,6 +51,14 @@ type walk struct {
 	rowKept bool
 	// unitOf names the row each item entry came from.
 	unitOf map[string]string
+	// indexed says a row's display index was reported left out.
+	indexed bool
+}
+
+// isNullColumn reports a column that is absent or null.
+func isNullColumn(cols hermes.Columns, name string) bool {
+	v, ok := cols.Get(name)
+	return !ok || v == nil
 }
 
 type pendingCompaction struct {
@@ -362,7 +371,16 @@ func (w *walk) rowMembers(e agentsession.Entry, m *hermes.Message, used ...strin
 	if err := sc.b.Member(e, "row", m.ID); err != nil {
 		return err
 	}
-	rest := m.Cols.Without(append(append([]string(nil), baseColumns...), used...)...)
+	drop := append(append([]string(nil), baseColumns...), used...)
+	if slices.Contains(used, "api_content") && m.Content.Text != m.APIContent {
+		// The content Hermes shows, which api_content replaced.
+		drop = slices.DeleteFunc(drop, func(c string) bool { return c == "content" })
+	}
+	if !w.indexed && (!isNullColumn(m.Cols, "display_identity") || !isNullColumn(m.Cols, "display_order")) {
+		w.indexed = true
+		sc.addf(agentimport.Dropped, "hermes/display-index", m.Unit, "display_identity and display_order, the display index Hermes derives from a row's other columns, are not kept")
+	}
+	rest := m.Cols.Without(drop...)
 	var keep hermes.Columns
 	for _, c := range rest {
 		switch v := c.Value.(type) {

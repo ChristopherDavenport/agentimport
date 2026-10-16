@@ -20,6 +20,20 @@ release of their age: what they lack is taken from the migrations in
 `hermes_state_schema.py`, and the `v14` fixture is written to that
 shape, not from a database of that age.
 
+The corpus run read a database written by Hermes Agent v0.22.2, the
+release commit `d923a5eb48` (2026-10-15). Both it and `848fc0ad8b`
+record schema version 31, and their `messages` tables are the same,
+yet `848fc0ad8b` adds `sessions.runtime_revision` and
+`runtime_generation` and the unified runtime's tables
+(`runtime_epoch`, `session_admissions`, `worker_executions`,
+`worker_receipts`, `async_delegations.owner_execution_id`): a schema
+version does not fix the columns. One reading rule differs:
+`get_resume_conversations` at `d923a5eb48` does not leave out
+`session_meta` rows from the model history, which `848fc0ad8b` does;
+the converter leaves them out for either, as the gateway's own replay
+always has (`_build_gateway_agent_history`), and the row holds no
+content.
+
 Hermes changes the schema often (version 24 on 2026-08-02, 30 on
 2026-09-03) and adds columns declaratively: on open it compares each
 table with `SCHEMA_SQL` and adds what is missing
@@ -73,7 +87,17 @@ The tables read:
 | `async_delegations` | background delegations: their ID, parent session and state |
 
 The other tables (leases, heartbeats, routing, admissions, workers,
-FTS) are runtime state and not read.
+delivery obligations, conversation generations, FTS) are runtime
+state and not read.
+
+Other databases in a home, none of which holds a session's model
+context, and none read:
+
+| File | What it is |
+| --- | --- |
+| `shared-state.db` | the gateway's hosted Bot Mode rooms (`gateway/hosted_rooms.py`, `hosted_room_policy_checkpoint.py`): each room's members and an append-only event log, whose `message.user` and `message.member` events are a group chat's messages, with a bounded projection of it (`hosted_room_policy_transcript`) for choosing the next discussion. The turns an agent takes in a room are sessions of `state.db`. Kept at the root of the home, shared by its profiles. |
+| `kanban.db` (and `kanban/boards/<slug>/kanban.db`) | the Kanban board shared across profiles (`hermes_cli/kanban_db.py`): tasks, their links, comments, events, runs with a summary and outcome, attachments. A worker's conversation is a session of `state.db`. |
+| `telemetry/shared_metrics/metrics.sqlite3` | aggregate usage counters and the outbox of metric packages (`website/docs/developer-guide/relay-shared-metrics.md`); no conversation. |
 
 ## Reading
 
@@ -85,7 +109,16 @@ FTS) are runtime state and not read.
 - `tool_calls` is a JSON array; a call's ID is `call_id` before `id`,
   and of a bridge ID `<call_id>|<item id>` the part before the bar
   (`coalesce_tool_call_id`). `tool_calls` that does not decode reads
-  as none, as Hermes falls back to `[]`.
+  as none, as Hermes falls back to `[]`. Hermes writes every call it
+  receives as `{id, call_id, response_item_id, type, function}`
+  (`agent/chat_completion_helpers.py`): `id` and `call_id` are the same
+  provider call ID, which a tool row's `tool_call_id` names, and
+  `response_item_id` is the `fc_` item ID a Responses route needs for
+  the call, derived from the call ID when the provider gave none
+  (`_derive_responses_function_call_id`). The chat-completions
+  transport strips `call_id` and `response_item_id` from what it sends
+  (`_STRIP_TC_KEYS`). The converter's function call carries the call
+  ID; `response_item_id` is kept in `hermes:call`.
 - `display_metadata` is an object, under at most one extra layer of
   string (rows from before Hermes guarded the column).
 - A timestamp outside Hermes' window (0 to 4.2e9 seconds) reads as
@@ -227,7 +260,35 @@ session row.
 
 Every entry made from a row carries the row's ID in `hermes:row`, on
 the row's first entry, with the columns no entry maps in
-`hermes:columns`. A renamed call keeps the native ID in
+`hermes:columns`, those that are null, empty or zero left out.
+
+Every column of `messages` at schema version 31:
+
+| Column | Where it goes |
+| --- | --- |
+| `id` | the order of the walk; `hermes:row`; a response's ID, `row-<id>` |
+| `session_id` | the session the row is converted with |
+| `role` | the kind of entry (Mapping above) |
+| `content` | the item's text or parts, unless `api_content` is sent in its place; then `hermes:columns` |
+| `tool_call_id` | the output's `call_id`, through the call it names |
+| `tool_calls` | `function_call` items; entries that are not objects keep the column in `hermes:columns` |
+| `tool_name` | `hermes:columns` (the call's name is on the call) |
+| `effect_disposition` | `hermes:columns`: whether an interrupted or refused call may have had its effect (`none`, `unknown`) |
+| `timestamp` | the entries' `ts` |
+| `token_count` | `hermes:columns`; no usage (Usage below) |
+| `finish_reason` | the response's status, and `hermes:finish_reason` |
+| `reasoning`, `reasoning_content`, `reasoning_details`, `codex_reasoning_items` | reasoning items from the first carrier that yields one (Payload below); the others, and one with entries no item holds, in `hermes:columns` |
+| `codex_message_items` | the message's phase and ID when it holds one; else `hermes:columns` |
+| `platform_message_id` | `hermes:columns`: the platform's ID of a gateway message |
+| `observed` | `hermes:columns`: a group message Hermes saw and was not addressed by (`hermes/observed`) |
+| `_compressed_summary` | tells a compaction's summary row |
+| `active`, `compacted` | where the row stands: in context, summarised, or out of context (What the model saw) |
+| `api_content` | the item's text, when set, for a user or assistant row |
+| `display_kind`, `display_metadata` | `visible: false` for hidden and model-only rows; both in `hermes:columns` |
+| `display_identity`, `display_order` | Hermes' display index, derived from the other columns; not kept (`hermes/display-index`) |
+| `message_uid` | `hermes:columns`: the row's durable identity |
+| `absorbed_message_uids` | `hermes:columns`: on a user row a consecutive-user merge kept, the `message_uid` of each row merged into it (`record_absorbed_message`) |
+| `tool_call_uids`, `tool_call_uid` | `hermes:columns`: per-occurrence identities of an assistant's calls and of the call an output answers | A renamed call keeps the native ID in
 `hermes:call_id`, and a call's members beyond `id`, `type` and
 `function` (such as `extra_content`) are in `hermes:call`.
 
@@ -328,6 +389,7 @@ sends a child its goal as that message.
 | `hermes/created-at` | lossy | The session row has no start time Hermes accepts; `created_at` is its first message's. |
 | `hermes/delegation-delivery` | kept | A background delegation's result, delivered as a user message; its delegation is in the row's columns. |
 | `hermes/denial-text` | lossy | An output carrying the approval gate's refusal; a reject decision, told by the text. |
+| `hermes/display-index` | dropped | `display_identity` and `display_order`, the display index Hermes derives from a row's other columns, are not kept. |
 | `hermes/duplicate-session` | dropped | A second row of one session ID. |
 | `hermes/inactive-rows` | lossy | Runs of rows out of context (rewound, superseded, deactivated), each a branch. |
 | `hermes/malformed` | repaired | A row that cannot be read (no id, no role) is skipped. |

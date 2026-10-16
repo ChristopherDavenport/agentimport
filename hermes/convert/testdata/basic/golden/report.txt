@@ -2,6 +2,7 @@ hermes: 5 rows: mapped 5 kept 0 dropped 0 malformed 0
   gap      agentimport/provenance                            1  the import is recorded in the header's agentimport:source member
   gap      agentimport/vcs-branch                            1  the session's git branch is in the vcs member hermes:branch
   gap      hermes/session-usage                              1  Hermes records usage per session and per model of a session, not per response, so no response entry carries usage; it is in the header's hermes:session member (its token and cost columns) and hermes:model_usage (session_model_usage's rows)
+  dropped  hermes/display-index                              1  display_identity and display_order, the display index Hermes derives from a row's other columns, are not kept
   dropped  hermes/tools                                      1  Hermes stores the names of the session's tools, kept with the session row, not their definitions; the settings carry no tools
   lossy    hermes/system-prompt                              1  the instructions are the system prompt Hermes stored for the session (system_prompts, by the row's system_prompt_hash); what it adds per request, the ephemeral prompt, prefill messages and per-turn notes, is not stored
   kept     hermes/members                                    5  kept in hermes:model_config
