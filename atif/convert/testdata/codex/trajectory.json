@@ -1,0 +1,15 @@
+{
+  "schema_version": "ATIF-v1.7",
+  "session_id": "cx-run",
+  "agent": {"name": "codex", "version": "0.99.0", "model_name": "gpt-5-codex", "extra": {"originator": "codex_exec", "cwd": "/repo"}},
+  "steps": [
+    {"step_id": 1, "timestamp": "2026-10-01T00:00:00Z", "source": "system", "message": "Developer instructions."},
+    {"step_id": 2, "timestamp": "2026-10-01T00:00:01Z", "source": "user", "message": "Apply the patch."},
+    {"step_id": 3, "timestamp": "2026-10-01T00:00:04Z", "source": "agent", "model_name": "gpt-5-codex", "message": "",
+     "reasoning_content": "Patch it.",
+     "tool_calls": [{"tool_call_id": "", "function_name": "apply_patch", "arguments": {"input": "*** Begin Patch\n*** End Patch"}}],
+     "observation": {"results": [{"content": "Done!"}]},
+     "metrics": {"prompt_tokens": 500, "completion_tokens": 30, "cached_tokens": 100, "extra": {"reasoning_output_tokens": 20, "total_tokens": 530}},
+     "extra": {"tool_call_details": {"": {"item_type": "custom_tool_call", "raw_arguments": "*** Begin Patch\n*** End Patch"}}}}
+  ]
+}

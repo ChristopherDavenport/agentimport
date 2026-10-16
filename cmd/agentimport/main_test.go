@@ -20,6 +20,7 @@ var fixtureRoots = []string{
 	"../../claudecode/convert/testdata",
 	"../../pi/convert/testdata",
 	"../../codex/convert/testdata",
+	"../../atif/convert/testdata",
 }
 
 func runCmd(t *testing.T, args ...string) (int, string, string) {
@@ -75,6 +76,9 @@ func TestDetect(t *testing.T) {
 		{write("side.jsonl", `{"type":"queue-operation","operation":"enqueue","sessionId":"s"}`+"\n"), "claudecode", ""},
 		{"../../claudecode/convert/testdata/plain/golden/0.jsonl", "", "already an agentsession file"},
 		{write("notes.jsonl", `{"hello":"world"}`+"\n"), "", "-from"},
+		{"../../atif/convert/testdata/minimal/trajectory.json", "atif", ""},
+		{"../../atif/convert/testdata/truncated/trajectory.json", "atif", ""},
+		{write("config.json", `{"schema_version":"2.0"}`), "", "-from"},
 		{write("empty.jsonl", ""), "", "-from"},
 	} {
 		s, err := detect(tc.path)
@@ -158,7 +162,7 @@ func TestConvertFixtures(t *testing.T) {
 			sameSession(t, w.File, got, want.Sessions[i])
 		}
 	}
-	for _, name := range []string{"claudecode", "pi", "codex"} {
+	for _, name := range []string{"claudecode", "pi", "codex", "atif"} {
 		if bySource[name] == 0 {
 			t.Errorf("no %s fixture was converted", name)
 		}
@@ -168,7 +172,8 @@ func TestConvertFixtures(t *testing.T) {
 	}
 	for _, s := range res.Skipped {
 		if !strings.Contains(s.Path, "golden") && !strings.Contains(s.Path, "/subagents/agent-") &&
-			s.Reason != "a Codex sub-agent's rollout, converted with its parent" {
+			s.Reason != "a Codex sub-agent's rollout, converted with its parent" &&
+			s.Reason != "an ATIF continuation or sub-agent file, converted with the document naming it" {
 			t.Errorf("skipped %s: %s", s.Path, s.Reason)
 		}
 	}
@@ -275,7 +280,7 @@ func TestReport(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d\n%s%s", code, out, errOut)
 	}
-	for _, want := range []string{"converted: claudecode ", "claudecode: ", "pi: ", "codex: ", "gap      agentimport/provenance"} {
+	for _, want := range []string{"converted: claudecode ", "claudecode: ", "pi: ", "codex: ", "atif: ", "roots and steps:", "gap      agentimport/provenance"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("report lacks %q:\n%s", want, out)
 		}
@@ -458,5 +463,42 @@ func TestCodexCycle(t *testing.T) {
 	})
 	if len(sessions) != 3 || sessions[self] != 1 || sessions[a] != 1 || sessions[b] != 1 {
 		t.Errorf("sessions = %v", sessions)
+	}
+}
+
+// TestATIFFamily checks an ATIF document's continuations and sub-agent
+// files convert with it and are skipped as inputs, and that a file
+// another names converts on its own when named alone.
+func TestATIFFamily(t *testing.T) {
+	run := func(args ...string) (converted []string, skippedRelated int) {
+		t.Helper()
+		ins, skip, err := collect(args, "auto")
+		if err != nil {
+			t.Fatal(err)
+		}
+		newRunner(false, &skip).each(ins, func(o outcome) {
+			if o.err != nil {
+				t.Errorf("%s: %v", o.in.path, o.err)
+				return
+			}
+			converted = append(converted, filepath.Base(o.in.path))
+		})
+		for _, s := range skip {
+			if strings.HasPrefix(s.Reason, "an ATIF continuation") {
+				skippedRelated++
+			}
+		}
+		return converted, skippedRelated
+	}
+	refs := "../../atif/convert/testdata/file-refs"
+	if got, n := run(refs); len(got) != 1 || got[0] != "trajectory.json" || n != 3 {
+		t.Errorf("file-refs: converted %v, %d skipped", got, n)
+	}
+	if got, n := run(filepath.Join(refs, "trajectory.summarization-1-questions.json")); len(got) != 1 || n != 0 {
+		t.Errorf("a sub-agent file alone: converted %v, %d skipped", got, n)
+	}
+	// A cycle: the child names its parent; each converts once.
+	if got, n := run("../../atif/convert/testdata/cycle"); len(got) != 1 || n != 2 {
+		t.Errorf("cycle: converted %v, %d skipped", got, n)
 	}
 }

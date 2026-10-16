@@ -1,0 +1,35 @@
+{
+  "schema_version": "ATIF-v1.7",
+  "session_id": "mini-run",
+  "agent": {"name": "mini-swe-agent", "version": "1.9", "model_name": "openai/gpt-5", "extra": {"original_format": "chat"}},
+  "notes": "Converted from a chat-completions log.",
+  "steps": [
+    {"step_id": 1, "timestamp": "2026-09-28T03:00:00Z", "source": "system", "message": "You are a shell agent."},
+    {"step_id": 2, "timestamp": "2026-09-28T03:00:01Z", "source": "user", "message": "Fix the test."},
+    {"step_id": 3, "timestamp": "2026-09-28T03:00:04Z", "source": "agent", "message": "Two commands.",
+     "tool_calls": [
+       {"tool_call_id": "t1", "function_name": "bash", "arguments": {"command": "ls"}},
+       {"tool_call_id": "t2", "function_name": "bash", "arguments": {"command": "go test"}}
+     ],
+     "observation": {"results": [{"content": "a_test.go"}, {"content": "FAIL"}]},
+     "metrics": {"prompt_tokens": 100, "completion_tokens": 20, "cost_usd": 0.001, "extra": {"completion_tokens_details": {"reasoning_tokens": 12}}}},
+    {"step_id": 4, "timestamp": "2026-09-28T03:00:07Z", "source": "agent", "message": "Looking again.",
+     "tool_calls": [{"tool_call_id": "t3", "function_name": "bash", "arguments": {"command": "cat a_test.go"}}],
+     "observation": {"results": [
+       {"source_call_id": "t3", "content": "package a"},
+       {"content": "Environment note: 3 steps left."},
+       {"source_call_id": "t1", "content": "a_test.go again"},
+       {"source_call_id": "t9", "content": "from nowhere"}
+     ]},
+     "metrics": {"prompt_tokens": 150, "completion_tokens": 10}},
+    {"step_id": 5, "timestamp": "2026-09-28T03:00:09Z", "source": "agent", "message": "",
+     "tool_calls": [{"tool_call_id": "t4", "function_name": "bash", "arguments": {"command": "go test"}}],
+     "metrics": {"prompt_tokens": 170, "completion_tokens": 6}},
+    {"step_id": 6, "timestamp": "2026-09-28T03:00:12Z", "source": "user", "message": "ok",
+     "observation": {"results": [{"source_call_id": "t4", "content": "PASS"}]}},
+    {"step_id": 7, "timestamp": "2026-09-28T03:00:15Z", "source": "agent", "message": "Once more.",
+     "tool_calls": [{"tool_call_id": "t5", "function_name": "bash", "arguments": {"command": "git diff"}}],
+     "observation": {"results": [{"content": "diff --git"}, {"content": "Environment note: 1 step left."}]},
+     "metrics": {"prompt_tokens": 190, "completion_tokens": 8}}
+  ]
+}

@@ -5,11 +5,13 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
 
 	"github.com/ChristopherDavenport/agentimport"
+	atifconvert "github.com/ChristopherDavenport/agentimport/atif/convert"
 	"github.com/ChristopherDavenport/agentimport/codex"
 	codexconvert "github.com/ChristopherDavenport/agentimport/codex/convert"
 )
@@ -65,11 +67,14 @@ func (r *runner) convertOne(in input) (o outcome) {
 
 // runner converts a command's inputs. It indexes each Codex sessions
 // tree once, however many of its rollouts are inputs, and converts a
-// Codex sub-agent's rollout with its ancestor when both are inputs.
+// Codex sub-agent's rollout with its ancestor when both are inputs, and
+// an ATIF continuation or sub-agent file with the document naming it.
 type runner struct {
 	slim    bool
 	skipped *[]skipped
 	indexes map[indexKey]*codexIndex
+	// atifDone records the ATIF files conversions converted.
+	atifDone *atifconvert.Converted
 }
 
 type indexKey struct {
@@ -84,7 +89,7 @@ type codexIndex struct {
 }
 
 func newRunner(slim bool, skip *[]skipped) *runner {
-	return &runner{slim: slim, skipped: skip, indexes: map[indexKey]*codexIndex{}}
+	return &runner{slim: slim, skipped: skip, indexes: map[indexKey]*codexIndex{}, atifDone: &atifconvert.Converted{}}
 }
 
 // index returns the index of the tree a Codex rollout's relatives are
@@ -131,11 +136,15 @@ func (r *runner) convertCodex(path string) (*agentimport.Result, error) {
 }
 
 // planned is an input whose conversion may wait: a Codex sub-agent's
-// rollout with an ancestor among the inputs.
+// rollout with an ancestor among the inputs, or an ATIF file another
+// ATIF input names.
 type planned struct {
 	in     input
 	thread string
 	depth  int
+	// named says the input is an ATIF file another input names, as a
+	// continuation or a sub-agent's file.
+	named bool
 }
 
 // plan splits the inputs into those converted first and the Codex
@@ -145,6 +154,8 @@ type planned struct {
 // rollout is never its own ancestor's. A waiting rollout converts on its
 // own after all, if no conversion before it produced its session.
 func (r *runner) plan(ins []input) (first []input, wait []planned) {
+	ins, named := planATIF(ins)
+	wait = append(wait, named...)
 	threads := map[string]bool{}
 	ids := make([]string, len(ins))
 	for i, in := range ins {
@@ -178,10 +189,45 @@ func (r *runner) plan(ins []input) (first []input, wait []planned) {
 			first = append(first, in)
 			continue
 		}
-		wait = append(wait, planned{in, ids[i], depth})
+		wait = append(wait, planned{in: in, thread: ids[i], depth: depth})
 	}
 	sort.SliceStable(wait, func(i, j int) bool { return wait[i].depth < wait[j].depth })
 	return first, wait
+}
+
+// planATIF takes out of the inputs the ATIF files another ATIF input
+// names, at any depth, which wait for it: a file every other names, in
+// a cycle, still converts, since a waiting file whose conversion no
+// other held converts on its own.
+func planATIF(ins []input) (rest []input, named []planned) {
+	names := map[string]bool{}
+	var index atifconvert.Index
+	for _, in := range ins {
+		if in.source.name == atifconvert.Source {
+			for _, p := range index.Related(in.path) {
+				names[p] = true
+			}
+		}
+	}
+	for _, in := range ins {
+		if in.source.name == atifconvert.Source && names[realPath(in.path)] {
+			named = append(named, planned{in: in, named: true})
+			continue
+		}
+		rest = append(rest, in)
+	}
+	return rest, named
+}
+
+// realPath is p absolute with its links resolved, as Related lists it.
+func realPath(p string) string {
+	if abs, err := filepath.Abs(p); err == nil {
+		p = abs
+	}
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		return r
+	}
+	return filepath.Clean(p)
 }
 
 // each converts the inputs, ancestors before the Codex sub-agents that
@@ -205,6 +251,14 @@ func (r *runner) each(ins []input, visit func(outcome)) {
 		run(in)
 	}
 	for _, w := range wait {
+		if w.named {
+			if r.atifDone.Has(w.in.path) {
+				*r.skipped = append(*r.skipped, skipped{w.in.path, "an ATIF continuation or sub-agent file, converted with the document naming it"})
+				continue
+			}
+			run(w.in)
+			continue
+		}
 		if produced[w.thread] {
 			*r.skipped = append(*r.skipped, skipped{w.in.path, "a Codex sub-agent's rollout, converted with its parent"})
 			continue
@@ -216,14 +270,16 @@ func (r *runner) each(ins []input, visit func(outcome)) {
 // summary is a report without its findings: the tally and the findings
 // grouped by code. It is what a report over many sessions prints.
 type summary struct {
-	Source string                          `json:"source"`
+	Source string `json:"source"`
+	// Unit names what Lines counts, lines when empty.
+	Unit   string                          `json:"unit,omitempty"`
 	Lines  int                             `json:"lines"`
 	Tally  map[agentimport.Disposition]int `json:"tally"`
 	Groups []agentimport.Group             `json:"groups,omitempty"`
 }
 
 func summarise(r *agentimport.Report) summary {
-	return summary{Source: r.Source, Lines: r.Lines(), Tally: r.Tally, Groups: r.Groups()}
+	return summary{Source: r.Source, Unit: r.Unit, Lines: r.Lines(), Tally: r.Tally, Groups: r.Groups()}
 }
 
 // totals adds up the outcomes of many inputs, per source.

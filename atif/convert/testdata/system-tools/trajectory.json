@@ -1,0 +1,36 @@
+{
+  "schema_version": "ATIF-v1.5",
+  "session_id": "toy-run-2",
+  "agent": {
+    "name": "toy",
+    "version": "0.2",
+    "model_name": "openai/gpt-5",
+    "tool_definitions": [
+      {"type": "function", "function": {"name": "read", "description": "Read a file.", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}},
+      {"type": "function", "function": {"name": "grep", "description": "Search files.", "parameters": {"type": "object", "properties": {"pattern": {"type": "string"}}}, "strict": true}},
+      {"type": "web_search"}
+    ]
+  },
+  "steps": [
+    {"step_id": 1, "timestamp": "2026-09-20T11:00:00Z", "source": "system", "message": "You are a careful assistant."},
+    {"step_id": 2, "timestamp": "2026-09-20T11:00:00Z", "source": "system", "message": "Answer briefly."},
+    {"step_id": 3, "timestamp": "2026-09-20T11:00:01Z", "source": "user", "message": "Where is the config read?"},
+    {"step_id": 4, "timestamp": "2026-09-20T11:00:05Z", "source": "agent", "model_name": "openai/gpt-5", "reasoning_effort": "low",
+     "reasoning_content": "Search for the loader, then read it.",
+     "message": "Searching.",
+     "tool_calls": [
+       {"tool_call_id": "call_a", "function_name": "grep", "arguments": {"pattern": "LoadConfig"}},
+       {"tool_call_id": "call_b", "function_name": "read", "arguments": {"path": "config.go"}}
+     ],
+     "observation": {"results": [
+       {"source_call_id": "call_a", "content": "config.go:12: func LoadConfig"},
+       {"source_call_id": "call_b", "content": "package config"}
+     ]},
+     "metrics": {"prompt_tokens": 900, "completion_tokens": 60, "cached_tokens": 512, "cost_usd": 0.0012, "extra": {"reasoning_tokens": 40}},
+     "extra": {"latency_ms": 2100}},
+    {"step_id": 5, "timestamp": "2026-09-20T11:00:09Z", "source": "agent", "model_name": "openai/gpt-5-mini", "reasoning_effort": "low",
+     "message": "In config.go, LoadConfig.",
+     "metrics": {"prompt_tokens": 1000, "completion_tokens": 9, "cached_tokens": 896}}
+  ],
+  "final_metrics": {"total_prompt_tokens": 1900, "total_completion_tokens": 69, "total_cached_tokens": 1408, "total_cost_usd": 0.0015, "total_steps": 5}
+}

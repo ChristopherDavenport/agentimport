@@ -12,6 +12,8 @@ import (
 	"strings"
 
 	"github.com/ChristopherDavenport/agentimport"
+	"github.com/ChristopherDavenport/agentimport/atif"
+	atifconvert "github.com/ChristopherDavenport/agentimport/atif/convert"
 	"github.com/ChristopherDavenport/agentimport/claudecode"
 	ccconvert "github.com/ChristopherDavenport/agentimport/claudecode/convert"
 	"github.com/ChristopherDavenport/agentimport/codex"
@@ -48,6 +50,13 @@ var sources = []source{
 		find: codex.FindSessions,
 		convert: func(path string, r *runner) (*agentimport.Result, error) {
 			return r.convertCodex(path)
+		},
+	},
+	{
+		name: atifconvert.Source,
+		find: atif.FindSessions,
+		convert: func(path string, r *runner) (*agentimport.Result, error) {
+			return atifconvert.ConvertFile(path, atifconvert.Options{Slim: r.slim, Converted: r.atifDone})
 		},
 	},
 }
@@ -177,13 +186,22 @@ const (
 //   - a pi session by a first line of type session that is not an
 //     agentsession header;
 //   - a Claude Code transcript by a sessionId member on one of its
-//     first lines.
+//     first lines;
+//   - an ATIF document by a .json name and a schema_version starting
+//     "ATIF-v", which a document of any layout carries before its
+//     steps or after them.
 //
 // An agentsession file, which is already converted, is an error.
 func detect(path string) (source, error) {
 	cx, _ := sourceNamed(codexconvert.Source)
 	if codex.IDFromFileName(path) != "" {
 		return cx, nil
+	}
+	if strings.HasSuffix(path, ".json") {
+		if _, ok := atif.Probe(path); ok {
+			s, _ := sourceNamed(atifconvert.Source)
+			return s, nil
+		}
 	}
 	f, err := os.Open(path)
 	if err != nil {

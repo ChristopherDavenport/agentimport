@@ -1,0 +1,8 @@
+{
+  "schema_version": "ATIF-v1.8",
+  "session_id": "cut-run",
+  "agent": {"name": "terminus-2", "version": "2.0.0"},
+  "steps": [
+    {"step_id": 1, "timestamp": "2026-10-04T07:00:00Z", "source": "user", "message": "Start."},
+    {"step_id": 2, "timestamp": "2026-10-04T07:00:03Z", "source": "agent", "message": "Working.", "metrics": {"prompt_tokens": 10, "completion_tokens": 2}},
+    {"step_id": 3, "timestamp": "2026-10-04T07:00:05Z", "source": "user", "message": "Keep go

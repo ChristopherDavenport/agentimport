@@ -1,0 +1,11 @@
+{
+  "schema_version": "ATIF-v1.6",
+  "session_id": "cyc-child",
+  "agent": {"name": "toy", "version": "1.0"},
+  "steps": [
+    {"step_id": 1, "timestamp": "2026-10-05T06:00:01Z", "source": "user", "message": "Child work."},
+    {"step_id": 2, "timestamp": "2026-10-05T06:00:01.5Z", "source": "agent", "message": "",
+     "tool_calls": [{"tool_call_id": "back", "function_name": "spawn", "arguments": {}}],
+     "observation": {"results": [{"source_call_id": "back", "content": "parent?", "subagent_trajectory_ref": [{"trajectory_path": "trajectory.json"}]}]}}
+  ]
+}

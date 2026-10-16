@@ -69,7 +69,12 @@ type Finding struct {
 type Report struct {
 	// Source names the native format, such as "claudecode".
 	Source string `json:"source"`
-	// Tally counts native lines by where they ended up.
+	// Unit names what the tally counts, "lines" when empty. A source
+	// whose native files are not line-oriented counts other units: ATIF,
+	// one JSON document per file, counts each document's root and each
+	// of its steps.
+	Unit string `json:"unit,omitempty"`
+	// Tally counts native lines, or units, by where they ended up.
 	Tally    map[Disposition]int `json:"tally"`
 	Findings []Finding           `json:"findings,omitempty"`
 }
@@ -99,8 +104,12 @@ func (r *Report) Addf(kind Kind, code, file string, line int, format string, arg
 	r.Add(Finding{Code: code, Kind: kind, File: file, Line: line, Detail: fmt.Sprintf(format, args...)})
 }
 
-// Merge adds another report's tally and findings to r.
+// Merge adds another report's tally and findings to r, and its unit
+// when r has none.
 func (r *Report) Merge(o *Report) {
+	if r.Unit == "" {
+		r.Unit = o.Unit
+	}
 	for d, n := range o.Tally {
 		r.Tally[d] += n
 	}
@@ -177,7 +186,11 @@ func (r *Report) Groups() []Group {
 // WriteText prints the tally and the grouped findings.
 func (r *Report) WriteText(w io.Writer) error {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s: %d lines:", r.Source, r.Lines())
+	unit := r.Unit
+	if unit == "" {
+		unit = "lines"
+	}
+	fmt.Fprintf(&b, "%s: %d %s:", r.Source, r.Lines(), unit)
 	for _, d := range Dispositions {
 		fmt.Fprintf(&b, " %s %d", d, r.Tally[d])
 	}

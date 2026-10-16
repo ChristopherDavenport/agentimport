@@ -1,0 +1,18 @@
+{
+  "schema_version": "ATIF-v1.7",
+  "session_id": "vibe-run",
+  "agent": {"name": "vibe", "version": "1.0", "model_name": "m"},
+  "steps": [
+    {"step_id": 1, "timestamp": "2026-10-06T05:00:00Z", "source": "user", "message": "Plan it."},
+    {"step_id": 2, "timestamp": "2026-10-06T05:00:02Z", "source": "agent", "message": "Three steps.", "metrics": {"prompt_tokens": 10, "completion_tokens": 3}},
+    {"step_id": 3, "timestamp": "2026-10-06T05:00:03Z", "source": "system", "message": "Compacted",
+     "extra": {"context_management": {"type": "compaction", "boundary": "replace"}}},
+    {"step_id": 4, "timestamp": "2026-10-06T05:00:03Z", "source": "user", "message": "Summary: asked for a plan; gave three steps."},
+    {"step_id": 5, "timestamp": "2026-10-06T05:00:05Z", "source": "agent", "message": "Step one.", "metrics": {"prompt_tokens": 12, "completion_tokens": 3}},
+    {"step_id": 6, "timestamp": "2026-10-06T05:00:06Z", "source": "system", "message": "Compacted",
+     "extra": {"context_management": {"type": "compaction", "boundary": "replace"}}},
+    {"step_id": 7, "timestamp": "2026-10-06T05:00:07Z", "source": "user", "message": "Next.",
+     "observation": {"results": [{"content": "tool out"}]}},
+    {"step_id": 8, "timestamp": "2026-10-06T05:00:09Z", "source": "agent", "message": "Step two.", "metrics": {"prompt_tokens": 20, "completion_tokens": 3}}
+  ]
+}

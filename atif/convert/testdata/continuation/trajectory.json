@@ -1,0 +1,11 @@
+{
+  "schema_version": "ATIF-v1.5",
+  "session_id": "lin-run",
+  "agent": {"name": "terminus-2", "version": "2.0.0", "model_name": "m"},
+  "steps": [
+    {"step_id": 1, "timestamp": "2026-09-25T06:00:00Z", "source": "user", "message": "Do the task."},
+    {"step_id": 2, "timestamp": "2026-09-25T06:00:03Z", "source": "agent", "message": "Step one done.",
+     "metrics": {"prompt_tokens": 100, "completion_tokens": 10}}
+  ],
+  "continued_trajectory_ref": "trajectory.cont-1.json"
+}

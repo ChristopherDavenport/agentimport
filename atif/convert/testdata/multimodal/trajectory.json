@@ -1,0 +1,23 @@
+{
+  "schema_version": "ATIF-v1.6",
+  "session_id": "toy-run-3",
+  "agent": {"name": "toy", "version": "0.3", "model_name": "gpt-5"},
+  "steps": [
+    {"step_id": 1, "timestamp": "2026-09-21T09:00:00Z", "source": "user", "message": [
+      {"type": "text", "text": "What is on screen?"},
+      {"type": "image", "source": {"media_type": "image/png", "path": "images/s1.png"}}
+    ]},
+    {"step_id": 2, "timestamp": "2026-09-21T09:00:03Z", "source": "agent", "message": "",
+     "tool_calls": [{"tool_call_id": "shot_1", "function_name": "screenshot", "arguments": {}}],
+     "observation": {"results": [{"source_call_id": "shot_1", "content": [
+       {"type": "text", "text": "captured"},
+       {"type": "image", "source": {"media_type": "image/png", "path": "images/missing.png"}}
+     ]}]}},
+    {"step_id": 3, "timestamp": "2026-09-21T09:00:05Z", "source": "user", "message": [
+      {"type": "text", "text": "And this one?"},
+      {"type": "image", "source": {"media_type": "image/jpeg", "path": "https://example.com/pic.jpg"}},
+      {"type": "image", "source": {"media_type": "image/png", "path": "../outside.png"}}
+    ]},
+    {"step_id": 4, "timestamp": "2026-09-21T09:00:07Z", "source": "agent", "message": "A green pixel, then a remote picture."}
+  ]
+}

@@ -37,6 +37,8 @@ One module, `github.com/ChristopherDavenport/agentimport`.
 | `pi/convert` | pi → agentsession | the above |
 | `codex` | the Codex CLI rollout format | stdlib |
 | `codex/convert` | Codex → agentsession | the above |
+| `atif` | ATIF, Harbor's trajectory format (v1.0 to v1.8) | stdlib |
+| `atif/convert` | ATIF → agentsession | the above |
 | `cmd/agentimport` | the command-line program | all of the above |
 
 A format package never imports `agentsession`; a test enforces it. The
@@ -204,8 +206,8 @@ of each rollout) to find a thread's children.
 ## The command
 
 ```
-agentimport convert -o <store> [-from auto|claudecode|pi|codex] [-strict] [-slim] [-force] [-report text|json] <file|dir>...
-agentimport report [-from auto|claudecode|pi|codex] [-strict] [-slim] [-json] <file|dir>...
+agentimport convert -o <store> [-from auto|claudecode|pi|codex|atif] [-strict] [-slim] [-force] [-report text|json] <file|dir>...
+agentimport report [-from auto|claudecode|pi|codex|atif] [-strict] [-slim] [-json] <file|dir>...
 ```
 
 `convert` writes every session a conversion makes into the jsonl store
