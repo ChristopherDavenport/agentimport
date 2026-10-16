@@ -333,13 +333,16 @@ func (c *conv) reasoningMembers(i int, e agentsession.Entry, provider, extra str
 // mergeNote reports a user message OpenHands merges with the one before
 // it in the view, which the session keeps apart.
 func (c *conv) mergeNote(i int) {
+	if c.era != eraLive {
+		return
+	}
 	v := c.vs.view
 	if len(v) == 0 {
 		return
 	}
 	last := v[len(v)-1]
 	if last.idx < 0 || c.plainUser(last.idx) {
-		c.at(agentimport.Lossy, "openhands/merged-user-messages", i, "OpenHands sends this message merged into the user message before it, as one turn; the session keeps the two items")
+		c.at(agentimport.Lossy, "openhands/merged-user-messages", i, "OpenHands from 1.26 sends this message merged into the user message before it, as one turn; the session keeps the two items")
 	}
 }
 
@@ -675,9 +678,14 @@ func (c *conv) output(i int) error {
 		c.at(agentimport.Kept, "openhands/orphan-output", i, "the %s answers call %q, which no action before it on its path made; OpenHands leaves it out of the context, and it is a custom entry", ev.Kind, native)
 		return c.customEvent(i, at, "")
 	case c.answeredOn(cl, i):
-		c.at(agentimport.Kept, "openhands/duplicate-output", i, "a second answer to call %s; OpenHands sends the first alone, and this one is a custom entry", cl.id)
+		if c.era == eraLive {
+			c.at(agentimport.Kept, "openhands/duplicate-output", i, "a second answer to call %s; OpenHands sends the first alone, and this one is a custom entry", cl.id)
+		} else {
+			c.at(agentimport.Kept, "openhands/duplicate-output", i, "a second answer to call %s, which OpenHands before 1.21 sends too and a session cannot hold; it is a custom entry", cl.id)
+		}
 		return c.customEvent(i, at, cl.id)
 	}
+	c.probableResume(i, cl)
 	var parts []outPart
 	var members map[string]json.RawMessage
 	var decision *agentsession.DecisionEntry

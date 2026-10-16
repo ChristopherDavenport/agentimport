@@ -44,8 +44,13 @@ date a change:
 No file records a version: not `base_state.json`, not an event, not
 `meta.json`. Shapes are told apart by structure and each guess is
 reported: tools as chat tool params (1.0 to 1.6) or tool definitions
-(1.7 and later), `parent_id` on events (1.31 and later), and the view
-algorithm (sequential condensations from 1.12). Timestamps are
+(1.7 and later), `parent_id` on events (1.31 and later), and the way
+the view is built (below), told by `parent_id`, by members
+`base_state.json` gained (`last_user_message_id` in 1.11.5,
+`hook_config` in 1.13, `tags` in 1.16, `invoked_skills` in 1.18) and by
+the `Message` members 1.0 to 1.9 wrote (`cache_enabled` and the like).
+`base_state.json` names the release that last saved it, so a
+conversation a newer release resumed reads as the newer one's. Timestamps are
 `datetime.now().isoformat()`: local time with no zone, read in
 `Options.Location` (UTC by default) and reported.
 
@@ -112,9 +117,25 @@ prefixed `subagents/<id>/`).
 
 ## What the model saw
 
-OpenHands rebuilds the model's context from the events at every step
-(`Agent.step`, `View.from_events`), and the conversion rebuilds the
-same thing:
+OpenHands builds the model's context from the events (`View`), in a way
+that changed across releases, and the conversion builds it as the
+release it takes the conversation for did (`openhands/version-guess`
+says which, and why):
+
+| Release | View |
+| --- | --- |
+| 1.0 to 1.9 | rebuilt at every request: every condensation's forgotten events left out at once, with the whole response of a forgotten action, the summary of the last condensation that has one inserted at its offset, then calls and answers with no partner filtered once |
+| 1.10 to 1.11.4 | rebuilt at every request: condensations applied in order, earlier summaries kept; batch atomicity, call matching, batch atomicity again, then answers to actions the view lost |
+| 1.11.5 to 1.16 | rebuilt at every request: condensations in order, then the properties (step 3, without observation uniqueness) until none removes anything |
+| 1.17 and later | built incrementally: each event appended, each condensation applied, and the properties enforced only when the conversation is reloaded (a cold load on resume, a branch switch from 1.31, a fork's start, or recovery from a history the provider refused); observation uniqueness from 1.21, adjacent user messages merged from 1.26 |
+
+From 1.17 a reload the files show (a branch switch, a fork's start) is
+applied where it happened; a cold load or a recovery leaves no trace,
+so where one would have changed what was sent the conversion follows
+the live run and reports the guess (`openhands/reload-guess`), as it
+does for an answer whose call waited across another event, which
+suggests a resume: OpenHands then sends that answer with no call,
+which a session cannot hold. The steps:
 
 1. **The path.** Events from 1.31 carry `parent_id`, and the context is
    the path from the leaf (`base_state.leaf_event_id`) to the root; an
@@ -132,10 +153,9 @@ same thing:
    forgets (`forgotten_event_ids`, which can name an earlier summary as
    `<condensation id>-summary`) from the view, then, with a `summary`
    and a `summary_offset`, inserts the summary as a user message at the
-   offset of what is left. Releases before 1.12 applied only the last
-   condensation's summary; the two differ only when a condensation
-   keeps an earlier summary, which is reported as a guess.
-3. **Properties**, enforced until none removes anything: a second
+   offset of what is left (1.10 and later; 1.0 to 1.9 as in the
+   table).
+3. **Properties**, when the release enforces them: a second
    answer to a call is dropped; when an action of a response is gone,
    the rest of the response goes; an action with no answer, or an
    answer with no action, is dropped (so a call awaiting confirmation is
@@ -143,15 +163,17 @@ same thing:
    from an action with Anthropic thinking blocks) is gone, the rest
    goes.
 4. **Messages.** Actions of one response become one assistant message,
-   the first action's thought and reasoning with every call; adjacent
-   plain user messages are merged into one.
+   the first action's thought and reasoning with every call (a
+   Responses reasoning item only from 1.43, below); adjacent plain user
+   messages are merged into one from 1.26.
 5. **Send time.** A tool result's text over 50,000 characters is cut in
    the middle; images go only to a vision model; prompt-cache markers;
    for the Responses API the system message is the `instructions`.
 
 The conversion writes the events where they are on the path and
 reconciles the session's context with OpenHands' view at each request
-(the first event of each response) and at each condensation: a
+(the first event of each response), at each condensation and at each
+reload the files show: a
 `config` entry's `omit.items` names the items OpenHands left out there
 (`openhands/view-enforced`), after one clearing the omit in force when
 something comes back. A condensation is:
@@ -372,7 +394,7 @@ every converter can report are in [README.md](README.md).
 | `openhands/instructions-join` | lossy | The system prompt and the dynamic context are two parts, joined with a blank line, where OpenHands sends two blocks or a newline. |
 | `openhands/interrupted` | lossy | A call a pause or a crash cut: an answer decision before OpenHands' output. |
 | `openhands/invalid-call` | lossy | A call OpenHands could not run, its arguments as OpenHands stored them. |
-| `openhands/merged-user-messages` | lossy | A user message OpenHands merges with the one before; the session keeps both. |
+| `openhands/merged-user-messages` | lossy | A user message OpenHands from 1.26 merges with the one before; the session keeps both. |
 | `openhands/model-from-state` | lossy | The model is the state's last saved one; a switch is not recorded per event. |
 | `openhands/no-observation` | lossy | An observation event with no observation; the output is empty. |
 | `openhands/no-state` | lossy | The conversation has no `base_state.json`: no working directory, leaf or usage. |
@@ -396,8 +418,9 @@ every converter can report are in [README.md](README.md).
 | `openhands/timestamp-zone` | lossy | Timestamps with no zone are read in `Options.Location`. |
 | `openhands/tools-unrecorded` | lossy | Tool definitions with no parameter schema; the config carries names and descriptions. |
 | `openhands/usage-joined` | lossy | No usage is recorded for a response. |
-| `openhands/version-guess` | lossy | A shape that tells the SDK release, or does not: chat tool params (1.0 to 1.6), an earlier summary kept in the view (1.12 and later). |
-| `openhands/view-enforced` | lossy | OpenHands leaves an event out of the context while building the view; an omit leaves out its items. |
+| `openhands/version-guess` | lossy | The release the conversation is taken for, and what tells it: the way its view is built, chat tool params (1.0 to 1.6). |
+| `openhands/reload-guess` | lossy | From 1.17 OpenHands enforces its view only on a reload: a reload the files do not show would have left an event out here, or an answer whose call waited across another event suggests one; the session follows the live run. |
+| `openhands/view-enforced` | lossy | OpenHands leaves an event out of the context while building the view, at a request before 1.17 or at a reload the files show from 1.17; an omit leaves out its items. |
 | `openhands/child-usage` | kept, or dropped | The sub-agents' copies of their metrics are in `openhands:stats` and not counted. |
 | `openhands/cost-unplaced` | kept, or dropped | Per-call costs, which name no response, are in `openhands:stats`. |
 | `openhands/event-members` | kept, or dropped | Event members the session has no place for are `openhands:event`. |
@@ -408,7 +431,7 @@ every converter can report are in [README.md](README.md).
 | `openhands/assistant-input` | kept | An assistant message no response produced is an input item. |
 | `openhands/compaction-marker` | kept | A custom marker is the first_kept of a compaction that keeps nothing after its summary. |
 | `openhands/condensation-noop` | kept | A condensation that forgets nothing the context holds is a custom entry. |
-| `openhands/duplicate-output` | kept | A second answer to a call is a custom entry. |
+| `openhands/duplicate-output` | kept | A second answer to a call on one path is a custom entry; OpenHands from 1.21 sends the first alone, before it both. |
 | `openhands/extension-item` | kept | A redacted thinking block is the `anthropic.redacted_thinking` item. |
 | `openhands/fork-usage` | kept, or lossy | A response a fork copied keeps its usage in `openhands:copied_usage`, and a call in the fork's metrics that its source's metrics hold too is a custom entry's `copied_usage`, not counted; when the source cannot be read, every call of a fork no event names is kept so, a guess. |
 | `openhands/harness-user-message` | kept | A user message the environment, a hook or OpenHands wrote carries `openhands:source`. |

@@ -55,6 +55,14 @@ type conv struct {
 	// byFileID maps the event IDs the file names hold to the first event
 	// holding each.
 	byFileID map[string]int
+	// era is how the SDK that wrote the conversation built its view,
+	// and eraWhy what tells it. reloadWhy holds why a reload left
+	// events out, for the next reconcile; guessed the events a reload
+	// guess was reported for.
+	era       era
+	eraWhy    string
+	reloadWhy map[int]string
+	guessed   map[int]bool
 
 	// calls holds the calls written, by native ID, on every branch;
 	// callAt the call each action wrote.
@@ -155,6 +163,7 @@ func newConv(fam *family, c *openhands.Conversation, tgt target, prefix string, 
 		vsKey:    -1,
 		vs:       newViewState(),
 		pinnedOf: map[string]map[string]bool{},
+		guessed:  map[int]bool{},
 	}
 }
 
@@ -303,6 +312,7 @@ func (c *conv) plan() {
 	}
 	c.leaf = c.pickLeaf()
 	c.forkCopies()
+	c.pickEra()
 }
 
 // readInfo reads the members of event i the walk and the view use.
@@ -696,6 +706,10 @@ func (c *conv) event(i int) error {
 		c.at(agentimport.Repaired, "openhands/mistyped-member", i, "members %s are not of the JSON type OpenHands writes; they are kept as written and not mapped", strings.Join(in.mistyped, ", "))
 	}
 	c.viewFor(i)
+	if c.copyKnown && c.copied > 0 && i == c.copied {
+		// A fork rebuilds its view from the copied events.
+		c.reload("the fork's start")
+	}
 	if c.done[i] {
 		// An action its batch wrote with the first: it writes nothing
 		// more.

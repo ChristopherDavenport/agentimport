@@ -8,6 +8,16 @@ session 0 00000008-0000-4000-9000-000000000001
     output call_l1 timeout after 5s …
   request of msg_l3:
     user: Investigate the flaky test.
+    reasoning
+    call call_l1 terminal
+    output call_l1 timeout after 5s …
+    call call_l2 terminal
+    output call_l2 ok …
   request of msg_l4:
     user: Investigate the flaky test.
+    reasoning
+    call call_l1 terminal
+    call call_l2 terminal
+    output call_l2 ok …
+    call call_lost terminal
     user: Stop that and summarise.

@@ -1,5 +1,10 @@
 session 0 00000008-0000-4000-9000-000000000001
   instructions: You are a careful coding agent.
   user: Investigate the flaky test.
+  reasoning
+  call call_l1 terminal
+  call call_l2 terminal
+  output call_l2 ok …
+  call call_lost terminal
   user: Stop that and summarise.
   assistant: The test times out on slow machines.

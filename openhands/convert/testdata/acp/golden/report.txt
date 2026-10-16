@@ -5,6 +5,7 @@ openhands: 6 files: mapped 5 kept 1 dropped 0 malformed 0
   lossy    openhands/no-version                              1  OpenHands records no version of itself or of its format; the harness names none, and shapes are told apart by structure
   lossy    openhands/timestamp-zone                          1  OpenHands writes local time with no zone; the timestamps are read in UTC
   lossy    openhands/usage-joined                            1  base_state records no usage for response "a1b2c3d4-0000-4000-8000-000000000001"; the response has none (at events:4)
+  lossy    openhands/version-guess                           1  the view is built as SDK 1.17 and later built it: base_state has invoked_skills, which SDK 1.18 and later write; base_state names the release that last saved it, and events an earlier release wrote are read the same way
   kept     openhands/cost-unplaced                           1  per-call costs name no response, so they cannot be placed on one; they are in the header member openhands:stats with the metrics' totals
   kept     openhands/event-members                           2  members action, security_risk, summary, tool_call are kept in openhands:event (at events:4, events:5)
   kept     openhands/observation                             1  the structured FinishObservation is kept in openhands:observation beside the output rendered from it (at events:5)

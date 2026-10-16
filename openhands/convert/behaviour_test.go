@@ -305,3 +305,91 @@ func TestForkUsageOnce(t *testing.T) {
 		t.Errorf("counted %s, want %s", got, want)
 	}
 }
+
+func replyEv(id, parent, resp, text string) string {
+	return ev("MessageEvent", id, parent, `"llm_message":{"role":"assistant","content":[{"type":"text","text":"`+text+`"}]},"llm_response_id":"`+resp+`"`)
+}
+
+// stateLive is a base_state as SDK 1.18 and later write it.
+const stateLive = `{"id":"s","agent":{"kind":"Agent","llm":{"model":"m"}},"persistence_dir":"p","invoked_skills":[]}`
+
+// requestOf renders the request context of response resp.
+func requestOf(t *testing.T, s *agentsession.Session, resp string) string {
+	t.Helper()
+	for _, e := range s.Entries() {
+		if r, ok := e.(*agentsession.ResponseEntry); ok && r.ResponseID == resp {
+			ctx, err := s.RequestContext(r.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return strings.Join(renderItems(ctx.Items), "; ")
+		}
+	}
+	t.Fatalf("no response %s", resp)
+	return ""
+}
+
+// TestEraSummaries keeps an earlier summary a later condensation does
+// not forget, as SDK 1.10 and later send it, and drops it for 1.0 to
+// 1.9, which sent the last summary alone.
+func TestEraSummaries(t *testing.T) {
+	events := func(user string) []string {
+		return []string{
+			userEv("e0000000", "", "start"),
+			replyEv("e1000000", "", "r1", "one"),
+			userEv("e2000000", "", "more"),
+			ev("Condensation", "e3000000", "", `"forgotten_event_ids":["e1000000"],"summary":"S1","summary_offset":1,"llm_response_id":"c1"`),
+			userEv("e4000000", "", "again"),
+			ev("Condensation", "e5000000", "", `"forgotten_event_ids":["e2000000"],"summary":"S2","summary_offset":1,"llm_response_id":"c2"`),
+			replyEv("e6000000", "", "r2", "two"),
+			user,
+		}
+	}
+	live := convertEvents(t, stateLive, events(userEv("e7000000", "", "end"))...)
+	if got := requestOf(t, live.Sessions[0], "r2"); !strings.HasPrefix(got, "user: S2 | S1;") {
+		t.Errorf("1.10 and later: request %s, want both summaries", got)
+	}
+	old := strings.Replace(userEv("e7000000", "", "end"), `"role":"user"`, `"role":"user","cache_enabled":false`, 1)
+	last := convertEvents(t, `{"id":"s","agent":{"kind":"Agent"}}`, events(old)...)
+	if got := requestOf(t, last.Sessions[0], "r2"); !strings.HasPrefix(got, "user: S2;") {
+		t.Errorf("1.0 to 1.9: request %s, want the last summary alone", got)
+	}
+}
+
+// TestReloadAtBranchSwitch builds a 1.31+ view incrementally: a call
+// left unanswered is sent while the run is live, reported as a guess,
+// and left out from the branch switch, where OpenHands reloads.
+func TestReloadAtBranchSwitch(t *testing.T) {
+	res := convertEvents(t, stateLive,
+		userEv("e0000000", "", "go"),
+		actionEv("e1000000", "e0000000", "c1", "r1", ""),
+		userEv("e2000000", "e1000000", "wait"),
+		replyEv("e3000000", "e2000000", "r2", "waiting"),
+		userEv("e4000000", "e2000000", "other"),
+		replyEv("e5000000", "e4000000", "r3", "done"),
+	)
+	s := res.Sessions[0]
+	if got := requestOf(t, s, "r2"); !strings.Contains(got, "call c1") {
+		t.Errorf("live request %s, want the unanswered call sent", got)
+	}
+	if got := requestOf(t, s, "r3"); strings.Contains(got, "call c1") {
+		t.Errorf("request after the branch switch %s, want the call left out", got)
+	}
+	if !codes(res.Report)["openhands/reload-guess"] {
+		t.Error("the live request that a reload would have trimmed is not reported")
+	}
+}
+
+// TestProbableResume reports an answer whose call waited across a
+// user message, which suggests the conversation was reloaded.
+func TestProbableResume(t *testing.T) {
+	res := convertEvents(t, stateLive,
+		userEv("e0000000", "", "go"),
+		actionEv("e1000000", "", "c1", "r1", ""),
+		userEv("e2000000", "", "approve it"),
+		obsEv("e3000000", "", "c1", "ran"),
+	)
+	if !codes(res.Report)["openhands/reload-guess"] {
+		t.Errorf("codes %v: want the probable resume reported", res.Report.Codes())
+	}
+}

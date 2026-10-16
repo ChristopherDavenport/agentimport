@@ -12,9 +12,12 @@ versions may break the API.
   Canvas). `openhands` reads a conversation as OpenHands does, events
   in index order up to the first gap, keeping every member it does not
   declare. `openhands/convert` rebuilds the context OpenHands built at
-  each request: the path to the leaf through the event tree (1.31 and
-  later), each condensation applied in order, and the view's four
-  properties, the difference written as `omit` config entries; a
+  each request, as the release it takes the conversation for built it
+  (told by the members the files hold, and reported): the path to the
+  leaf through the event tree (1.31 and later), condensations, and the
+  view's properties, at every request before 1.17 and from 1.17 only
+  at the reloads the files show, the difference written as `omit`
+  config entries; a
   condensation with a summary is a compaction pinning the head
   OpenHands kept ahead of the summary (the gap `agentimport/fold-head`,
   now naming OpenHands). Tool results are rendered as each observation

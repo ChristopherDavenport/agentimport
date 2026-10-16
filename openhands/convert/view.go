@@ -34,10 +34,16 @@ type viewState struct {
 	loops  [][]int
 	loopOf map[int]int
 	open   bool
+	// For SDK 1.0 to 1.9: the context events on the path, the IDs every
+	// condensation so far forgot, and the last condensation with a
+	// summary, -1 for none.
+	path    []int
+	forgot  map[string]bool
+	lastSum int
 }
 
 func newViewState() *viewState {
-	return &viewState{batches: map[string]map[int]bool{}, loopOf: map[int]int{}}
+	return &viewState{batches: map[string]map[int]bool{}, loopOf: map[int]int{}, forgot: map[string]bool{}, lastSum: -1}
 }
 
 // stateKey is the event whose view the view after event p is: p, or,
@@ -66,6 +72,8 @@ func (c *conv) viewFor(i int) {
 		c.vs.apply(c, path[k])
 	}
 	c.vsKey = want
+	// OpenHands rebuilds its view when it switches branches.
+	c.reload("a branch switch")
 }
 
 // viewApply adds event i to the view.
@@ -109,7 +117,10 @@ func (vs *viewState) apply(c *conv, j int) {
 		vs.batches[in.respID][j] = true
 	}
 	if openhands.InContext(in.kind) {
-		vs.view = append(vs.view, vEvent{idx: j})
+		vs.path = append(vs.path, j)
+		if !vs.forgot[e.ID] {
+			vs.view = append(vs.view, vEvent{idx: j})
+		}
 		return
 	}
 	if in.kind != openhands.KindCondensation {
@@ -117,6 +128,10 @@ func (vs *viewState) apply(c *conv, j int) {
 	}
 	cd, err := e.Condensation()
 	if err != nil {
+		return
+	}
+	if c.era == eraLast {
+		vs.applyLast(c, j, cd)
 		return
 	}
 	ids, _ := cd.Forgotten()
@@ -143,45 +158,6 @@ func (c *conv) viewID(v vEvent) string {
 		return openhands.SummaryID(c.c.Events[v.summaryOf].ID)
 	}
 	return c.c.Events[v.idx].ID
-}
-
-// enforce is View.enforce_properties: observation uniqueness, batch
-// atomicity, tool-call matching and tool-loop atomicity, each applied
-// in turn and the turn begun again whenever one removes events. It
-// returns the view and why each removed event left it.
-func (c *conv) enforce() ([]vEvent, map[int]string) {
-	view := append([]vEvent(nil), c.vs.view...)
-	why := map[int]string{}
-	drop := func(gone map[int]bool, reason string) {
-		kept := view[:0]
-		for _, v := range view {
-			if v.idx >= 0 && gone[v.idx] {
-				why[v.idx] = reason
-				continue
-			}
-			kept = append(kept, v)
-		}
-		view = kept
-	}
-	for {
-		if gone := c.uniqueness(view); len(gone) > 0 {
-			drop(gone, "a second answer to a call already answered")
-			continue
-		}
-		if gone := c.batchAtomicity(view); len(gone) > 0 {
-			drop(gone, "an action of a response another of whose actions left the context")
-			continue
-		}
-		if gone := c.callMatching(view); len(gone) > 0 {
-			drop(gone, "a call with no answer in the context, or an answer with no call")
-			continue
-		}
-		if gone := c.loopAtomicity(view); len(gone) > 0 {
-			drop(gone, "part of a tool loop another part of which left the context")
-			continue
-		}
-		return view, why
-	}
 }
 
 func (c *conv) uniqueness(view []vEvent) map[int]bool {
@@ -302,7 +278,7 @@ func (c *conv) activePins(ctx agentsession.Context) map[string]bool {
 // out is back. decorate, when set, is applied to the last entry
 // written. It returns the entry the event's own entries follow.
 func (c *conv) reconcile(i int, at string, decorate func(agentsession.Entry) error) (string, error) {
-	view, why := c.enforce()
+	view, why := c.viewNow(i)
 	return c.reconcileTo(i, at, view, why, decorate)
 }
 
@@ -396,7 +372,7 @@ func (c *conv) reconcileTo(i int, at string, view []vEvent, why map[int]string, 
 func (c *conv) condensation(i int) error {
 	cd, _ := c.c.Events[i].Condensation()
 	c.viewApply(i)
-	view, why := c.enforce()
+	view, why := c.viewNow(i)
 	at, err := c.attach(i)
 	if err != nil {
 		return err
@@ -419,6 +395,9 @@ func (c *conv) condensation(i int) error {
 	}
 	if cd.Summary != nil && hasOffset && pos >= 0 {
 		return c.compaction(i, at, cd, view, pos, why, members)
+	}
+	if c.era == eraLast && c.vs.lastSum >= 0 && c.vs.lastSum != i {
+		c.at(agentimport.Lossy, "openhands/condensation", i, "SDK 1.0 to 1.9 insert the summary of event %d again at its offset in the view this condensation leaves, which the compaction in force cannot move", c.vs.lastSum+1)
 	}
 	switch {
 	case cd.Summary != nil:
@@ -534,9 +513,6 @@ func (c *conv) compaction(i int, at string, cd *openhands.Condensation, view []v
 	if len(pinned) > 0 {
 		c.at(agentimport.Gap, "agentimport/fold-head", i, "OpenHands puts the summary after the %d items it keeps at the head of the context; a compaction puts its summary first, so the head is pinned after it", len(pinned))
 	}
-	if restated > 0 && !c.tree {
-		c.at(agentimport.Lossy, "openhands/version-guess", i, "an earlier summary is still in the view; OpenHands from 1.12 sends it, as converted, and releases before 1.12 sent the last condensation's summary alone, which the file cannot tell apart")
-	}
 	if restated > 0 {
 		c.at(agentimport.Lossy, "openhands/summary-restated", i, "%d earlier summaries OpenHands still sends are restated in this compaction's summary, as only the last compaction contributes; they move to its place", restated)
 	}
@@ -584,4 +560,42 @@ func sortedKeys(m map[string]bool) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// applyLast applies condensation j as SDK 1.0 to 1.9 did: every
+// condensation's forgotten events left out at once, with the whole
+// response of any forgotten action, and the summary of the last
+// condensation that has one inserted at its offset.
+func (vs *viewState) applyLast(c *conv, j int, cd *openhands.Condensation) {
+	ids, _ := cd.Forgotten()
+	for _, id := range ids {
+		vs.forgot[id] = true
+	}
+	for _, set := range vs.batches {
+		whole := false
+		for a := range set {
+			whole = whole || vs.forgot[c.c.Events[a].ID]
+		}
+		if whole {
+			for a := range set {
+				vs.forgot[c.c.Events[a].ID] = true
+			}
+		}
+	}
+	if _, ok := cd.Offset(); ok && cd.Summary != nil {
+		vs.lastSum = j
+	}
+	var view []vEvent
+	for _, k := range vs.path {
+		if !vs.forgot[c.c.Events[k].ID] {
+			view = append(view, vEvent{idx: k})
+		}
+	}
+	if vs.lastSum >= 0 {
+		last, _ := c.c.Events[vs.lastSum].Condensation()
+		off, _ := last.Offset()
+		off = min(off, len(view))
+		view = append(view[:off:off], append([]vEvent{{idx: -1, summaryOf: vs.lastSum}}, view[off:]...)...)
+	}
+	vs.view = view
 }
