@@ -11,7 +11,7 @@ INSERT INTO messages (session_id, role, content, tool_calls, tool_call_id, tool_
   ('20261006_050000_ff0014', 'assistant', 'Dispatching an auditor.', '[{"id":"call_bg","type":"function","function":{"name":"delegate_task","arguments":"{\"goal\":\"Audit the deps.\"}"}}]', NULL, NULL, NULL, NULL, 1759726810.0, 'tool_calls'),
   ('20261006_050000_ff0014', 'tool', '{"status":"dispatched","mode":"background","count":1,"delegation_id":"deleg_01","goals":["Audit the deps."],"note":"Running in the background."}', NULL, 'call_bg', 'delegate_task', NULL, NULL, 1759726811.0, NULL),
   ('20261006_050000_ff0014', 'assistant', 'The auditor is running.', NULL, NULL, NULL, NULL, NULL, 1759726812.0, 'stop'),
-  ('20261006_050000_ff0014', 'user', '[Async delegation deleg_01 finished] No vulnerable deps.', NULL, NULL, NULL, 'hidden', '{"delegation_id":"deleg_01","status":"completed"}', 1759726861.0, NULL),
+  ('20261006_050000_ff0014', 'user', '[Async delegation deleg_01 finished] No vulnerable deps.', NULL, NULL, NULL, 'hidden', '{"delegation_id":"deleg_01","task_count":1,"completed_count":1,"failed_count":0,"duration_seconds":49.4}', 1759726861.0, NULL),
   ('20261006_050000_ff0014', 'assistant', 'The audit found nothing.', NULL, NULL, NULL, NULL, NULL, 1759726862.0, 'stop');
 INSERT INTO messages (session_id, role, content, timestamp, finish_reason) VALUES
   ('20261006_050010_ff0015', 'user', 'Audit the deps.', 1759726810.7, NULL),
