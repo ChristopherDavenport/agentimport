@@ -20,6 +20,8 @@ import (
 	clineconvert "github.com/ChristopherDavenport/agentimport/cline/convert"
 	"github.com/ChristopherDavenport/agentimport/codex"
 	codexconvert "github.com/ChristopherDavenport/agentimport/codex/convert"
+	"github.com/ChristopherDavenport/agentimport/openhands"
+	ohconvert "github.com/ChristopherDavenport/agentimport/openhands/convert"
 	"github.com/ChristopherDavenport/agentimport/pi"
 	piconvert "github.com/ChristopherDavenport/agentimport/pi/convert"
 )
@@ -66,6 +68,13 @@ var sources = []source{
 		find: cline.FindSessions,
 		convert: func(path string, r *runner) (*agentimport.Result, error) {
 			return clineconvert.ConvertFile(path, clineconvert.Options{Slim: r.slim, Converted: r.clineDone})
+		},
+	},
+	{
+		name: ohconvert.Source,
+		find: openhands.FindSessions,
+		convert: func(path string, r *runner) (*agentimport.Result, error) {
+			return ohconvert.ConvertFile(path, ohconvert.Options{Slim: r.slim, Converted: r.openhandsDone})
 		},
 	},
 }
@@ -116,6 +125,13 @@ func collect(args []string, from string) ([]input, []skipped, error) {
 		seen = map[string]bool{}
 	)
 	add := func(path string, s source) {
+		if s.name == ohconvert.Source {
+			// An OpenHands conversation is a directory, whichever of
+			// its files names it.
+			if dir, err := openhands.ConversationDir(path); err == nil {
+				path = dir
+			}
+		}
 		if !seen[path] {
 			seen[path] = true
 			ins = append(ins, input{path, s})
@@ -200,10 +216,25 @@ const (
 //     "ATIF-v", which a document of any layout carries before its
 //     steps or after them;
 //   - a classic Cline or Roo Code task by the name of its API history
-//     or UI messages in a task directory, tasks/<id>/.
+//     or UI messages in a task directory, tasks/<id>/;
+//   - an OpenHands conversation by its directory, holding a
+//     base_state.json or an event file, or by one of those files.
 //
 // An agentsession file, which is already converted, is an error.
 func detect(path string) (source, error) {
+	if info, err := os.Stat(path); err == nil && info.IsDir() {
+		if openhands.IsConversationDir(path) {
+			s, _ := sourceNamed(ohconvert.Source)
+			return s, nil
+		}
+		return source{}, errUnknown
+	}
+	if openhands.IsConversationFile(path) {
+		if dir, err := openhands.ConversationDir(path); err == nil && openhands.IsConversationDir(dir) {
+			s, _ := sourceNamed(ohconvert.Source)
+			return s, nil
+		}
+	}
 	cx, _ := sourceNamed(codexconvert.Source)
 	if codex.IDFromFileName(path) != "" {
 		return cx, nil

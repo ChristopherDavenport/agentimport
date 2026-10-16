@@ -22,6 +22,7 @@ var fixtureRoots = []string{
 	"../../codex/convert/testdata",
 	"../../atif/convert/testdata",
 	"../../cline/convert/testdata",
+	"../../openhands/convert/testdata",
 }
 
 func runCmd(t *testing.T, args ...string) (int, string, string) {
@@ -84,6 +85,11 @@ func TestDetect(t *testing.T) {
 		{"../../cline/convert/testdata/classic-native/saoudrizwan.claude-dev/tasks/1760000000000/api_conversation_history.json", "cline", ""},
 		{"../../cline/convert/testdata/classic-xml/saoudrizwan.claude-dev/tasks/1700000000000/claude_messages.json", "cline", ""},
 		{write("api_conversation_history.json", "[]"), "", "-from"},
+		{"../../openhands/convert/testdata/linear-chat/conversations/00000001000040009000000000000001", "openhands", ""},
+		{"../../openhands/convert/testdata/linear-chat/conversations/00000001000040009000000000000001/base_state.json", "openhands", ""},
+		{"../../openhands/convert/testdata/linear-chat/conversations/00000001000040009000000000000001/events/event-00001-00000001-0001-4000-8000-000000000002.json", "openhands", ""},
+		{write("base_state.json", "{}"), "openhands", ""},
+		{"../../openhands/convert/testdata/linear-chat", "", "-from"},
 	} {
 		s, err := detect(tc.path)
 		if tc.err != "" {
@@ -166,7 +172,7 @@ func TestConvertFixtures(t *testing.T) {
 			sameSession(t, w.File, got, want.Sessions[i])
 		}
 	}
-	for _, name := range []string{"claudecode", "pi", "codex", "atif", "cline"} {
+	for _, name := range []string{"claudecode", "pi", "codex", "atif", "cline", "openhands"} {
 		if bySource[name] == 0 {
 			t.Errorf("no %s fixture was converted", name)
 		}
@@ -178,7 +184,8 @@ func TestConvertFixtures(t *testing.T) {
 		if !strings.Contains(s.Path, "golden") && !strings.Contains(s.Path, "/subagents/agent-") &&
 			s.Reason != "a Codex sub-agent's rollout, converted with its parent" &&
 			s.Reason != "an ATIF continuation or sub-agent file, converted with the document naming it" &&
-			s.Reason != "a Roo sub-task, converted with the task that delegated to it" {
+			s.Reason != "a Roo sub-task, converted with the task that delegated to it" &&
+			s.Reason != "an OpenHands sub-agent's conversation, converted with its parent" {
 			t.Errorf("skipped %s: %s", s.Path, s.Reason)
 		}
 	}
@@ -539,5 +546,44 @@ func TestClineFamily(t *testing.T) {
 	child := filepath.Join(root, "rooveterinaryinc.roo-cline/tasks/4f1b2c3d-0000-4000-8000-0000000000c6")
 	if got, n := run(child); len(got) != 1 || n != 0 {
 		t.Errorf("the sub-task alone: converted %v, %d skipped", got, n)
+	}
+}
+
+// TestOpenHandsFamily converts an OpenHands conversation with a
+// sub-agent: the sub-agent's directory, named as an input too, converts
+// with its parent and is skipped; on its own it converts.
+func TestOpenHandsFamily(t *testing.T) {
+	run := func(args ...string) (converted []string, skippedChildren int) {
+		t.Helper()
+		ins, skip, err := collect(args, "auto")
+		if err != nil {
+			t.Fatal(err)
+		}
+		newRunner(false, &skip).each(ins, func(o outcome) {
+			if o.err != nil {
+				t.Errorf("%s: %v", o.in.path, o.err)
+				return
+			}
+			converted = append(converted, filepath.Base(o.in.path))
+		})
+		for _, s := range skip {
+			if strings.HasPrefix(s.Reason, "an OpenHands sub-agent") {
+				skippedChildren++
+			}
+		}
+		return converted, skippedChildren
+	}
+	parent := "../../openhands/convert/testdata/subagent-task/conversations/0000000b000040009000000000000001"
+	child := filepath.Join(parent, "subagents/0000000b000040009000000000000002")
+	if got, n := run(parent, child); len(got) != 1 || got[0] != filepath.Base(parent) || n != 1 {
+		t.Errorf("parent and child: converted %v, %d skipped", got, n)
+	}
+	if got, n := run(child); len(got) != 1 || n != 0 {
+		t.Errorf("the sub-agent alone: converted %v, %d skipped", got, n)
+	}
+	// An event file names its conversation, once.
+	ev := filepath.Join(parent, "events/event-00000-0000000b-0001-4000-8000-000000000001.json")
+	if got, _ := run(ev, parent); len(got) != 1 {
+		t.Errorf("an event file and its directory: converted %v", got)
 	}
 }

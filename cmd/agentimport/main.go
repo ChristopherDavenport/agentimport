@@ -1,8 +1,8 @@
 // Command agentimport converts other coding agents' session logs into
 // the Agent Session Format, and reports what each conversion changed.
 //
-//	agentimport convert -o <store> [-from auto|claudecode|pi|codex|atif|cline] [-strict] [-slim] [-force] [-report text|json] <file|dir>...
-//	agentimport report [-from auto|claudecode|pi|codex|atif|cline] [-strict] [-slim] [-json] <file|dir>...
+//	agentimport convert -o <store> [-from auto|claudecode|pi|codex|atif|cline|openhands] [-strict] [-slim] [-force] [-report text|json] <file|dir>...
+//	agentimport report [-from auto|claudecode|pi|codex|atif|cline|openhands] [-strict] [-slim] [-json] <file|dir>...
 //	agentimport version
 //
 // convert writes every session a conversion makes, the main session and
@@ -14,9 +14,10 @@
 // A directory argument is searched for sessions; a file argument is one
 // session. With -from auto, each file's source is told from its name
 // and its first lines, an ATIF document by its schema_version, a Cline
-// or Roo Code task by its files' names in a task directory; a file
-// that is not a session of any source is skipped when it was found in
-// a directory and an error when named.
+// or Roo Code task by its files' names in a task directory, an OpenHands
+// conversation by its directory, its base_state.json or an event file;
+// a file that is not a session of any source is skipped when it was
+// found in a directory and an error when named.
 //
 // Both commands exit 1 when a conversion failed, and with -strict when
 // a report holds a dropped or gap finding; 2 on bad usage.

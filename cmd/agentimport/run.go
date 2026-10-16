@@ -16,6 +16,8 @@ import (
 	clineconvert "github.com/ChristopherDavenport/agentimport/cline/convert"
 	"github.com/ChristopherDavenport/agentimport/codex"
 	codexconvert "github.com/ChristopherDavenport/agentimport/codex/convert"
+	"github.com/ChristopherDavenport/agentimport/openhands"
+	ohconvert "github.com/ChristopherDavenport/agentimport/openhands/convert"
 )
 
 // common holds the flags both commands take.
@@ -75,10 +77,12 @@ type runner struct {
 	slim    bool
 	skipped *[]skipped
 	indexes map[indexKey]*codexIndex
-	// atifDone records the ATIF files conversions converted, and
-	// clineDone the Cline and Roo task directories.
-	atifDone  *atifconvert.Converted
-	clineDone *clineconvert.Converted
+	// atifDone records the ATIF files conversions converted,
+	// clineDone the Cline and Roo task directories, and openhandsDone
+	// the OpenHands conversation directories.
+	atifDone      *atifconvert.Converted
+	clineDone     *clineconvert.Converted
+	openhandsDone *ohconvert.Converted
 }
 
 type indexKey struct {
@@ -93,7 +97,8 @@ type codexIndex struct {
 }
 
 func newRunner(slim bool, skip *[]skipped) *runner {
-	return &runner{slim: slim, skipped: skip, indexes: map[indexKey]*codexIndex{}, atifDone: &atifconvert.Converted{}, clineDone: &clineconvert.Converted{}}
+	return &runner{slim: slim, skipped: skip, indexes: map[indexKey]*codexIndex{}, atifDone: &atifconvert.Converted{},
+		clineDone: &clineconvert.Converted{}, openhandsDone: &ohconvert.Converted{}}
 }
 
 // index returns the index of the tree a Codex rollout's relatives are
@@ -151,6 +156,9 @@ type planned struct {
 	named bool
 	// task says the input is a Roo sub-task whose parent is an input.
 	task bool
+	// subagent says the input is an OpenHands sub-agent's conversation
+	// whose parent is an input.
+	subagent bool
 }
 
 // plan splits the inputs into those converted first and the Codex
@@ -164,6 +172,8 @@ func (r *runner) plan(ins []input) (first []input, wait []planned) {
 	wait = append(wait, named...)
 	ins, children := planCline(ins)
 	wait = append(wait, children...)
+	ins, subagents := planOpenHands(ins)
+	wait = append(wait, subagents...)
 	threads := map[string]bool{}
 	ids := make([]string, len(ins))
 	for i, in := range ins {
@@ -278,6 +288,56 @@ func planCline(ins []input) (rest []input, children []planned) {
 	return rest, children
 }
 
+// planOpenHands takes out of the inputs the OpenHands sub-agents'
+// conversations, <parent>/subagents/<id>, whose parent at any depth is
+// among them, which wait for it: the parent's conversation holds its
+// sub-agents. A chain of parents is followed at most 32 deep, and a
+// cycle ends it.
+func planOpenHands(ins []input) (rest []input, children []planned) {
+	dirs := map[string]bool{}
+	for _, in := range ins {
+		if in.source.name == ohconvert.Source {
+			if d, err := openhands.ConversationDir(in.path); err == nil {
+				dirs[realPath(d)] = true
+			}
+		}
+	}
+	for _, in := range ins {
+		if in.source.name != ohconvert.Source {
+			rest = append(rest, in)
+			continue
+		}
+		d, err := openhands.ConversationDir(in.path)
+		if err != nil {
+			rest = append(rest, in)
+			continue
+		}
+		depth := 0
+		seen := map[string]bool{realPath(d): true}
+		for cur := d; depth < 32; {
+			parent, ok := openhands.SubagentParent(cur)
+			if !ok {
+				break
+			}
+			real := realPath(parent)
+			if seen[real] {
+				break
+			}
+			seen[real] = true
+			if dirs[real] {
+				depth++
+			}
+			cur = parent
+		}
+		if depth == 0 {
+			rest = append(rest, in)
+			continue
+		}
+		children = append(children, planned{in: in, depth: depth, subagent: true})
+	}
+	return rest, children
+}
+
 // realPath is p absolute with its links resolved, as Related lists it.
 func realPath(p string) string {
 	if abs, err := filepath.Abs(p); err == nil {
@@ -310,6 +370,14 @@ func (r *runner) each(ins []input, visit func(outcome)) {
 		run(in)
 	}
 	for _, w := range wait {
+		if w.subagent {
+			if r.openhandsDone.Has(w.in.path) {
+				*r.skipped = append(*r.skipped, skipped{w.in.path, "an OpenHands sub-agent's conversation, converted with its parent"})
+				continue
+			}
+			run(w.in)
+			continue
+		}
 		if w.task {
 			if r.clineDone.Has(w.in.path) {
 				*r.skipped = append(*r.skipped, skipped{w.in.path, "a Roo sub-task, converted with the task that delegated to it"})
