@@ -1,0 +1,151 @@
+{
+  "version": 1,
+  "updated_at": "2025-10-01T14:00:12.000Z",
+  "agent": "lead",
+  "sessionId": "1759327200000_sub01",
+  "origin": {
+    "source": "cli",
+    "mode": "user",
+    "sessionId": "1759327200000_sub01",
+    "version": "4.1.20"
+  },
+  "messages": [
+    {
+      "id": "r0",
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "<user_input mode=\"act\">Plan the refactor with helpers</user_input>"
+        }
+      ],
+      "ts": 1759327200001
+    },
+    {
+      "id": "r1",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "call_s1",
+          "name": "spawn_agent",
+          "input": {
+            "systemPrompt": "You survey code and report.",
+            "task": "Survey the lexer"
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_s2",
+          "name": "spawn_agent",
+          "input": {
+            "systemPrompt": "You survey code and report.",
+            "task": "Survey the parser"
+          }
+        }
+      ],
+      "ts": 1759327201000,
+      "modelInfo": {
+        "id": "claude-x",
+        "provider": "anthropic"
+      },
+      "metrics": {
+        "inputTokens": 2000,
+        "outputTokens": 60,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 2000,
+        "cost": 0.01
+      }
+    },
+    {
+      "id": "r1_tool_call_s1",
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_s1",
+          "name": "spawn_agent",
+          "content": "{\"text\":\"Lexer surveyed.\",\"iterations\":2,\"finishReason\":\"completed\",\"usage\":{\"inputTokens\":300,\"outputTokens\":20}}"
+        }
+      ],
+      "ts": 1759327209000
+    },
+    {
+      "id": "r1_tool_call_s2",
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_s2",
+          "name": "spawn_agent",
+          "content": "{\"text\":\"Parser surveyed.\",\"iterations\":2,\"finishReason\":\"completed\",\"usage\":{\"inputTokens\":300,\"outputTokens\":20}}"
+        }
+      ],
+      "ts": 1759327209001
+    },
+    {
+      "id": "r2",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "call_t1",
+          "name": "team_run_task",
+          "input": {
+            "agentId": "reviewer",
+            "task": "Review the plan",
+            "runMode": "async"
+          }
+        }
+      ],
+      "ts": 1759327210000,
+      "modelInfo": {
+        "id": "claude-x",
+        "provider": "anthropic"
+      },
+      "metrics": {
+        "inputTokens": 2500,
+        "outputTokens": 40,
+        "cacheReadTokens": 2000,
+        "cacheWriteTokens": 400,
+        "cost": 0.004
+      }
+    },
+    {
+      "id": "r2_tool_call_t1",
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_t1",
+          "name": "team_run_task",
+          "content": "{\"agentId\":\"reviewer\",\"mode\":\"async\",\"status\":\"queued\",\"dispatched\":true,\"message\":\"Task dispatched to reviewer and queued as run_1.\",\"runId\":\"run_1\"}"
+        }
+      ],
+      "ts": 1759327210100
+    },
+    {
+      "id": "r3",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Helpers are done; the reviewer is on it."
+        }
+      ],
+      "ts": 1759327211000,
+      "modelInfo": {
+        "id": "claude-x",
+        "provider": "anthropic"
+      },
+      "metrics": {
+        "inputTokens": 2700,
+        "outputTokens": 30,
+        "cacheReadTokens": 2400,
+        "cacheWriteTokens": 200,
+        "cost": 0.003
+      }
+    }
+  ],
+  "system_prompt": "You are Cline, a coding agent."
+}

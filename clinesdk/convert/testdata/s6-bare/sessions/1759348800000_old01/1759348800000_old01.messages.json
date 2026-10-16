@@ -1,0 +1,16 @@
+[
+  {
+    "role": "user",
+    "content": "hello",
+    "ts": 1759348800000
+  },
+  {
+    "role": "assistant",
+    "content": "hi there",
+    "ts": 1759348801000,
+    "modelInfo": {
+      "id": "claude-x",
+      "provider": "anthropic"
+    }
+  }
+]

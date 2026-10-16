@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "updated_at": "2025-10-01T15:00:06.100Z",
+  "agent": "subagent",
+  "sessionId": "1759330800000_sub02__agent_b",
+  "taskType": "subagent_task",
+  "origin": {
+    "source": "cli",
+    "mode": "subagent",
+    "sessionId": "1759330800000_sub02__agent_b",
+    "parentThreadId": "1759330800000_sub02",
+    "subagent": "agent_b",
+    "version": "4.1.20"
+  },
+  "messages": [
+    {
+      "id": "k0",
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Check the build"
+        }
+      ],
+      "ts": 1759330802100
+    },
+    {
+      "id": "k9",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Build is fine too."
+        }
+      ],
+      "ts": 1759330805100,
+      "modelInfo": {
+        "id": "claude-x",
+        "provider": "anthropic"
+      },
+      "metrics": {
+        "inputTokens": 300,
+        "outputTokens": 20,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 300,
+        "cost": 0.001
+      }
+    }
+  ]
+}

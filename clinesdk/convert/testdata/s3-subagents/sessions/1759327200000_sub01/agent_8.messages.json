@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "updated_at": "2025-10-01T14:00:06.500Z",
+  "agent": "subagent",
+  "sessionId": "1759327200000_sub01__agent_8",
+  "taskType": "subagent_task",
+  "origin": {
+    "source": "cli",
+    "mode": "subagent",
+    "sessionId": "1759327200000_sub01__agent_8",
+    "parentThreadId": "1759327200000_sub01",
+    "subagent": "agent_8",
+    "version": "4.1.20"
+  },
+  "messages": [
+    {
+      "id": "k0",
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Survey the parser"
+        }
+      ],
+      "ts": 1759327202500
+    },
+    {
+      "id": "k1",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "call_n1",
+          "name": "spawn_agent",
+          "input": {
+            "systemPrompt": "Go deeper.",
+            "task": "Survey the grammar"
+          }
+        }
+      ],
+      "ts": 1759327202600,
+      "modelInfo": {
+        "id": "claude-x",
+        "provider": "anthropic"
+      },
+      "metrics": {
+        "inputTokens": 400,
+        "outputTokens": 20,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 400,
+        "cost": 0.001
+      }
+    },
+    {
+      "id": "k1_tool_call_n1",
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_n1",
+          "name": "spawn_agent",
+          "content": "{\"text\":\"Grammar surveyed.\",\"iterations\":2,\"finishReason\":\"completed\",\"usage\":{\"inputTokens\":300,\"outputTokens\":20}}"
+        }
+      ],
+      "ts": 1759327205000
+    },
+    {
+      "id": "k9",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Parser surveyed."
+        }
+      ],
+      "ts": 1759327205500,
+      "modelInfo": {
+        "id": "claude-x",
+        "provider": "anthropic"
+      },
+      "metrics": {
+        "inputTokens": 300,
+        "outputTokens": 20,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 300,
+        "cost": 0.001
+      }
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "session_id": "1759312800000_ab12c",
+  "source": "cli",
+  "pid": 4242,
+  "started_at": "2025-10-01T10:00:00.000Z",
+  "status": "completed",
+  "interactive": true,
+  "provider": "anthropic",
+  "model": "claude-x",
+  "cwd": "/work/proj",
+  "workspace_root": "/work/proj",
+  "enable_tools": true,
+  "enable_spawn": false,
+  "enable_teams": false,
+  "prompt": "Fix the failing test in a.go",
+  "metadata": {
+    "title": "Fix the failing test in a.go",
+    "sessionHistoryOrigin": {
+      "mode": "user",
+      "version": "4.1.20"
+    },
+    "checkpoint": {
+      "latest": {
+        "ref": "refs/cline/1",
+        "runCount": 1
+      },
+      "history": [
+        {
+          "ref": "refs/cline/1",
+          "runCount": 1
+        }
+      ]
+    }
+  },
+  "messages_path": "/home/u/.cline/data/sessions/1759312800000_ab12c/1759312800000_ab12c.messages.json"
+}

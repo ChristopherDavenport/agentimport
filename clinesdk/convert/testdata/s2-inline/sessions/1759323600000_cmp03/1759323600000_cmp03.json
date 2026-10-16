@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "session_id": "1759323600000_cmp03",
+  "source": "cli",
+  "pid": 4242,
+  "started_at": "2025-10-01T13:00:00.000Z",
+  "status": "completed",
+  "interactive": true,
+  "provider": "anthropic",
+  "model": "claude-x",
+  "cwd": "/work/proj",
+  "workspace_root": "/work/proj",
+  "enable_tools": true,
+  "enable_spawn": false,
+  "enable_teams": false,
+  "metadata": {},
+  "messages_path": "/home/u/.cline/data/sessions/1759323600000_cmp03/1759323600000_cmp03.messages.json"
+}
