@@ -1,12 +1,14 @@
 package convert
 
 import (
+	"bytes"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/ChristopherDavenport/agentimport/atif"
 	"github.com/ChristopherDavenport/agentimport/internal/doccheck"
+	"github.com/ChristopherDavenport/agentsession"
 )
 
 // exporterDoc wraps steps in a document agentsession's exporter would
@@ -74,6 +76,53 @@ func TestExporterBadItems(t *testing.T) {
 				}
 				if ctx.Settings.Model != "m-2" {
 					t.Errorf("model %q, want m-2", ctx.Settings.Model)
+				}
+			}
+		})
+	}
+}
+
+// TestExporterMembers checks that members an edit after export leaves
+// on an exporter's step, result or observation are kept and reported,
+// as they are on any other producer's, whose observation members are
+// now written where they are reported.
+func TestExporterMembers(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		doc  []byte
+		want []string
+	}{
+		{"exporter", exporterDoc(`{"step_id":1,"timestamp":"2026-10-01T00:00:00Z","source":"agent","message":"","edited":true,` +
+			`"extra":{"openresponses":{"items":[{"type":"function_call","call_id":"c1","name":"f","arguments":"{}"}],"response":{"response_id":"r1"}}},` +
+			`"observation":{"obs_note":1,"results":[{"source_call_id":"c1","note":"x","extra":{"openresponses":{"item":{"type":"function_call_output","call_id":"c1","output":"ok"}}}}]}}`),
+			[]string{`"atif:step":{"edited":true}`, `"atif:result":{"note":"x"}`, `"atif:observation":{"obs_note":1}`}},
+		{"exporter item", exporterDoc(`{"step_id":1,"timestamp":"2026-10-01T00:00:00Z","source":"user","message":"hi","edited":true,` +
+			`"extra":{"openresponses":{"item":{"type":"message","role":"user","content":"hi"}}}}`),
+			[]string{`"atif:step":{"edited":true}`}},
+		{"plain", []byte(`{"schema_version":"ATIF-v1.7","session_id":"p","steps":[{"step_id":1,"timestamp":"2026-10-01T00:00:00Z","source":"agent","message":"",` +
+			`"tool_calls":[{"tool_call_id":"c1","function_name":"f","arguments":{}}],"observation":{"obs_note":1,"results":[{"source_call_id":"c1","content":"ok"}]}}]}`),
+			[]string{`"atif:observation":{"obs_note":1}`}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f, err := atif.Parse(tc.doc)
+			if err != nil {
+				t.Fatal(err)
+			}
+			res, err := Convert(f, Options{CreatedAt: fixed})
+			if err != nil {
+				t.Fatal(err)
+			}
+			doccheck.Check(t, Source, res.Report)
+			if !slices.Contains(res.Report.Codes(), "atif/unknown-member") {
+				t.Errorf("no atif/unknown-member: %v", res.Report.Codes())
+			}
+			var b bytes.Buffer
+			if err := agentsession.Write(&b, res.Sessions[0]); err != nil {
+				t.Fatal(err)
+			}
+			for _, w := range tc.want {
+				if !strings.Contains(b.String(), w) {
+					t.Errorf("the session holds no %s", w)
 				}
 			}
 		})

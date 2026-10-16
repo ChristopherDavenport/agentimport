@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"path/filepath"
+	"slices"
+	"strings"
 
 	"github.com/ChristopherDavenport/agentimport"
 	"github.com/ChristopherDavenport/agentimport/atif"
@@ -26,9 +29,6 @@ func (c *docConv) results(i int, s *atif.Step, local map[string][]*call, order [
 	if o.Err != nil {
 		// stepRest keeps it.
 		return nil, nil
-	}
-	if len(o.Members.Extra) > 0 {
-		c.reportMembers(line, "observation", o.Members.Extra, o.Mistyped())
 	}
 	// mini-swe-agent's chat shape: no result of a step names a call, the
 	// tool messages first, one per call, then the environment's user
@@ -83,7 +83,29 @@ func (c *docConv) results(i int, s *atif.Step, local map[string][]*call, order [
 			after = append(after, ents...)
 		}
 	}
-	return append(outputs, after...), nil
+	out := append(outputs, after...)
+	if err := c.observationRest(i, o, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// observationRest keeps an observation's members the conversion does
+// not map on the last entry made from its results.
+func (c *docConv) observationRest(i int, o *atif.Observation, out []agentsession.Entry) error {
+	if len(o.Members.Extra) == 0 {
+		return nil
+	}
+	if len(out) == 0 {
+		keys := slices.Sorted(maps.Keys(o.Members.Extra))
+		c.addf(agentimport.Dropped, "atif/unknown-member", i+1, "an observation with nothing converted carries members, which are left out: %s", strings.Join(keys, ", "))
+		return nil
+	}
+	c.reportMembers(i+1, "observation", o.Members.Extra, o.Mistyped())
+	if c.fam.opts.Slim {
+		return nil
+	}
+	return c.b.Member(out[len(out)-1], "observation", o.Members.Extra)
 }
 
 // findCall finds the call a result names: one of its own step's, the
@@ -230,6 +252,13 @@ func (c *docConv) resultMembers(e agentsession.Entry, i int, r *atif.Result) err
 	if err := c.keepExtra(e, i, r.Ext); err != nil {
 		return err
 	}
+	return c.resultRest(e, i, r)
+}
+
+// resultRest keeps a result's members the conversion does not map,
+// undeclared ones and declared ones of another JSON type, on the entry
+// made from it.
+func (c *docConv) resultRest(e agentsession.Entry, i int, r *atif.Result) error {
 	rest := map[string]json.RawMessage{}
 	for k, v := range r.Members.Extra {
 		rest[k] = v

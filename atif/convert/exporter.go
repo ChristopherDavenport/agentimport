@@ -229,6 +229,9 @@ func (c *docConv) exporterItem(i int, s *atif.Step, ext, or map[string]json.RawM
 	if err := c.restore(e, i, members, kept); err != nil {
 		return err
 	}
+	if err := c.stepMembers(e, i, s); err != nil {
+		return err
+	}
 	ids, err := c.commitEntries(i, s, []agentsession.Entry{e}, nil, false)
 	if err != nil {
 		return err
@@ -236,6 +239,17 @@ func (c *docConv) exporterItem(i int, s *atif.Step, ext, or map[string]json.RawM
 	c.leftOut(ext, []string{str(object(ext["agentsession"])["entry_id"])}, ids)
 	c.mark(i, agentimport.LineMapped)
 	return nil
+}
+
+// stepMembers keeps the members of a step the rebuild does not read,
+// which an edit after export leaves, on e: undeclared ones and those of
+// another JSON type.
+func (c *docConv) stepMembers(e agentsession.Entry, i int, s *atif.Step) error {
+	rest := c.stepRest(i, s)
+	if len(rest) == 0 || c.fam.opts.Slim {
+		return nil
+	}
+	return c.b.Member(e, "step", rest)
 }
 
 // exporterFallback maps a step whose raw items do not decode from its
@@ -335,6 +349,15 @@ func (c *docConv) exporterAgent(i int, s *atif.Step, ext, or map[string]json.Raw
 		return err
 	}
 	entries = append(entries, outs...)
+	if len(entries) > 0 {
+		owner := entries[len(entries)-1]
+		if nItems > 0 {
+			owner = entries[nItems-1]
+		}
+		if err := c.stepMembers(owner, i, s); err != nil {
+			return err
+		}
+	}
 	ids, err := c.commitEntries(i, s, entries, nil, false)
 	if err != nil {
 		return err
@@ -450,10 +473,16 @@ func (c *docConv) exporterResults(i int, s *atif.Step, local map[string][]*call)
 		if err := c.restore(e, i, members, kept); err != nil {
 			return nil, nil, err
 		}
+		if err := c.resultRest(e, i, r); err != nil {
+			return nil, nil, err
+		}
 		out = append(out, e)
 		if rext["omitted"] != nil {
 			omitted[e] = true
 		}
+	}
+	if err := c.observationRest(i, o, out); err != nil {
+		return nil, nil, err
 	}
 	return out, omitted, nil
 }
@@ -601,6 +630,9 @@ func (c *docConv) exporterCompaction(i int, s *atif.Step, ext, or map[string]jso
 	if err := c.restore(e, i, members, kept); err != nil {
 		return 0, err
 	}
+	if err := c.stepMembers(e, i, s); err != nil {
+		return 0, err
+	}
 	if _, err := c.commitEntries(i, s, []agentsession.Entry{e}, nil, false); err != nil {
 		return 0, err
 	}
@@ -625,6 +657,9 @@ func (c *docConv) exporterBranchSummary(i int, s *atif.Step, ext, or map[string]
 		"a branch summary's from names an entry of the exported session, which this one does not hold")
 	members, kept := c.exporterExtra(i, ext)
 	if err := c.restore(e, i, members, kept); err != nil {
+		return err
+	}
+	if err := c.stepMembers(e, i, s); err != nil {
 		return err
 	}
 	if _, err := c.commitEntries(i, s, []agentsession.Entry{e}, nil, false); err != nil {
