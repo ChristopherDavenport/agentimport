@@ -261,7 +261,11 @@ rejected, and a session reads it as pending.
   `anthropic.redacted_thinking` item. A Responses
   `responses_reasoning_item` is a `reasoning` item with its `id`,
   `summary` strings as `summary_text`, `content` as `reasoning_text`
-  and `encrypted_content`, `openhands:provider` `openai`. A
+  and `encrypted_content`, `openhands:provider` `openai`; OpenHands
+  before 1.43 left it out of a message of several calls, so in a file
+  older than 1.31 it is omitted from the requests after such a
+  response (`openhands/batch-reasoning`), and from 1.31 kept and
+  reported as a guess. A
   `reasoning_content` with neither is a `reasoning` item with a
   `summary_text`; beside them it is litellm's copy of their text, kept
   in `openhands:reasoning_content` when it differs. Gemini's thought
@@ -384,6 +388,7 @@ every converter can report are in [README.md](README.md).
 | `openhands/subagents-alone` | dropped | Sub-agents not converted, with `Options.Alone`. |
 | `openhands/unreached` | dropped | An event the converter did not reach; a bug if it occurs. |
 | `openhands/acp-agent` | lossy | The agent is an `ACPAgent`, which records an external agent's tool calls rather than the model's context. |
+| `openhands/batch-reasoning` | lossy | OpenHands before 1.43 sent a response of several calls without its Responses reasoning item; in a file older than 1.31 the item is the response's output and an omit leaves it out of later requests. |
 | `openhands/bad-system-prompt` | lossy | A system prompt that is missing or not text; the instructions are empty. |
 | `openhands/condensation` | lossy | A condensation: a compaction, or an omit of what it forgot. |
 | `openhands/confirmation-policy` | lossy | The conversation ran under a confirmation policy, and approvals are not recorded. |

@@ -393,3 +393,24 @@ func TestProbableResume(t *testing.T) {
 		t.Errorf("codes %v: want the probable resume reported", res.Report.Codes())
 	}
 }
+
+// TestBatchReasoningBefore143 leaves the Responses reasoning item of a
+// response of several calls out of later requests in a file older than
+// 1.31, as OpenHands before 1.43 sent such a response without it.
+func TestBatchReasoningBefore143(t *testing.T) {
+	rs := `"responses_reasoning_item":{"id":"rs_1","summary":["think"],"encrypted_content":"enc"}`
+	res := convertEvents(t, stateLive,
+		userEv("e0000000", "", "go"),
+		actionEv("e1000000", "", "c1", "r1", rs),
+		actionEv("e2000000", "", "c2", "r1", ""),
+		obsEv("e3000000", "", "c1", "one"),
+		obsEv("e4000000", "", "c2", "two"),
+		replyEv("e5000000", "", "r2", "done"),
+	)
+	if got := requestOf(t, res.Sessions[0], "r2"); strings.Contains(got, "reasoning") {
+		t.Errorf("request %s, want no reasoning item", got)
+	}
+	if !codes(res.Report)["openhands/batch-reasoning"] {
+		t.Error("the left-out reasoning item is not reported")
+	}
+}

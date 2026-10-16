@@ -494,7 +494,7 @@ func (c *conv) action(i int) error {
 	if at, err = c.reconcile(i, at, nil); err != nil {
 		return err
 	}
-	batch, split, _ := c.batchOf(i)
+	batch, split, group := c.batchOf(i)
 	if split {
 		c.at(agentimport.Lossy, "openhands/split-batch", i, "an output was written between the calls of this response, as for an unknown tool; OpenHands sends the response as several assistant messages around it, the session as one response before the outputs")
 	}
@@ -514,6 +514,26 @@ func (c *conv) action(i int) error {
 		return id, nil
 	}
 	reasons, provs, extra := c.reasoning(i, a0.ThinkingBlocks, a0.ResponsesReasoningItem, a0.ReasoningContent)
+	// The Responses reasoning item follows the reasoning the thinking
+	// blocks made. Before 1.43 OpenHands sent a message of several
+	// calls without it: one with no parent_id is older than 1.31, so it
+	// is written as the response's output and left out of later
+	// requests; from 1.31 the file cannot tell, and it is kept.
+	rs := -1
+	if a0.ResponsesReasoningItem != nil && group >= 2 {
+		rs = 0
+		for _, b := range a0.ThinkingBlocks {
+			if b != nil {
+				rs++
+			}
+		}
+		if c.tree {
+			c.at(agentimport.Lossy, "openhands/version-guess", i, "OpenHands from 1.43 sends the Responses reasoning item of a response of several calls, and earlier releases did not; this file, from 1.31 or later, cannot tell which, and the item is kept in context")
+			rs = -1
+		} else {
+			c.at(agentimport.Lossy, "openhands/batch-reasoning", i, "OpenHands before 1.43 sent a response of several calls without its Responses reasoning item; the item is the response's output, and an omit leaves it out of later requests")
+		}
+	}
 	for k, r := range reasons {
 		e := c.itemEntry(i, r, resp)
 		if err := c.reasoningMembers(i, e, provs[k], extra, k); err != nil {
@@ -523,7 +543,9 @@ func (c *conv) action(i int) error {
 		if err != nil {
 			return err
 		}
-		c.items[i] = append(c.items[i], id)
+		if k != rs {
+			c.items[i] = append(c.items[i], id)
+		}
 	}
 	parts, pm := c.outputParts(i, a0.Thought)
 	if len(parts) > 0 {

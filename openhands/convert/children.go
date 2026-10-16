@@ -54,11 +54,11 @@ type answer struct {
 type spawn struct {
 	native   string
 	delegate bool
-	texts  []string
-	start  time.Time
-	end    time.Time
-	timed  bool
-	ended  bool
+	texts    []string
+	start    time.Time
+	end      time.Time
+	timed    bool
+	ended    bool
 }
 
 // matchChildren reads the sub-agents under subagents/ and matches each
