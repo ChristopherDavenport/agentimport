@@ -523,3 +523,19 @@ func StateID(dir string) string {
 	}
 	return id
 }
+
+// ReadState reads the base_state.json of dir.
+func ReadState(dir string) (*State, error) {
+	data, err := readLimited(filepath.Join(dir, FileBaseState))
+	if err != nil {
+		return nil, err
+	}
+	var s State
+	if !isObject(data) {
+		return nil, errNotObject
+	}
+	if err := s.UnmarshalJSON(data); err != nil {
+		return nil, err
+	}
+	return &s, nil
+}

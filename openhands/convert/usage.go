@@ -2,6 +2,7 @@ package convert
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"strings"
 
 	"github.com/ChristopherDavenport/agentimport"
@@ -259,12 +260,28 @@ func (c *conv) finish() error {
 	if c.leaf >= 0 && c.tail[c.leaf] != "" {
 		leaf = c.tail[c.leaf]
 	}
+	source, known := c.sourceUsages()
 	for _, ref := range c.usage.all {
 		if ref.used {
 			continue
 		}
 		use, extra := c.usageOf(ref.u)
-		data := map[string]any{"usage": use, "usage_id": ref.usageID}
+		// A fork made with reset_metrics=False holds the source's
+		// metrics whole: a call the source made is the source's to
+		// count, so it is kept under a member a reader does not count.
+		usageKey := "usage"
+		if c.forked() {
+			copied := !known || source[usageIdentity(ref.u)]
+			if copied {
+				usageKey = "copied_usage"
+				if known {
+					c.addf(agentimport.Kept, "openhands/fork-usage", openhands.FileBaseState, 0, "a call of %q in the fork's metrics is one its source made, copied with them; it is kept in a custom entry's copied_usage, not counted", ref.usageID)
+				} else {
+					c.addf(agentimport.Lossy, "openhands/fork-usage", openhands.FileBaseState, 0, "a call of %q no event names, in a fork whose source's metrics cannot be read, may be a copy of the source's; it is kept in a custom entry's copied_usage, not counted", ref.usageID)
+				}
+			}
+		}
+		data := map[string]any{usageKey: use, "usage_id": ref.usageID}
 		if ref.u.Model != "" {
 			data["model"] = ref.u.Model
 		}
@@ -284,7 +301,49 @@ func (c *conv) finish() error {
 			return err
 		}
 		leaf = id
+		if usageKey != "usage" {
+			continue
+		}
 		c.addf(agentimport.Kept, "openhands/unmatched-usage", openhands.FileBaseState, 0, "a call of %q that no event names (a title, a refused condensation, an ACP turn) is a custom entry with its usage at the end of the leaf's path", ref.usageID)
 	}
 	return c.b.Leaf(leaf)
+}
+
+// forked reports whether the conversation is a fork, as meta.json says.
+func (c *conv) forked() bool {
+	return c.c.Meta != nil && c.c.Meta.ForkedFromConversationID != ""
+}
+
+// sourceUsages returns the token usages of a fork's source, read from
+// its base_state.json beside the fork, by identity; known is false when
+// the source cannot be read.
+func (c *conv) sourceUsages() (map[string]bool, bool) {
+	if !c.forked() || c.c.Dir == "" {
+		return nil, false
+	}
+	dir := filepath.Join(filepath.Dir(c.c.Dir), openhands.HexID(c.c.Meta.ForkedFromConversationID))
+	src, err := openhands.ReadState(dir)
+	if err != nil || src.Stats == nil {
+		return nil, false
+	}
+	out := map[string]bool{}
+	for _, key := range src.Stats.UsageToMetrics.Keys() {
+		m := src.Stats.UsageToMetrics[key]
+		if m.Err != nil {
+			continue
+		}
+		for _, u := range m.TokenUsages {
+			if u != nil {
+				out[usageIdentity(u)] = true
+			}
+		}
+	}
+	return out, true
+}
+
+// usageIdentity is a token usage's members as JSON, which a copy
+// repeats.
+func usageIdentity(u *openhands.TokenUsage) string {
+	raw, _ := json.Marshal(u)
+	return string(raw)
 }

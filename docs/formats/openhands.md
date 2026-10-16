@@ -316,8 +316,12 @@ the events up to it, else those whose IDs the source's `events/`
 names. The copies convert as the session's own and are reported
 (`openhands/fork-copied`); a copied response keeps the usage the fork's
 metrics hold for it, which a fork made with `reset_metrics=False`
-copies from the source, in `openhands:copied_usage`. Without
-`meta.json` a fork is not recognised.
+copies from the source, in `openhands:copied_usage`. Such a fork's
+metrics also hold the source's calls no copied event names (titles,
+condensations on other branches): a call the source's `base_state.json`
+holds too is written as a custom entry's `copied_usage`, which a reader
+does not count, and when the source cannot be read every such call is,
+reported as a guess. Without `meta.json` a fork is not recognised.
 
 ## Extension types
 
@@ -406,7 +410,7 @@ every converter can report are in [README.md](README.md).
 | `openhands/condensation-noop` | kept | A condensation that forgets nothing the context holds is a custom entry. |
 | `openhands/duplicate-output` | kept | A second answer to a call is a custom entry. |
 | `openhands/extension-item` | kept | A redacted thinking block is the `anthropic.redacted_thinking` item. |
-| `openhands/fork-usage` | kept | A response a fork copied keeps its usage in `openhands:copied_usage`. |
+| `openhands/fork-usage` | kept, or lossy | A response a fork copied keeps its usage in `openhands:copied_usage`, and a call in the fork's metrics that its source's metrics hold too is a custom entry's `copied_usage`, not counted; when the source cannot be read, every call of a fork no event names is kept so, a guess. |
 | `openhands/harness-user-message` | kept | A user message the environment, a hook or OpenHands wrote carries `openhands:source`. |
 | `openhands/orphan-output` | kept | An answer to a call no action on its path made is a custom entry. |
 | `openhands/reasoning-content` | kept | A `reasoning_content` that differs from the reasoning items is `openhands:reasoning_content`. |

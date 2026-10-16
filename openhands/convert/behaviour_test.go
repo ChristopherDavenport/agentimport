@@ -278,3 +278,30 @@ func TestAnswerPerBranch(t *testing.T) {
 		t.Error("the branch where the call has no answer does not report it pending")
 	}
 }
+
+// TestForkUsageOnce converts a fork made with reset_metrics=False,
+// whose metrics hold the source's calls: only the fork's own calls are
+// counted, as top-level usage of a custom entry or on a response.
+func TestForkUsageOnce(t *testing.T) {
+	res := convertFixture(t, fixtures(t)["fork"], Options{})
+	var counted []string
+	for _, e := range res.Sessions[0].Entries() {
+		switch e := e.(type) {
+		case *agentsession.CustomEntry:
+			var d struct {
+				Usage      json.RawMessage `json:"usage"`
+				ResponseID string          `json:"response_id"`
+			}
+			if json.Unmarshal(e.Data, &d) == nil && d.Usage != nil {
+				counted = append(counted, d.ResponseID)
+			}
+		case *agentsession.ResponseEntry:
+			if e.Usage != nil {
+				counted = append(counted, e.ResponseID)
+			}
+		}
+	}
+	if got, want := strings.Join(counted, ", "), "chatcmpl-f3, title-2"; got != want {
+		t.Errorf("counted %s, want %s", got, want)
+	}
+}
