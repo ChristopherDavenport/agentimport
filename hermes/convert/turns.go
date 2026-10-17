@@ -1,0 +1,522 @@
+package convert
+
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+
+	"github.com/ChristopherDavenport/agentimport"
+	"github.com/ChristopherDavenport/agentimport/hermes"
+	"github.com/ChristopherDavenport/agentsession"
+	"github.com/ChristopherDavenport/openresponses"
+)
+
+// responseID is the response ID of an assistant row: Hermes keeps no
+// provider's, so the row's.
+func responseID(m *hermes.Message) string { return fmt.Sprintf("row-%d", m.ID) }
+
+// assistant converts an assistant row: its reasoning, its text and its
+// calls, the output of one model call, then the response. Every column
+// the row maps is known before its first entry is written, which
+// carries the rest.
+func (w *walk) assistant(i int) error {
+	sc := w.sc
+	m := w.rows[i]
+	sc.pairing.turn()
+	summaryRow := isSummary(m)
+	copied := w.copied[i]
+	respID := ""
+	if !summaryRow {
+		respID = responseID(m)
+	}
+	used := []string{"tool_calls"}
+	if len(m.BadCalls) > 0 {
+		sc.addf(agentimport.Repaired, "hermes/call-malformed", m.Unit, "%d entries of the row's tool_calls are not objects; Hermes cannot send them, and they are kept in the row's columns", len(m.BadCalls))
+		used = nil
+	}
+
+	r := reasoningOf(m)
+	if len(r.items) > 0 && r.from != r.keptFrom {
+		used = append(used, r.from)
+	}
+	if r.bad > 0 {
+		sc.addf(agentimport.Repaired, "hermes/reasoning-malformed", m.Unit, "%d entries of the row's %s are not objects; they are kept as written", r.bad, r.keptFrom)
+	}
+	if len(r.kept) > 0 {
+		sc.addf(agentimport.Kept, "hermes/reasoning-carrier", m.Unit, "%d entries of %s no item holds, such as a provider's native carrier, are kept in the row's columns", len(r.kept), r.keptFrom)
+	}
+	switch r.from {
+	case "reasoning_content", "reasoning":
+		if len(r.items) > 0 {
+			sc.addf(agentimport.Lossy, "hermes/reasoning-text", m.Unit, "the reasoning is the row's %s text, a reasoning item's content, which a chat-completions route replays only into the field its provider reads", r.from)
+		}
+	}
+	encrypted := false
+	for _, it := range r.items {
+		if ri, ok := it.(*openresponses.ReasoningItem); ok && ri.EncryptedContent != "" || it.ItemType() == "anthropic.redacted_thinking" || it.ItemType() == openresponses.ItemTypeCompaction {
+			encrypted = true
+		}
+	}
+
+	// The text.
+	var msg *openresponses.Message
+	if m.Content.Structured && !m.HasAPIContent {
+		cs, kept := parts(m.Content.Parts, true)
+		if kept > 0 {
+			sc.addf(agentimport.Kept, "hermes/content-part", m.Unit, "%d content parts Open Responses does not define are carried as extension parts", kept)
+		}
+		if len(cs) > 0 {
+			msg = &openresponses.Message{Role: openresponses.RoleAssistant, Content: cs}
+		}
+	} else {
+		text, sidecar := sentText(m)
+		if sidecar {
+			used = append(used, "api_content")
+		}
+		if len(m.ToolCalls) > 0 && !sidecar && staleMarkerRE.MatchString(text) {
+			sc.addf(agentimport.Repaired, "hermes/stale-marker", m.Unit, "the assistant's content is a bare tool marker an older Hermes stored, which a resume blanks; the turn has no text")
+			text = ""
+		}
+		w.sentDiffers(m, text, sidecar)
+		switch {
+		case text != "":
+			msg = openresponses.AssistantText(text)
+		case len(m.ToolCalls) == 0 && len(r.items) == 0:
+			// The turn is empty, and so was the model's output. Once a
+			// later message follows it, each request sends a placeholder
+			// in its place (repair_empty_non_final_messages), which the
+			// item cannot become.
+			msg = openresponses.AssistantText("")
+			if len(m.CodexMessageItems) == 0 && len(m.CodexReasoningItems) == 0 {
+				sc.addf(agentimport.Lossy, "hermes/empty-turn", m.Unit, "an empty assistant turn: once a message follows it, Hermes sends %q in its place in each request's copy (repair_empty_non_final_messages); the item stays empty", emptyPlaceholder)
+			}
+		}
+	}
+	// The messages: the Codex route's items when the row holds them,
+	// else the text.
+	msgs := codexMessages(m)
+	if len(msgs) > 0 {
+		used = append(used, "codex_message_items")
+		var joined strings.Builder
+		for _, cm := range msgs {
+			joined.WriteString(cm.Text())
+		}
+		if msg == nil || joined.String() != msg.Text() {
+			w.keepContent = true
+			sc.addf(agentimport.Lossy, "hermes/codex-messages", m.Unit, "the turn is the %d message items of codex_message_items, as the Codex route replays them, not its content, which is kept in the row's columns", len(msgs))
+		}
+	} else if msg != nil {
+		msgs = []*openresponses.Message{msg}
+	}
+	if summaryRow {
+		used = append(used, "_compressed_summary")
+	}
+	if m.FinishReason != "" && respID != "" {
+		used = append(used, "finish_reason")
+	}
+	w.used = used
+
+	var reasoningEntries []string
+	for k, it := range r.items {
+		k, it := k, it
+		id, e, err := w.item(it, m, respID, nil, func(e *agentsession.ItemEntry) error {
+			if ri, ok := it.(*openresponses.ReasoningItem); ok && ri.EncryptedContent != "" || it.ItemType() == "anthropic.redacted_thinking" || it.ItemType() == openresponses.ItemTypeCompaction {
+				if err := sc.b.Member(e, "provider", r.providers[k]); err != nil {
+					return err
+				}
+			}
+			if k < len(r.issuer) && !isEmpty(r.issuer[k]) {
+				return sc.member(e, "item", r.issuer[k], m.Unit)
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		if e != nil {
+			reasoningEntries = append(reasoningEntries, id)
+		}
+		if it.ItemType() == openresponses.ItemTypeCompaction {
+			sc.addf(agentimport.Lossy, "hermes/native-compaction", m.Unit, "a provider's compaction item Hermes keeps among the reasoning items; it replays only to a request that carries context management, and it is in context here")
+		}
+	}
+	if encrypted {
+		sc.addf(agentimport.Gap, "agentimport/reasoning-provider", m.Unit, "the reasoning's encrypted content is opaque and names no provider; the item entry carries %s:provider", Source)
+	}
+	for _, cm := range msgs {
+		if _, _, err := w.item(cm, m, respID, visible(m), nil); err != nil {
+			return err
+		}
+	}
+
+	// The calls.
+	for _, c := range m.ToolCalls {
+		if sig := thoughtSignature(c); sig != "" {
+			_, _, err := w.item(&openresponses.ReasoningItem{EncryptedContent: sig}, m, respID, nil, func(e *agentsession.ItemEntry) error {
+				return sc.b.Member(e, "provider", "gemini")
+			})
+			if err != nil {
+				return err
+			}
+			sc.addf(agentimport.Gap, "agentimport/reasoning-provider", m.Unit, "the call's Gemini thought signature is a reasoning item holding it alone, before the call, as providers/gemini reads one; the item entry carries %s:provider", Source)
+		}
+		native := c.PairingID()
+		callID, renamed := sc.b.Calls.Assign(native)
+		fc := &openresponses.FunctionCall{CallID: callID, Name: c.Name(), Arguments: c.ArgumentsText()}
+		id, _, err := w.item(fc, m, respID, nil, func(e *agentsession.ItemEntry) error {
+			if renamed {
+				if err := sc.b.Member(e, "call_id", native); err != nil {
+					return err
+				}
+			}
+			if rest := callRest(c); len(rest) > 0 {
+				return sc.member(e, "call", rest, m.Unit)
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		if renamed {
+			sc.addf(agentimport.Repaired, "hermes/call-id", m.Unit, "call ID %q is empty, malformed or used before in the session; the call is %s, the native ID kept in %s:call_id", native, callID, Source)
+		}
+		aliases := c.Aliases()
+		sc.pairing.call(callID, aliases)
+		w.callAliases[id] = aliases
+		sc.callEntry[callID] = id
+		if c.Name() == "delegate_task" {
+			sc.kids.called(c, callID, m)
+		}
+	}
+	sc.mark(m.Unit, agentimport.LineMapped)
+
+	if respID == "" {
+		sc.addf(agentimport.Lossy, "hermes/summary-row", m.Unit, "the compaction's summary, which Hermes wrote as an assistant message; it is no model's output and has no response")
+		return nil
+	}
+	resp := &agentsession.ResponseEntry{ResponseID: respID, Status: openresponses.ResponseStatusCompleted}
+	resp.Timestamp = m.Time
+	if copied {
+		if err := sc.b.Member(resp, "copied", true); err != nil {
+			return err
+		}
+		sc.addf(agentimport.Lossy, "hermes/copied-row", m.Unit, "the row is a copy Hermes wrote of an earlier assistant turn, kept by a compaction, a continuation or a branch: a response entry marked %s:copied, the model call the turn it copies made; Hermes records no usage per response, so none moves off the entry", Source)
+	}
+	switch m.FinishReason {
+	case "length":
+		resp.Status = openresponses.ResponseStatusIncomplete
+		resp.Incomplete = &openresponses.IncompleteDetails{Reason: openresponses.IncompleteReasonMaxOutputTokens}
+	case "content_filter":
+		resp.Status = openresponses.ResponseStatusIncomplete
+		resp.Incomplete = &openresponses.IncompleteDetails{Reason: openresponses.IncompleteReasonContentFilter}
+	}
+	if err := sc.b.Member(resp, "finish_reason", m.FinishReason); err != nil {
+		return err
+	}
+	if !w.rowKept {
+		if err := w.rowMembers(resp, m, used...); err != nil {
+			return err
+		}
+		w.rowKept = true
+	}
+	if _, err := sc.append(resp); err != nil {
+		return err
+	}
+	return w.thinkingOnly(m, msgs, reasoningEntries)
+}
+
+// emptyPlaceholder is the text Hermes sends for an empty turn that is
+// not the request's last (agent/agent_runtime_helpers_placeholders.py
+// _INTERRUPTED_PLACEHOLDER).
+const emptyPlaceholder = "[interrupt: no assistant output for this turn]"
+
+// thinkingOnly leaves out of every later request an assistant turn
+// whose only payload is reasoning, as each request's copy drops it
+// (drop_thinking_only_and_merge_users, AIAgent._is_thinking_only_assistant):
+// no tool calls, no text, and reasoning text or reasoning_details. A
+// turn of Codex reasoning items alone is dropped only off the Codex
+// route, which the row does not record; it is reported and kept.
+func (w *walk) thinkingOnly(m *hermes.Message, msgs []*openresponses.Message, entries []string) error {
+	sc := w.sc
+	if len(m.ToolCalls) > 0 || len(entries) == 0 {
+		return nil
+	}
+	for _, msg := range msgs {
+		if strings.TrimSpace(msg.Text()) != "" {
+			return nil
+		}
+	}
+	rc := m.ReasoningContent != nil && strings.TrimSpace(*m.ReasoningContent) != ""
+	if !rc && m.Reasoning == "" && len(splitArray(m.ReasoningDetails)) == 0 {
+		sc.addf(agentimport.Lossy, "hermes/thinking-only", m.Unit, "an assistant turn of Codex reasoning items alone, which Hermes drops from each request's copy off the Codex route and keeps on it; the row does not say which route, and the turn stays in context")
+		return nil
+	}
+	cfg := &agentsession.ConfigEntry{Omit: &agentsession.Omit{Items: entries}}
+	cfg.Timestamp = m.Time
+	if _, err := sc.append(cfg); err != nil {
+		return err
+	}
+	sc.addf(agentimport.Lossy, "hermes/thinking-only", m.Unit, "an assistant turn of reasoning alone, which Hermes drops from each request's copy (drop_thinking_only_and_merge_users): left out by omit from every request after it; the user turns it leaves side by side, which Hermes then merges, are not merged")
+	return nil
+}
+
+// callRest is a tool call without the members a function call maps.
+func callRest(c *hermes.ToolCall) json.RawMessage {
+	var all map[string]json.RawMessage
+	raw, err := json.Marshal(c)
+	if err != nil || json.Unmarshal(raw, &all) != nil {
+		return nil
+	}
+	delete(all, "id")
+	delete(all, "call_id")
+	if t, ok := all["type"]; ok && string(t) == `"function"` {
+		delete(all, "type")
+	}
+	if f, ok := all["function"]; ok {
+		var fn map[string]json.RawMessage
+		if json.Unmarshal(f, &fn) == nil {
+			delete(fn, "name")
+			delete(fn, "arguments")
+			if len(fn) == 0 {
+				delete(all, "function")
+			} else {
+				all["function"], _ = json.Marshal(fn)
+			}
+		}
+	}
+	if len(all) == 0 {
+		return nil
+	}
+	out, _ := json.Marshal(all)
+	return out
+}
+
+// tool converts a tool row: the output of the call it names, after the
+// decision a refusal is and the sub-agents the call ran.
+func (w *walk) tool(i int) error {
+	sc := w.sc
+	m := w.rows[i]
+	native := m.ToolCallID
+	aliases := hermes.ResultAliases(native)
+	callID, paired := sc.pairing.result(aliases)
+	if callID == "" {
+		callID = strings.TrimSpace(native)
+		if !wellFormedCall(callID) {
+			callID = fmt.Sprintf("orphan_%d", m.ID)
+		}
+	}
+	var data openresponses.FunctionCallOutputData
+	if m.Content.Structured {
+		cs, kept := parts(m.Content.Parts, false)
+		if kept > 0 {
+			sc.addf(agentimport.Kept, "hermes/content-part", m.Unit, "%d content parts Open Responses does not define are carried as extension parts", kept)
+		}
+		data = openresponses.FunctionCallOutputData{Parts: cs}
+		if cs == nil {
+			data.Parts = openresponses.Contents{}
+		}
+	} else {
+		text, _ := sentText(m)
+		w.sentDiffers(m, text, false)
+		data = openresponses.FunctionCallOutputData{Text: text}
+	}
+	if paired && strings.Contains(data.String(), notConsented) {
+		by := "policy"
+		if strings.Contains(data.String(), userDenied) {
+			by = "user"
+		}
+		d := agentsession.NewDecision(callID, sc.callEntry[callID], agentsession.VerdictReject, by).WithReason(data.String())
+		d.Timestamp = m.Time
+		if _, err := sc.append(d); err != nil {
+			return err
+		}
+		sc.addf(agentimport.Lossy, "hermes/denial-text", m.Unit, "the output is the text Hermes' approval gate gives a refusal; it is a reject decision by the %s, told by the text alone", by)
+	}
+	var refs []agentsession.EntryRef
+	if paired {
+		var err error
+		if refs, err = sc.linkBefore(callID, m); err != nil {
+			return err
+		}
+	}
+	w.used = []string{"tool_call_id"}
+	id, _, err := w.item(&openresponses.FunctionCallOutput{CallID: callID, Output: data}, m, "", nil, func(e *agentsession.ItemEntry) error {
+		e.Parents = refs
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	w.outAliases[id] = aliases
+	sc.mark(m.Unit, agentimport.LineMapped)
+	if paired {
+		if err := sc.linkAfter(callID, m); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// wellFormedCall reports a call ID a provider takes as it is.
+func wellFormedCall(id string) bool {
+	if id == "" || len(id) > 64 {
+		return false
+	}
+	for _, c := range id {
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '_', c == '-':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// repair leaves out of the context Hermes resumes with what its
+// repair_message_sequence drops before it sends: a tool result that
+// pairs with no call of the assistant turn just before it
+// (_drop_stray_tool_results), then a call the run of tool results right
+// after it does not answer (_prune_unanswered_tool_calls). Consecutive
+// user turns, which it merges into one, are reported, not merged.
+func (w *walk) repair() error {
+	sc := w.sc
+	ctx, err := sc.b.S.ContextAt(sc.at)
+	if err != nil {
+		return err
+	}
+	// The context's items, a turn per row: items of one row are one
+	// message Hermes holds.
+	type turn struct {
+		role  string
+		calls []*agentsession.ItemEntry
+		out   *agentsession.ItemEntry
+	}
+	var turns []*turn
+	lastUnit := ""
+	for k, it := range ctx.Items {
+		e, ok := ctx.ItemEntries[k].(*agentsession.ItemEntry)
+		unit := ""
+		if ok {
+			unit = w.unitOf[e.ID]
+		}
+		role := "assistant"
+		switch it := it.(type) {
+		case *openresponses.Message:
+			role = string(it.Role)
+		case *openresponses.FunctionCallOutput:
+			role = "tool"
+		}
+		if !ok || unit == "" || unit != lastUnit || role == "tool" || len(turns) == 0 || turns[len(turns)-1].role != role {
+			turns = append(turns, &turn{role: role})
+		}
+		lastUnit = unit
+		cur := turns[len(turns)-1]
+		switch it.(type) {
+		case *openresponses.FunctionCall:
+			if ok {
+				cur.calls = append(cur.calls, e)
+			}
+		case *openresponses.FunctionCallOutput:
+			if ok {
+				cur.out = e
+			}
+		}
+	}
+	var omit []string
+	// Pass 1: results of no call of the turn before.
+	var kept []*turn
+	known := map[string]int{}
+	matched := map[int]bool{}
+	group := 0
+	for _, t := range turns {
+		switch t.role {
+		case "assistant", "user":
+			known, matched = map[string]int{}, map[int]bool{}
+			for _, c := range t.calls {
+				for _, a := range w.callAliases[c.ID] {
+					if _, ok := known[a]; !ok {
+						known[a] = group
+					}
+				}
+				for _, a := range []string{c.Item.(*openresponses.FunctionCall).CallID} {
+					if _, ok := known[a]; !ok {
+						known[a] = group
+					}
+				}
+				group++
+			}
+		case "tool":
+			if t.out == nil {
+				break
+			}
+			aliases := w.outAliases[t.out.ID]
+			if len(aliases) == 0 {
+				aliases = []string{t.out.Item.(*openresponses.FunctionCallOutput).CallID}
+			}
+			best := -1
+			for _, a := range aliases {
+				if g, ok := known[a]; ok && !matched[g] && (best < 0 || g < best) {
+					best = g
+				}
+			}
+			if best < 0 {
+				omit = append(omit, t.out.ID)
+				sc.addf(agentimport.Repaired, "hermes/orphan-output", w.unitOf[t.out.ID], "the output names %s, no call of the assistant turn just before it in the context Hermes resumes with; a resume drops it (_drop_stray_tool_results), and it is left out of that context", strings.Join(aliases, ", "))
+				continue
+			}
+			matched[best] = true
+		}
+		kept = append(kept, t)
+	}
+	// Pass 2: calls the run of results right after them does not
+	// answer.
+	for i, t := range kept {
+		if len(t.calls) == 0 {
+			continue
+		}
+		answered := map[string]bool{}
+		for _, f := range kept[i+1:] {
+			if f.role != "tool" {
+				break
+			}
+			if f.out == nil {
+				continue
+			}
+			for _, a := range w.outAliases[f.out.ID] {
+				answered[a] = true
+			}
+			answered[f.out.Item.(*openresponses.FunctionCallOutput).CallID] = true
+		}
+		for _, c := range t.calls {
+			fc := c.Item.(*openresponses.FunctionCall)
+			hit := answered[fc.CallID]
+			for _, a := range w.callAliases[c.ID] {
+				hit = hit || answered[a]
+			}
+			if !hit {
+				omit = append(omit, c.ID)
+				sc.addf(agentimport.Repaired, "hermes/unanswered-call", w.unitOf[c.ID], "call %s has no output in the run of tool results right after it in the context Hermes resumes with; a resume prunes it (_prune_unanswered_tool_calls), and it is left out of that context", fc.CallID)
+			}
+		}
+	}
+	prevUser := false
+	merged := 0
+	for _, t := range kept {
+		if t.role == "user" && prevUser {
+			merged++
+		}
+		prevUser = t.role == "user"
+	}
+	if merged > 0 {
+		sc.addf(agentimport.Lossy, "hermes/alternation", sc.rec.s.Unit, "%d user messages follow another in the context Hermes resumes with; Hermes merges consecutive plain-text user turns into one before it sends (repair_message_sequence, or the request's own pass), which is not reproduced", merged)
+	}
+	if len(omit) == 0 {
+		return nil
+	}
+	cfg := &agentsession.ConfigEntry{Omit: &agentsession.Omit{Items: omit}}
+	if e, ok := sc.b.S.Entry(sc.at); ok {
+		cfg.Timestamp = e.Base().Timestamp
+	}
+	_, err = sc.append(cfg)
+	return err
+}

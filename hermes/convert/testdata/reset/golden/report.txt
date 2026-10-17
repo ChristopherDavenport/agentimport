@@ -1,0 +1,7 @@
+hermes: 9 rows: mapped 9 kept 0 dropped 0 malformed 0
+  gap      agentimport/provenance                            3  the import is recorded in the header's agentimport:source member
+  dropped  hermes/system-prompt                              3  the session row holds no system prompt; the settings carry the model alone
+  dropped  hermes/tools                                      3  Hermes does not store the session's tool definitions; the settings carry no tools
+  lossy    hermes/reset                                      2  the session is a reset of 20261008_030000_hh0019 (its parent ended idle on the same routing key): a new conversation on the same chat, carrying nothing over, so it names no parent_session; the row's parent_session_id is kept with the session row
+  kept     hermes/members                                    1  kept in hermes:model_config
+  kept     hermes/session-row                                3  the session row's columns the header has no place for are in the header's hermes:session member

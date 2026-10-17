@@ -1,0 +1,8 @@
+hermes: 4 rows: mapped 3 kept 1 dropped 0 malformed 0
+  gap      agentimport/provenance                            1  the import is recorded in the header's agentimport:source member
+  dropped  hermes/system-prompt                              1  the session row holds no system prompt; the settings carry the model alone
+  dropped  hermes/tools                                      1  Hermes does not store the session's tool definitions; the settings carry no tools
+  lossy    hermes/schema-version                             1  the database is at schema version 35, newer than 31, the one this converter was written against; its rows are read by the columns it knows, and the others are kept
+  kept     hermes/members                                    2  kept in hermes:columns
+  kept     hermes/session-row                                1  the session row's columns the header has no place for are in the header's hermes:session member
+  kept     hermes/unknown-role                               1  a row of role "critic", one Hermes' readers do not send, which is not context, is a custom entry

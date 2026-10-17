@@ -1,0 +1,12 @@
+hermes: 12 rows: mapped 12 kept 0 dropped 0 malformed 0
+  gap      agentimport/provenance                            3  the import is recorded in the header's agentimport:source member
+  gap      hermes/session-usage                              1  Hermes records usage per session and per model of a session, not per response, so no response entry carries usage; it is in the header's hermes:session member (its token and cost columns) and hermes:model_usage (session_model_usage's rows)
+  dropped  hermes/tools                                      3  Hermes does not store the session's tool definitions; the settings carry no tools
+  lossy    hermes/alternation                                1  1 user messages follow another in the context Hermes resumes with; Hermes merges consecutive plain-text user turns into one before it sends (repair_message_sequence, or the request's own pass), which is not reproduced
+  lossy    hermes/continuation                               1  a compression ended 20250601_100000_jj0023 and continued it in session 20250601_100140_jj0025, which holds the compacted context a resume sends: a continued_in link, the successor naming it in parent_session
+  lossy    hermes/reasoning-text                             1  the reasoning is the row's reasoning text, a reasoning item's content, which a chat-completions route replays only into the field its provider reads
+  lossy    hermes/subagent                                   1  the call ran sub-agent session 20250601_100010_jj0024 (the call's only sub-agent; its session ID is derived from the call's): a subsession, linked before the call's output, tied to the call by when it started and the goal it was sent, a heuristic, as Hermes records no tie
+  lossy    hermes/system-prompt                              3  the instructions are the system prompt Hermes stored for the session (the row's system_prompt column); what it adds per request, the ephemeral prompt, prefill messages and per-turn notes, is not stored
+  lossy    hermes/usage-rollup                               1  the session ran children; Hermes adds a sub-agent's estimated cost to its parent's, so the parent's cost columns count it again
+  kept     hermes/members                                    1  kept in hermes:columns
+  kept     hermes/session-row                                3  the session row's columns the header has no place for are in the header's hermes:session member

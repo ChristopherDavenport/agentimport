@@ -1,0 +1,37 @@
+session 0 20261005_060000_ee0007
+  request of row-2:
+    user: Survey the repo.
+  request of row-4:
+    user: Survey the repo.
+    call call_batch delegate_task
+    output call_batch {"results":[{"task_index":0,"status":"completed","
+  request of row-7:
+    user: Survey the repo.
+    call call_batch delegate_task
+    output call_batch {"results":[{"task_index":0,"status":"completed","
+    call call_x delegate_task
+    call call_y delegate_task
+    output call_x {"results":[{"task_index":0,"status":"completed","
+    output call_y {"results":[{"task_index":0,"status":"completed","
+session 1 20261005_060010_ee0008
+  request of row-9:
+    user: List the Go files.
+  request of row-11:
+    user: List the Go files.
+    call call_n delegate_task
+    output call_n {"results":[{"task_index":0,"status":"completed","
+session 2 0725c176-51f2-5dea-801f-08460535c19f
+  request of row-15:
+    user: Count lines.
+session 3 20261005_060010_ee0009
+  request of row-13:
+    user: List the tests.
+session 4 40d1ed72-c34e-576c-89d6-c1b76509e8a4
+  request of row-19:
+    user: Read main.go.
+session 5 16270e9a-ba70-5409-892c-d2b9ddefc3dc
+  request of row-17:
+    user: Read go.mod.
+session 6 20261005_060100_ee0013
+  request of row-21:
+    user: Stray task.

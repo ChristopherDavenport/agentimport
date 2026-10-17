@@ -11,6 +11,7 @@ import (
 
 	"github.com/ChristopherDavenport/agentimport"
 	sdksqlite "github.com/ChristopherDavenport/agentimport/clinesdk/sqlite"
+	hsqlite "github.com/ChristopherDavenport/agentimport/hermes/sqlite"
 	"github.com/ChristopherDavenport/agentimport/opencode/sqlite"
 	"github.com/ChristopherDavenport/agentsession"
 )
@@ -683,6 +684,83 @@ INSERT INTO part VALUES ('prt_a', 'msg_a', 'ses_a', 1, 1, '{"type":"text","text"
 	store := t.TempDir()
 	if code, out, errOut := runCmd(t, "convert", "-o", store, db); code != 0 {
 		t.Fatalf("exit %d: %s\n%s", code, errOut, out)
+	}
+}
+
+// TestHermesStore detects a Hermes database, its home and its
+// profiles' directories, refuses a database of other tables named
+// state.db, converts a database once whichever of its paths name it,
+// and converts every profile of a home.
+func TestHermesStore(t *testing.T) {
+	root := t.TempDir()
+	home := filepath.Join(root, ".hermes")
+	profile := filepath.Join(home, "profiles", "work")
+	other := filepath.Join(root, "other")
+	for _, d := range []string{profile, other} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	schema, err := os.ReadFile("../../hermes/testdata/schema-v31.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []struct{ dir, fixture string }{{home, "basic"}, {profile, "async"}} {
+		script, err := os.ReadFile(filepath.Join("../../hermes/convert/testdata", f.fixture, "db.sql"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		w, err := hsqlite.Fixture(filepath.Join(f.dir, "state.db"), string(schema)+"\n"+string(script))
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.Close()
+	}
+	ow, err := hsqlite.Fixture(filepath.Join(other, "state.db"), "CREATE TABLE sessions (id TEXT PRIMARY KEY, title TEXT); CREATE TABLE messages (id TEXT, parts TEXT);")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ow.Close()
+	db := filepath.Join(home, "state.db")
+	for _, p := range []string{home, db, profile} {
+		if s, err := detect(p); err != nil || s.name != "hermes" {
+			t.Errorf("detect(%s) = %s, %v", p, s.name, err)
+		}
+	}
+	if s, err := detect(filepath.Join(other, "state.db")); err == nil {
+		t.Errorf("another program's state.db is detected as %s", s.name)
+	}
+	ins, skip, err := collect([]string{home, db, root}, "auto")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, in := range ins {
+		if in.source.name == "hermes" {
+			if got[in.path] {
+				t.Errorf("%s is an input twice", in.path)
+			}
+			got[in.path] = true
+		}
+	}
+	if !got[db] || !got[filepath.Join(profile, "state.db")] || len(got) != 2 {
+		t.Errorf("Hermes inputs %v; skipped %v", got, skip)
+	}
+	store := t.TempDir()
+	code, out, errOut := runCmd(t, "convert", "-o", store, "-report", "json", home)
+	if code != 0 {
+		t.Fatalf("exit %d: %s\n%s", code, errOut, out)
+	}
+	var res convertResult
+	if err := json.Unmarshal([]byte(out), &res); err != nil {
+		t.Fatal(err)
+	}
+	written := 0
+	for _, in := range res.Sessions {
+		written += len(in.Written)
+	}
+	if written != 3 || res.Aggregate["hermes"].Lines == 0 {
+		t.Errorf("wrote %d sessions; aggregate %+v", written, res.Aggregate["hermes"])
 	}
 }
 

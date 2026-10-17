@@ -7,6 +7,30 @@ versions may break the API.
 
 ## Unreleased
 
+- Added: Hermes Agent (NousResearch/hermes-agent), which keeps every
+  session of a profile in SQLite, `~/.hermes/state.db` and
+  `~/.hermes/profiles/<name>/state.db`. `hermes` reads its sessions and
+  messages rows by column name, as Hermes adds columns as it needs them,
+  keeping the columns it does not know, and tells a child session's
+  relation to its parent as Hermes does (compression continuation,
+  branch, reset, sub-agent, tool session). `hermes/sqlite` reads the
+  database from a copy made by `internal/sqlite`. `hermes/convert`
+  rebuilds the context a resume sends: the live rows in id order,
+  `api_content` where Hermes sent it, its memory blocks stripped,
+  background-review harness turns out of context, orphaned outputs and
+  unanswered calls left out as its sequence repair drops them. An
+  in-place compaction is a compaction entry per generation of rows, a
+  split compaction a successor session with a `continued_in` link,
+  rewound rows a branch, a branch a session with a `fork_of` link, and a
+  delegate_task's sub-agents subsessions, or peers when the call ran
+  them in the background, tied to the call by when they started; a
+  background run's delivered report names its delegation in the item's
+  `source` (kind `delegation`, `ref` the delegation ID). Usage,
+  which Hermes records per session and per model only, is kept in the
+  header (`hermes/session-usage`, a gap). The command detects a
+  database by its tables, or the home or profile directory holding it
+  (`-from hermes`), and `make corpus HERMES=~/.hermes` reads a corpus.
+
 - Added: `THIRD_PARTY_NOTICES.md`, the license notices for the code
   ported from OpenHands, OpenCode, Cline, Roo Code, Codex and pi, and
   credits for the behaviour matched from the AI SDK and Harbor. Each

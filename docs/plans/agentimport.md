@@ -49,10 +49,13 @@ One module, `github.com/ChristopherDavenport/agentimport`.
 | `clinesdk` | the Cline SDK's session directories (Cline 4) and the JSON index | stdlib |
 | `clinesdk/sqlite` | reads Cline's `sessions.db`, copied, as `clinesdk`'s index | the above, `internal/sqlite` |
 | `clinesdk/convert` | Cline SDK → agentsession; takes the index opener in its Options | `clinesdk`, agentsession, openresponses |
+| `hermes` | Hermes Agent's database rows (`state.db`), read by column, and its session relations | stdlib |
+| `hermes/sqlite` | opens `state.db`, copied, and yields its rows as `hermes`'s types | the above, `internal/sqlite` |
+| `hermes/convert` | Hermes → agentsession; takes the database opener in its Options | `hermes`, agentsession, openresponses |
 | `cmd/agentimport` | the command-line program | all of the above |
 
 A format package never imports `agentsession`; a test enforces it.
-`opencode/sqlite`, `clinesdk/sqlite` and `internal/sqlite` are the
+`opencode/sqlite`, `clinesdk/sqlite`, `hermes/sqlite` and `internal/sqlite` are the
 packages that import a database driver, which `make deps` holds them
 to. The
 converter packages are all named `convert`, since a program almost
@@ -219,8 +222,8 @@ of each rollout) to find a thread's children.
 ## The command
 
 ```
-agentimport convert -o <store> [-from auto|claudecode|pi|codex|atif|cline|clinesdk|openhands|opencode] [-strict] [-slim] [-force] [-report text|json] <file|dir>...
-agentimport report [-from auto|claudecode|pi|codex|atif|cline|clinesdk|openhands|opencode] [-strict] [-slim] [-json] <file|dir>...
+agentimport convert -o <store> [-from auto|claudecode|pi|codex|atif|cline|clinesdk|openhands|opencode|hermes] [-strict] [-slim] [-force] [-report text|json] <file|dir>...
+agentimport report [-from auto|claudecode|pi|codex|atif|cline|clinesdk|openhands|opencode|hermes] [-strict] [-slim] [-json] <file|dir>...
 ```
 
 `convert` writes every session a conversion makes into the jsonl store

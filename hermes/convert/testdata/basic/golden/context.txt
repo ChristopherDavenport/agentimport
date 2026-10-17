@@ -1,0 +1,7 @@
+session 0 20261001_100000_aa0001
+  model: anthropic/claude-sonnet-4
+  user: What does the README say?
+  assistant: Let me read it.
+  call toolu_01 read_file
+  output toolu_01 # App …
+  assistant: The README says the app prints hello.
