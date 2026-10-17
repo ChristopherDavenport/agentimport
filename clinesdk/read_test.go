@@ -310,13 +310,20 @@ func TestTinyElements(t *testing.T) {
 }
 
 // TestManyNotices strips many mode notices in time linear in the text.
+// Sixteen times the notices takes about sixteen times as long when the
+// work is linear and 256 times when each notice copies the text, as
+// cutting one notice at a time did; the bound sits between the two, far
+// enough from both that a collection or a cold cache during the larger
+// run does not cross it, as a 4-times step against an 8-times bound did
+// on CI.
 func TestManyNotices(t *testing.T) {
 	text := func(n int) string {
 		return strings.Repeat("word <mode_notice>switched</mode_notice> ", n)
 	}
 	best := func(s string) time.Duration {
 		var d time.Duration
-		for i := 0; i < 3; i++ {
+		for i := range 5 {
+			runtime.GC()
 			start := time.Now()
 			if got := StripModeNotices(s); strings.Contains(got, "mode_notice") {
 				t.Fatal("a notice is left")
@@ -327,9 +334,9 @@ func TestManyNotices(t *testing.T) {
 		}
 		return d
 	}
-	a, b := best(text(5_000)), best(text(20_000))
-	if b > 8*a {
-		t.Errorf("%v for 5000 notices, %v for 20000: not linear", a, b)
+	a, b := best(text(1_000)), best(text(16_000))
+	if b > 48*a {
+		t.Errorf("%v for 1000 notices, %v for 16000: not linear", a, b)
 	}
 }
 
