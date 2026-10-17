@@ -3,6 +3,7 @@ package jsjson
 import (
 	"fmt"
 	"math"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -106,8 +107,13 @@ func FuzzParse(f *testing.F) {
 }
 
 // TestManyKeys reads an object of many members in time linear in it:
-// a repeated member is found without scanning the others. The best of
-// three runs of four times the keys against once.
+// a repeated member is found without scanning the others. Sixteen times
+// the keys takes 30 to 35 times as long with the index (a larger map
+// misses the cache more) and 268 times when each member scans the ones
+// before it; the bound sits about three times from each, so a
+// collection or a cold cache during the larger run does not cross it,
+// as a 4-times step against an 8-times bound could. The best of five,
+// each after a collection.
 func TestManyKeys(t *testing.T) {
 	object := func(n int) []byte {
 		var b strings.Builder
@@ -123,7 +129,8 @@ func TestManyKeys(t *testing.T) {
 	}
 	best := func(data []byte) time.Duration {
 		var d time.Duration
-		for i := 0; i < 3; i++ {
+		for i := range 5 {
+			runtime.GC()
 			start := time.Now()
 			v, err := Parse(data)
 			if err != nil {
@@ -138,9 +145,9 @@ func TestManyKeys(t *testing.T) {
 		}
 		return d
 	}
-	a, b := best(object(20_000)), best(object(80_000))
-	if b > 8*a {
-		t.Errorf("%v for 20000 keys, %v for 80000: not linear", a, b)
+	a, b := best(object(4_000)), best(object(64_000))
+	if b > 90*a {
+		t.Errorf("%v for 4000 keys, %v for 64000: not linear", a, b)
 	}
 }
 
