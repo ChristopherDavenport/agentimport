@@ -3,6 +3,7 @@ package convert
 import (
 	"fmt"
 	"math/rand"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -54,7 +55,8 @@ func TestCompactionScale(t *testing.T) {
 // TestReadsScale runs MessageBuilder's index over a session of many
 // reads in time linear in it: each request does not scan the context
 // again. Allocations do not tell, the scan allocating nothing, so the
-// test times four times the reads against once, the best of three.
+// test times sixteen times the reads against once, the best of three,
+// each after a collection.
 func TestReadsScale(t *testing.T) {
 	session := func(n int) map[string][]byte {
 		ms := []string{userMsg("go", 1000)}
@@ -66,8 +68,9 @@ func TestReadsScale(t *testing.T) {
 	}
 	best := func(files map[string][]byte) time.Duration {
 		var b time.Duration
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			s := clinesdk.ParseSession("r", files)
+			runtime.GC()
 			start := time.Now()
 			if _, err := Convert(s, Options{}); err != nil {
 				t.Fatal(err)
@@ -78,10 +81,13 @@ func TestReadsScale(t *testing.T) {
 		}
 		return b
 	}
-	a, b := best(session(1000)), best(session(4000))
-	// Linear is about 4 times; rescanning the context made it 8.6.
-	if b > 6*a {
-		t.Errorf("reads: %v for 1000, %v for 4000: not linear", a, b)
+	a, b := best(session(500)), best(session(8000))
+	// Linear is about 15 times; rescanning the context made it 82. The
+	// bound sits about 2.4 times from each, so a collection or a cold
+	// cache during the larger run does not cross it, as a 4-times step
+	// against a 6-times bound could.
+	if b > 36*a {
+		t.Errorf("reads: %v for 500, %v for 8000: not linear", a, b)
 	}
 }
 
