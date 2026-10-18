@@ -206,7 +206,10 @@ func itemsJSON(t *testing.T, items openresponses.Items) []string {
 // document: the exporter carries each redacted entry's redacted member,
 // in the response body and in the steps' extra.agentsession, and no
 // entry of the imported session, which is not a redaction, may carry
-// it. The marks are kept namespaced and reported.
+// it. The marks are kept namespaced and reported. The redacted session
+// is made as a redactor makes one: its response, made from one that
+// recorded a request_hash, is given the hash of the request the
+// redacted session rebuilds for it, so it verifies.
 func TestExporterRedacted(t *testing.T) {
 	at := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
 	s := agentsession.New(agentsession.Header{ID: "rt-redacted", CreatedAt: at, Redacted: true,
@@ -221,6 +224,11 @@ func TestExporterRedacted(t *testing.T) {
 		}
 		at = at.Add(time.Second)
 		e.Base().Timestamp = at
+		if r, ok := e.(*agentsession.ResponseEntry); ok {
+			if err := s.SetRequestHash(r); err != nil {
+				t.Fatal(err)
+			}
+		}
 		if _, err := s.Append(e); err != nil {
 			t.Fatal(err)
 		}
@@ -230,8 +238,13 @@ func TestExporterRedacted(t *testing.T) {
 	reply := agentsession.NewItemEntry(openresponses.AssistantText("Hello."))
 	reply.ResponseID = "resp_1"
 	add(reply)
-	add(&agentsession.ResponseEntry{ResponseID: "resp_1", Model: "m-1", Status: openresponses.ResponseStatusCompleted,
-		Usage: &openresponses.Usage{InputTokens: 10, OutputTokens: 5, TotalTokens: 15}})
+	resp := &agentsession.ResponseEntry{ResponseID: "resp_1", Model: "m-1", Status: openresponses.ResponseStatusCompleted,
+		Usage:       &openresponses.Usage{InputTokens: 10, OutputTokens: 5, TotalTokens: 15},
+		RequestHash: "sha256:" + strings.Repeat("0", 64)} // the original's, which the redaction replaces
+	add(resp)
+	if err := s.Verify(resp.ID); err != nil {
+		t.Fatalf("the redacted response does not verify: %v", err)
+	}
 	var main export.Trajectory
 	for tr, err := range export.Trajectories(s) {
 		if err != nil {
