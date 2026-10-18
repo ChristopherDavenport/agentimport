@@ -216,12 +216,18 @@ versions may break the API.
   (`extra.agentsession`'s `redacted` and `redacted_entries`, which the
   rebuild dropped) are `atif:extra`; new code `atif/redacted` (kept, or
   dropped under `-slim`). No converter writes the `redacted` member.
-- Dependencies: agentsession v0.0.27, format 0.13: converted sessions
+- Dependencies: agentsession v0.0.28, format 0.13: converted sessions
   are written with `agentsession/0.13` headers, so a reader of 0.12
   refuses them until it is upgraded. Its jsonl store (since v0.0.26)
   refuses a session ID or working directory that would put a file
   outside its root; the command's own check, which did the same, is
-  gone. openresponses stays at v0.0.15, its current release.
+  gone. v0.0.28, up from v0.0.27, makes a redacted session hash
+  independently: a redactor gives each redacted response the
+  `request_hash` of the request the redacted session rebuilds for it,
+  so readers verify and replay it with no exception for redacted
+  entries. The exporter test's redacted session is made that way, with
+  `SetRequestHash`, and its response verifies. openresponses stays at
+  v0.0.15, its current release.
 - Added: the `agentimport` command. `convert -o <store>` writes every
   session a conversion makes into an agentsession jsonl store and
   prints the report; `report` converts without writing and adds the
