@@ -46,6 +46,10 @@ func (c *docConv) exporterExtra(i int, ext map[string]json.RawMessage) (members,
 	var records []string
 	for k, v := range ext {
 		switch {
+		case k == "agentsession":
+			if rest := c.exporterMarks(i, v); rest != nil {
+				kept[k] = rest
+			}
 		case slices.Contains(exporterRestored, k):
 		case slices.Contains(exporterRecords, k):
 			kept[k] = v
@@ -66,6 +70,34 @@ func (c *docConv) exporterExtra(i int, ext map[string]json.RawMessage) (members,
 			"the exporter's records of entries that are not items (%s) are %s; records stays empty", strings.Join(records, ", "), verb)
 	}
 	return members, kept
+}
+
+// exporterMarks returns what a step's extra.agentsession holds beside
+// the entry_id the rebuild reads, or nil when it holds nothing else. The
+// exporter of a redacted session writes there the redacted members of
+// the entries the step was built from (redacted, redacted_entries):
+// positions in that session's original, which this session, not a
+// redaction, has no place for, so they are kept in atif:extra and never
+// become an entry's redacted member.
+func (c *docConv) exporterMarks(i int, raw json.RawMessage) json.RawMessage {
+	as := object(raw)
+	delete(as, "entry_id")
+	if len(as) == 0 {
+		return nil
+	}
+	if as["redacted"] != nil || as["redacted_entries"] != nil {
+		kind, verb := agentimport.Kept, "kept in "+Source+":extra"
+		if c.fam.opts.Slim {
+			kind, verb = agentimport.Dropped, "left out"
+		}
+		c.addf(kind, "atif/redacted", i+1,
+			"the exporter's redaction marks, positions in the original of the session it exported, are %s; this session is not a redaction", verb)
+	}
+	out, err := json.Marshal(as)
+	if err != nil {
+		return nil
+	}
+	return out
 }
 
 // exporterStep rebuilds a step from the raw items its extra carries. ok
@@ -493,7 +525,31 @@ func (c *docConv) responseBody(i int, body json.RawMessage) (*agentsession.Respo
 	if _, err := c.clean(i+1, body); err != nil {
 		return nil, err
 	}
-	return parseResponseBody(body)
+	r, err := parseResponseBody(body)
+	if err != nil {
+		return nil, err
+	}
+	// The body of a redacted session's response carries its redacted
+	// member, positions in that session's original. Passed through, it
+	// would mark an entry of this session, which is not a redaction, as
+	// redacted; it is atif:redacted instead.
+	if raw, ok := r.Unknown["redacted"]; ok {
+		delete(r.Unknown, "redacted")
+		if len(r.Unknown) == 0 {
+			r.Unknown = nil
+		}
+		if c.fam.opts.Slim {
+			c.addf(agentimport.Dropped, "atif/redacted", i+1,
+				"the response the exporter carried was redacted in the session it exported; its redacted member is left out")
+			return r, nil
+		}
+		c.addf(agentimport.Kept, "atif/redacted", i+1,
+			"the response the exporter carried was redacted in the session it exported; its redacted member, positions in that session's original, is %s:redacted, since this session is not a redaction", Source)
+		if err := c.b.Member(r, "redacted", raw); err != nil {
+			return nil, err
+		}
+	}
+	return r, nil
 }
 
 // parseResponseBody is responseBody reporting nothing.
