@@ -201,3 +201,91 @@ func itemsJSON(t *testing.T, items openresponses.Items) []string {
 	}
 	return out
 }
+
+// TestExporterRedacted exports a redacted session and imports the
+// document: the exporter carries each redacted entry's redacted member,
+// in the response body and in the steps' extra.agentsession, and no
+// entry of the imported session, which is not a redaction, may carry
+// it. The marks are kept namespaced and reported.
+func TestExporterRedacted(t *testing.T) {
+	at := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+	s := agentsession.New(agentsession.Header{ID: "rt-redacted", CreatedAt: at, Redacted: true,
+		RedactedFrom: &agentsession.RedactedFrom{Session: "rt-original"},
+		Harness:      &agentsession.Harness{Name: "rt", Version: "1"}})
+	n := 0
+	add := func(e agentsession.Entry) {
+		t.Helper()
+		n++
+		if err := agentsession.SetRedacted(e, []agentsession.Span{{From: n, To: n}}); err != nil {
+			t.Fatal(err)
+		}
+		at = at.Add(time.Second)
+		e.Base().Timestamp = at
+		if _, err := s.Append(e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	add(&agentsession.ConfigEntry{Model: "m-1"})
+	add(agentsession.NewItemEntry(openresponses.UserText("Hi [REDACTED].")))
+	reply := agentsession.NewItemEntry(openresponses.AssistantText("Hello."))
+	reply.ResponseID = "resp_1"
+	add(reply)
+	add(&agentsession.ResponseEntry{ResponseID: "resp_1", Model: "m-1", Status: openresponses.ResponseStatusCompleted,
+		Usage: &openresponses.Usage{InputTokens: 10, OutputTokens: 5, TotalTokens: 15}})
+	var main export.Trajectory
+	for tr, err := range export.Trajectories(s) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		if tr.Main {
+			main = tr
+		}
+	}
+	doc, err := export.ToATIF(main, export.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"redacted_entries"`) || !strings.Contains(string(raw), `"redacted":[4]`) {
+		t.Fatalf("the exporter wrote no redaction marks to exercise:\n%s", raw)
+	}
+	for _, slim := range []bool{false, true} {
+		path := filepath.Join(t.TempDir(), "agent", "trajectory.json")
+		if err := export.WriteDocument(path, doc); err != nil {
+			t.Fatal(err)
+		}
+		res := convertFixture(t, path, Options{Slim: slim})
+		got := reread(t, res.Sessions[0])
+		if got.Header().Redacted || got.Header().RedactedFrom != nil {
+			t.Errorf("slim %v: the imported session is marked redacted", slim)
+		}
+		kept, marks := false, false
+		for _, e := range got.Entries() {
+			if strings.Contains(string(e.Base().Unknown[Source+":extra"]), `"redacted_entries"`) {
+				marks = true
+			}
+			if _, ok := agentsession.RedactedOf(e); ok {
+				t.Errorf("slim %v: entry %s is redacted", slim, e.Base().ID)
+			}
+			if _, ok := e.Base().Unknown["redacted"]; ok {
+				t.Errorf("slim %v: entry %s carries a redacted member", slim, e.Base().ID)
+			}
+			if r, ok := e.(*agentsession.ResponseEntry); ok && string(r.Unknown[Source+":redacted"]) == "[4]" {
+				kept = true
+			}
+		}
+		if kept == slim {
+			t.Errorf("slim %v: the response's %s:redacted kept = %v", slim, Source, kept)
+		}
+		if marks == slim {
+			t.Errorf("slim %v: the steps' redaction marks kept in %s:extra = %v", slim, Source, marks)
+		}
+		if !slices.Contains(res.Report.Codes(), "atif/redacted") {
+			t.Errorf("slim %v: no atif/redacted finding: %v", slim, res.Report.Codes())
+		}
+		doccheck.Check(t, Source, res.Report)
+	}
+}

@@ -1,7 +1,7 @@
 # What the session format cannot hold
 
 Each entry is a `gap` finding: something one or more native formats
-record that the Agent Session Format (RFC 0001, format 0.12) has no
+record that the Agent Session Format (RFC 0001, format 0.13) has no
 place for. The converters keep it in a namespaced member or drop it,
 and report it under the code given. Each is a question for the RFC;
 the converter changes when the answer lands.

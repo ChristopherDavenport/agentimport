@@ -250,6 +250,7 @@ fields; a step without them falls back to the mapping above.
 | `branch_from` with `openresponses.item` | a branch summary |
 | `omitted` | a config entry at the end whose `omit.items` names the entries |
 | a namespaced member the exporter merged in | back on the entry |
+| a response body's `redacted`, and `extra.agentsession` beside its `entry_id` (a redacted session's marks) | `atif:redacted` on the response entry, and `atif:extra` on the step's last entry: never the entry's `redacted` member |
 | the exporter's records (`run`, `calls`, `labels`, `info`, `custom`, config ids, `environment`, `links`, `outcome` and the like) | `atif:extra` on the step's last entry; `records` stays empty |
 
 The exporter does not write the settings (instructions, the
@@ -339,6 +340,7 @@ every converter can report are in [README.md](README.md).
 | `atif/mistyped-member` | kept, or dropped | A declared member of another JSON type is kept with its object's unmapped members. |
 | `atif/notes` | kept, or dropped | `notes` is the header member `atif:notes`. |
 | `atif/part-type` | kept | A part of a type ATIF does not define is an `atif.<type>` part. |
+| `atif/redacted` | kept, or dropped | The exporter wrote a redacted session: a response body's `redacted` member is `atif:redacted`, and a step's redaction marks (`extra.agentsession`'s `redacted` and `redacted_entries`) are `atif:extra`. They are positions in the exported session's original; this session is not a redaction, so no entry carries `redacted`. |
 | `atif/source` | kept | A step of a source ATIF does not define is a custom entry. |
 | `atif/unknown-member` | kept, or dropped | Members Harbor's models do not declare are kept with their object's unmapped members. |
 | `atif/arguments` | repaired | A tool call's arguments are absent, a string, or not an object; they are `{}`, the string, or their JSON. |

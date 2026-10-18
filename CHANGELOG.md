@@ -207,9 +207,21 @@ versions may break the API.
   project or fixture directory of that name, or a root of that name,
   hid its transcripts. It now skips only a session's own directory, the
   `<session-id>/` beside its transcript.
-- Dependencies: agentsession v0.0.26, whose jsonl store refuses a
-  session ID or working directory that would put a file outside its
-  root; the command's own check, which did the same, is gone.
+- Fixed: an ATIF document agentsession's exporter wrote from a redacted
+  session no longer yields redacted entries. The response body the
+  exporter carries held the entry's `redacted` member, which the
+  rebuild passed through, so the converted session, not a redaction,
+  held an entry format 0.13 reads as redacted. That member is now
+  `atif:redacted` on the response entry, and the steps' redaction marks
+  (`extra.agentsession`'s `redacted` and `redacted_entries`, which the
+  rebuild dropped) are `atif:extra`; new code `atif/redacted` (kept, or
+  dropped under `-slim`). No converter writes the `redacted` member.
+- Dependencies: agentsession v0.0.27, format 0.13: converted sessions
+  are written with `agentsession/0.13` headers, so a reader of 0.12
+  refuses them until it is upgraded. Its jsonl store (since v0.0.26)
+  refuses a session ID or working directory that would put a file
+  outside its root; the command's own check, which did the same, is
+  gone. openresponses stays at v0.0.15, its current release.
 - Added: the `agentimport` command. `convert -o <store>` writes every
   session a conversion makes into an agentsession jsonl store and
   prints the report; `report` converts without writing and adds the
