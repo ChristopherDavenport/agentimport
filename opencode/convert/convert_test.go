@@ -348,3 +348,49 @@ func short(s string) string {
 	}
 	return s
 }
+
+// TestSkills converts a V2 user row with two skills, one without text:
+// each element but its text is kept in opencode:skills and reported,
+// the one without text is reported as not sent, and Slim drops both.
+func TestSkills(t *testing.T) {
+	for _, slim := range []bool{false, true} {
+		res := convertFixture(t, "g3-skills", Options{Slim: slim})
+		var b bytes.Buffer
+		if err := agentsession.Write(&b, res.Sessions[0]); err != nil {
+			t.Fatal(err)
+		}
+		out := b.String()
+		for _, want := range []string{`"opencode:skills"`, `"name":"docs-style"`, `"x_origin":"global"`, `"name":"no-body"`} {
+			if got := strings.Contains(out, want); got == slim {
+				t.Errorf("slim %v: output holds %s: %v", slim, want, got)
+			}
+		}
+		if !strings.Contains(out, `"text":"Write short sentences."`) {
+			t.Errorf("slim %v: the skill's text is not sent", slim)
+		}
+		if strings.Contains(out, `"opencode:skills":[{"id":"sk_1","location":"/work/s/.opencode/skills/docs-style/SKILL.md","name":"docs-style","text"`) {
+			t.Errorf("slim %v: the kept skill holds its text", slim)
+		}
+		untexted := 0
+		for _, fd := range res.Report.Findings {
+			if fd.Code == "opencode/skill-untexted" {
+				untexted++
+			}
+			if fd.Code == "opencode/members" && strings.Contains(fd.Detail, "skills") {
+				want := agentimport.Kept
+				if slim {
+					want = agentimport.Dropped
+				}
+				if fd.Kind != want {
+					t.Errorf("slim %v: %+v; want %s", slim, fd, want)
+				}
+			}
+		}
+		if untexted != 1 {
+			t.Errorf("slim %v: %d opencode/skill-untexted findings, want 1", slim, untexted)
+		}
+		if !strings.Contains(fmt.Sprint(res.Report.Findings), "opencode:skills") && !slim {
+			t.Errorf("the skills member is not reported: %v", res.Report.Findings)
+		}
+	}
+}

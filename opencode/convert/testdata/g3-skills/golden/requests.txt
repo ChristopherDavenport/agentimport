@@ -1,0 +1,3 @@
+session 0 ses_skills
+  request of msg_s02:
+    user: Write short sentences. | tidy the docs

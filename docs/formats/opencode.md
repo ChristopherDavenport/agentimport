@@ -265,7 +265,9 @@ by `seq`, and `toLLMMessages` renders each:
   and directories inline as text under an `Attached file:` or
   `Attached directory:` header, images and PDFs as media (an image
   attached twice under one mention once), other types not sent
-  (`opencode/attachment-mime`).
+  (`opencode/attachment-mime`). A skill with no text sends nothing
+  (`opencode/skill-untexted`); every skill element but its text, its
+  name among it, is kept in `opencode:skills`, one element per skill.
 - `synthetic` and `skill`: user text; `system`: a system message;
   `shell`: user text giving the command and its output, but for a
   background command, whose result comes back later
@@ -307,7 +309,7 @@ by `seq`, and `toLLMMessages` renders each:
 | V1 assistant step | items, then a `response` (`response_id` `<message id>:<step>`), then outputs | items carry `opencode:id` (the part) and `opencode:part`; the response `opencode:finish`, `opencode:step_start`, `opencode:step_finish` (snapshots), `opencode:parts` (parts not sent: patches, retries), and on the last step `opencode:message_id`, `opencode:message`, `opencode:error` |
 | V1 `tool` part | `function_call` (`call_id` the part's `callID` through `agentimport.CallIDs`, `name` the tool, `arguments` the input), its output after the response | `opencode:state` (title, metadata, times); a renamed call `opencode:call_id` |
 | V1 task call run by OpenCode for a subtask | its items with no `response` (`opencode/subtask`) | |
-| V2 row | as above; `assistant`: items, a `response` (`response_id` the row's ID), outputs | `opencode:id`, `opencode:type`, `opencode:row` (the data but what is mapped), `opencode:content` (content not sent) |
+| V2 row | as above; `assistant`: items, a `response` (`response_id` the row's ID), outputs | `opencode:id`, `opencode:type`, `opencode:row` (the data but what is mapped), `opencode:content` (content not sent), `opencode:skills` (a user row's skills, each element but its `text`, which is sent; its name among it) |
 | a refused call: V1 error text of PermissionV1 (`opencode/permission-text`, told by the text), V2 `permission.rejected` or `aborted` "The user declined this tool call" (`opencode/permission-rejected`) | a `reject` `decision` (`by` `human`, or `policy` for a rule), then the output | approvals are not recorded |
 | `snapshot`, `patch`, `retry` parts, V2 `snapshot`, `retry` | members, as above | dropped with Slim |
 
@@ -458,6 +460,7 @@ every converter can report are in [README.md](README.md).
 | `opencode/session-id` | lossy | A session ID derived from the native one. |
 | `opencode/session-record` | kept, or dropped | The session record's members, in the header's `opencode:session`. |
 | `opencode/shell-background` | kept, or dropped | A background shell command, which enters context through its result. |
+| `opencode/skill-untexted` | kept, or dropped | A V2 user row's skill with no `text`: OpenCode renders none, so nothing is sent; the element is in `opencode:skills`. |
 | `opencode/state-namespaced` | lossy | Provider state under its namespace in a row OpenCode 2's migration copied. |
 | `opencode/step-part` | kept, or dropped | A part of a step that is not sent: a patch, a retry, a snapshot. |
 | `opencode/step-unfinished` | lossy | A step that did not finish, its usage unrecorded. |

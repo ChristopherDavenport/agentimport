@@ -7,6 +7,13 @@ versions may break the API.
 
 ## Unreleased
 
+- Fixed: an OpenCode 2 user row's skills kept only their text, which
+  is sent; the rest of each element, the skill's name among it, was
+  lost unreported. Each element but its text is now `opencode:skills`
+  on the item (`opencode/members`, dropped under `-slim`), and a skill
+  with no text, which OpenCode does not send, is reported
+  (`opencode/skill-untexted`).
+
 - Fixed: `-slim` drops a Claude Code attachment that rendered nothing
   into the request (`credential_org`, `deferred_tools_record`), which
   the model never saw, and reports it `dropped`; it kept each as a

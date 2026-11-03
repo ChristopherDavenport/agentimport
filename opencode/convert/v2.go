@@ -227,10 +227,28 @@ func (w *v2walk) user(r *opencode.Row2, ts time.Time) error {
 	sc := w.sc
 	d := r.Data
 	var content openresponses.Contents
+	// Each skill's text is sent; the rest of each element, its name
+	// among it, is kept in opencode:skills, an element per skill.
+	var skills []json.RawMessage
+	keepSkills := false
 	for _, raw := range d.Skills {
-		if t, ok := opencode.SkillText(raw); ok {
+		t, ok := opencode.SkillText(raw)
+		if ok {
 			content = append(content, &openresponses.InputText{Text: t})
+		} else {
+			kind := sc.keepKind()
+			sc.addf(kind, "opencode/skill-untexted", r.Unit, "a skill with no text is not sent, as OpenCode sends none; the element is %s", keptOr(kind, "kept in "+Source+":skills"))
 		}
+		el := json.RawMessage(raw)
+		if m := rest(raw, "text"); ok && m != nil {
+			el, _ = json.Marshal(m)
+		} else if ok {
+			el = json.RawMessage("{}")
+		}
+		if !isEmpty(el) {
+			keepSkills = true
+		}
+		skills = append(skills, el)
 	}
 	if d.Text != "" {
 		content = append(content, &openresponses.InputText{Text: d.Text})
@@ -240,7 +258,22 @@ func (w *v2walk) user(r *opencode.Row2, ts time.Time) error {
 		sc.addf(sc.keepKind(), "opencode/message-empty", r.Unit, "a user row with nothing OpenCode sends is not in context")
 		return sc.custom(ts, r.Unit, "a user row with nothing sent", map[string]any{"id": r.ID, "type": r.Type, "data": json.RawMessage(r.Raw)})
 	}
-	return w.item(r, agentsession.NewItemEntry(openresponses.UserMessage(content...)), ts, "text", "skills", "files")
+	e := agentsession.NewItemEntry(openresponses.UserMessage(content...))
+	if keepSkills {
+		if err := sc.member(e, "skills", skills, r.Unit); err != nil {
+			return err
+		}
+	}
+	return w.item(r, e, ts, "text", "skills", "files")
+}
+
+// keptOr is what a finding of kind says of a value: kept as where says,
+// or left out.
+func keptOr(kind agentimport.Kind, where string) string {
+	if kind == agentimport.Dropped {
+		return "left out"
+	}
+	return where
 }
 
 // attachments renders a user row's files: text and directories inline

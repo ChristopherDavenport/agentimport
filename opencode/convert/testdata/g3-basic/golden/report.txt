@@ -15,7 +15,7 @@ opencode: 27 records: mapped 19 kept 6 dropped 1 malformed 1
   kept     agentimport/usage-detail                          1  cache writes have no place in Responses usage; they are folded into input tokens, and the count, with the cost, is in opencode:usage
   kept     opencode/custom                                   6  a background shell command, which is not context, is a custom entry
   kept     opencode/hosted-tool                              1  a tool the provider ran, its call and result in the response, is an opencode.hosted_tool item holding the content
-  kept     opencode/members                                 33  kept in opencode:row
+  kept     opencode/members                                 34  kept in opencode:skills
   kept     opencode/pending-input                            2  input OpenCode 2 queued in session_pending and has not put in the history is not context
   kept     opencode/session-record                           3  the session record's members the header has no place for are in the header's opencode:session member
   kept     opencode/shell-background                         1  a shell command run in the background enters context through its result, not here
