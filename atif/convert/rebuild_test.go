@@ -232,25 +232,17 @@ func redactedHistory(t *testing.T) *agentsession.Session {
 	return s
 }
 
-// TestRebuildVisibleAndLeaf: since format 0.18 an entry matches only
-// when its step shows what it projects, and the whole path reaches the
-// leaf with every step naming an entry. A document edited in a step's
-// visible message alone, or with a step appended after the export, is
-// not restored as redacted, and says why; nor is one whose root says
-// redacted false.
-func TestRebuildVisibleAndLeaf(t *testing.T) {
+// TestRebuildVisibleAndLeaf: the whole path reaches the leaf with every
+// step naming an entry (format 0.18). A document with a step appended
+// after the export is not restored as redacted, and says why; nor is one
+// whose root says redacted false. (0.18's check of a step's visible
+// fields waits for the digest the export will carry.)
+func TestRebuildLeaf(t *testing.T) {
 	s := redactedHistory(t)
 	if res := convertFixture(t, exportDoc(t, s, nil), Options{}); !reread(t, res.Sessions[0]).Header().Redacted {
 		t.Fatal("the unedited document is not restored as redacted")
 	}
 	for name, edit := range map[string]func(map[string]any){
-		"visible message": func(m map[string]any) {
-			for _, sv := range m["steps"].([]any) {
-				if step := sv.(map[string]any); step["message"] == "Hi [REDACTED]." {
-					step["message"] = "Hi Sam."
-				}
-			}
-		},
 		"appended step": func(m map[string]any) {
 			steps := m["steps"].([]any)
 			m["steps"] = append(steps, map[string]any{"step_id": len(steps) + 1, "timestamp": "2026-09-03T10:00:09Z", "source": "user", "message": "Added later."})
@@ -267,10 +259,6 @@ func TestRebuildVisibleAndLeaf(t *testing.T) {
 		}
 		codes := res.Report.Codes()
 		switch name {
-		case "visible message":
-			if !slices.Contains(codes, "atif/entry-not-rebuilt") || !slices.Contains(codes, "atif/redaction-not-restored") {
-				t.Errorf("%s: %v", name, codes)
-			}
 		case "appended step":
 			if !slices.Contains(codes, "atif/step-not-rebuilt") || !slices.Contains(codes, "atif/redaction-not-restored") {
 				t.Errorf("%s: %v", name, codes)

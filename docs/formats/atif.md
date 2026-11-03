@@ -249,14 +249,10 @@ asks (Projections/ATIF): each entry is put back together from its record
 there, its item from its step (by its position in `item_entry_ids`, or
 the item of a step or observation result, a spilled image read back as
 its data URL) and a response's body from its step; its id is computed
-and compared with the one the document names, and, as format 0.18
-asks, the entries that matched are projected again at the document's
-leaf and each step's visible fields (`message`, `reasoning_content`,
-`tool_calls`, each observation result's `source_call_id` and
-`content`) compared with the projection's: the id covers the raw item,
-not what a reader of the step sees, so a step edited in its visible
-text alone unmatches every entry it is made from. An entry that
-matches both ways, under a parent that matched, is the exported entry, its meaning
+and compared with the one the document names. (Format 0.18 also
+compares each step's visible fields, by a digest the export will
+carry; this converter does not check them yet.) An entry that
+matches, under a parent that matched, is the exported entry, its meaning
 members (`failed`, `trust`, `copied_from`, `from_link`,
 `instructions_part`, unknown members) and its history members
 (`legacy_id`, `normalised`, `redacted`) as written. Any other entry is a
@@ -269,7 +265,8 @@ document holds the whole path: from a first entry to the leaf its
 step that names none is left out, `atif/step-not-rebuilt`), and the
 root's `redacted` `true`; otherwise they stay in `atif:extra`
 and the report says why (`atif/redaction-not-restored`). Every step is
-counted mapped, since the entries hold what it carried. A document that
+counted mapped, since the entries hold what it carried, but one that
+names no entry, which is dropped. A document that
 embeds sub-agent trajectories, continues in another or is cut short is
 mapped from its steps as below (`atif/not-rebuilt`); there a step's
 meaning members are restored on the entry it maps to

@@ -42,9 +42,7 @@ versions may break the API.
   entries (format 0.17) is rebuilt to the document's own ids
   (breaking: such an import's entry ids, and a redacted session's
   header, change).** Each entry is put back together from
-  `extra.agentsession.entries` and its step, its id checked and its
-  step's visible fields compared with what it projects (as format 0.18
-  asks; a step edited in its visible text alone does not match); an entry
+  `extra.agentsession.entries` and its step, its id checked; an entry
   that matches keeps its history members, any other is a new entry,
   listed (`atif/entry-not-rebuilt`), its history members `atif:<name>`.
   The header's `redacted` and `redacted_from` are restored exactly when
