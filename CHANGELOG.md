@@ -7,6 +7,14 @@ versions may break the API.
 
 ## Unreleased
 
+- Changed: Codex `env` entries are whole snapshots, as RFC 0001 0.17
+  reads them. A `turn_context` that moves the working directory inside
+  the session's repeats the session meta's `vcs`, reported as a guess
+  (`codex/vcs-carried`, lossy), and one that moves outside it writes
+  none (`codex/vcs-after-cwd`); before, every later `env` dropped the
+  git state. Members of `git` Codex adds are kept as `codex:<name>` vcs
+  members (`codex/git-members`); they were lost.
+
 - Fixed: an OpenCode 2 user row's skills kept only their text, which
   is sent; the rest of each element, the skill's name among it, was
   lost unreported. Each element but its text is now `opencode:skills`

@@ -687,3 +687,67 @@ func TestRepeatedSpawnID(t *testing.T) {
 		t.Errorf("links = %v", got)
 	}
 }
+
+// TestVCSCarried checks an env entry is a whole snapshot: a move inside
+// the session's directory repeats the session meta's git state, as a
+// guess reported lossy; a move out of it writes no vcs, reported; and
+// git members Codex adds are kept as vcs members.
+func TestVCSCarried(t *testing.T) {
+	res := convertFixture(t, fixtures(t)["vcs"], Options{})
+	var envs []*agentsession.EnvEntry
+	for _, e := range res.Sessions[0].Entries() {
+		if e, ok := e.(*agentsession.EnvEntry); ok {
+			envs = append(envs, e)
+		}
+	}
+	if len(envs) != 3 {
+		t.Fatalf("%d env entries, want 3", len(envs))
+	}
+	first := envs[0].VCS
+	if first == nil || first.Revision != "abc123def4567890abc123def4567890abc12345" || string(first.Unknown["codex:x_upstream"]) != `"origin/main"` {
+		t.Fatalf("session meta vcs = %+v", first)
+	}
+	in := envs[1]
+	if in.CWD != "/work/demo/pkg" || in.VCS == nil || in.VCS.Revision != first.Revision ||
+		string(in.VCS.Unknown["codex:branch"]) != `"main"` || string(in.VCS.Unknown["codex:x_upstream"]) != `"origin/main"` {
+		t.Errorf("env inside the session's directory = %+v, vcs %+v", in, in.VCS)
+	}
+	if out := envs[2]; out.CWD != "/work/demo-other" || out.VCS != nil {
+		t.Errorf("env outside the session's directory = %+v, vcs %+v", out, out.VCS)
+	}
+	want := map[string]agentimport.Kind{"codex/vcs-carried": agentimport.Lossy, "codex/vcs-after-cwd": agentimport.Lossy, "codex/git-members": agentimport.Kept}
+	got := map[string]int{}
+	for _, f := range res.Report.Findings {
+		if k, ok := want[f.Code]; ok {
+			got[f.Code]++
+			if f.Kind != k {
+				t.Errorf("%+v; want %s", f, k)
+			}
+		}
+	}
+	for code := range want {
+		if got[code] != 1 {
+			t.Errorf("%s reported %d times, want once", code, got[code])
+		}
+	}
+}
+
+func TestUnder(t *testing.T) {
+	for _, tc := range []struct {
+		base, dir string
+		want      bool
+	}{
+		{"/work/demo", "/work/demo", true},
+		{"/work/demo", "/work/demo/pkg", true},
+		{"/work/demo/", "/work/demo/pkg/x", true},
+		{"/work/demo", "/work/demo-other", false},
+		{"/work/demo", "/work", false},
+		{"", "/work", false},
+		{`C:\work\demo`, `C:\work\demo\pkg`, true},
+		{`C:\work\demo`, `C:\work\demo2`, false},
+	} {
+		if got := under(tc.base, tc.dir); got != tc.want {
+			t.Errorf("under(%q, %q) = %v, want %v", tc.base, tc.dir, got, tc.want)
+		}
+	}
+}

@@ -4,6 +4,7 @@ codex: 17 lines: mapped 10 kept 6 dropped 1 malformed 0
   lossy    codex/effort                                      1  reasoning effort "max" has no Responses effort; it is in codex:turn_context alone (at 15)
   lossy    codex/response-id                                 1  the rollout names no response ids (only the token usage records of newer rollouts do); a response is named codex-line-<n> after its first item's line (at 9)
   lossy    codex/tools-unrecorded                            1  Codex does not record the tool definitions it sends the model; the session's config has none (at 1)
+  lossy    codex/vcs-after-cwd                               1  the working directory moved outside the session's; Codex records no git state for it, so the env entry has no vcs (at 15)
   lossy    codex/world-state                                 1  Codex renders its world state into each request; the rollout records the state, not the text the model saw, so it is not in the session's context (at 2)
   kept     agentimport/provenance                            1  the import is recorded in the header member agentimport:source
   kept     codex/assistant-input                             1  an assistant message the harness wrote (a delivered or inherited message, compaction output, another agent's instruction) is input, not a response's output; it is marked codex:input (at 8)

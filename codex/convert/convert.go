@@ -267,6 +267,11 @@ type converter struct {
 	f      *codex.File
 	b      *agentimport.Builder
 	meta   *codex.Line
+	// metaCWD and metaVCS are the session meta's working directory and
+	// the vcs its git state became, which an env entry for a move
+	// inside that directory repeats: an env entry is a whole snapshot.
+	metaCWD string
+	metaVCS *agentsession.VCS
 
 	// spawns maps a spawn call to the thread it started, as the call's
 	// output or a record beside it names it; tasks to the agent path a
@@ -630,6 +635,15 @@ func (c *converter) start() error {
 				}
 				c.addf(agentimport.Kept, "codex/repository-url", c.meta, "the repository URL is the vcs member %s:repository_url", Source)
 			}
+			if extra := nonNull(g.Extra); len(extra) > 0 {
+				for k, v := range extra {
+					if err := env.VCS.SetMember(Source+":"+k, v); err != nil {
+						return err
+					}
+				}
+				c.addf(agentimport.Kept, "codex/git-members", c.meta, "git members %s are vcs members under %s:", memberNames(extra), Source)
+			}
+			c.metaCWD, c.metaVCS = m.CWD, env.VCS
 		}
 		if err := c.appendNow(env, c.meta); err != nil {
 			return err

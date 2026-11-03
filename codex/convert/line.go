@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 
@@ -913,6 +914,20 @@ func (c *converter) turnContext(l *codex.Line) error {
 	if cwdMoved {
 		c.st.cwd = tc.CWD
 		env := agentsession.NewEnvEntry(tc.CWD)
+		// An env entry is a whole snapshot, so the git state still in
+		// force is repeated. Codex records it once, for the session's
+		// directory: inside it the same repository is a guess a nested
+		// one would make wrong; outside it the state is unknown.
+		if c.metaVCS != nil {
+			if under(c.metaCWD, tc.CWD) {
+				env.VCS = cloneVCS(c.metaVCS)
+				c.addf(agentimport.Lossy, "codex/vcs-carried", l,
+					"the working directory moved inside the session's; the session meta's git state is repeated, which a nested repository would make wrong")
+			} else {
+				c.addf(agentimport.Lossy, "codex/vcs-after-cwd", l,
+					"the working directory moved outside the session's; Codex records no git state for it, so the env entry has no vcs")
+			}
+		}
 		if !changed {
 			if err := c.lineMembers(env, l); err != nil {
 				return err
@@ -1099,4 +1114,25 @@ func (c *converter) customMembers(e agentsession.Entry, l *codex.Line, it *codex
 	c.addf(agentimport.Kept, "codex/custom-tool-call", l,
 		"a Responses %s is a %s, marked %s:tool_kind \"custom\"; its free-form input is the arguments {\"input\": …}", it.Type, map[bool]string{true: "function call", false: "function call output"}[it.Type == codex.ItemCustomToolCall], Source)
 	return nil
+}
+
+// under reports whether dir is base or a directory below it, with
+// either path separator, as Codex records paths of the host it ran on.
+func under(base, dir string) bool {
+	base = strings.TrimRight(base, `/\`)
+	if base == "" {
+		return false
+	}
+	if dir == base {
+		return true
+	}
+	rest, ok := strings.CutPrefix(dir, base)
+	return ok && (strings.HasPrefix(rest, "/") || strings.HasPrefix(rest, `\`))
+}
+
+// cloneVCS copies a vcs, its members included.
+func cloneVCS(v *agentsession.VCS) *agentsession.VCS {
+	out := *v
+	out.Unknown = maps.Clone(v.Unknown)
+	return &out
 }
