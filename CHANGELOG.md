@@ -7,6 +7,14 @@ versions may break the API.
 
 ## Unreleased
 
+- Fixed: `make release` can cut the first release. The release guard
+  refused every tag while no `v*` tag was published; it now takes a
+  plain `vX.Y.Z` of the module path's major version as the first
+  release when origin, read fail-closed, and the local repository hold
+  none. Prereleases and other `v*` tags no longer raise the floor, and
+  the guard refuses them. `scripts/release-guard-test.sh` tests it
+  (`make guard-test`, part of `make check`).
+
 - Added: Hermes Agent (NousResearch/hermes-agent), which keeps every
   session of a profile in SQLite, `~/.hermes/state.db` and
   `~/.hermes/profiles/<name>/state.db`. `hermes` reads its sessions and
