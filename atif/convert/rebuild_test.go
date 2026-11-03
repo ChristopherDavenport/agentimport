@@ -207,3 +207,74 @@ func TestRebuildBlocked(t *testing.T) {
 		t.Errorf("no atif/not-rebuilt: %v", res.Report.Codes())
 	}
 }
+
+// redactedHistory is historySession redacted, as a redactor writes one,
+// so its document carries the header marks the rebuild restores.
+func redactedHistory(t *testing.T) *agentsession.Session {
+	t.Helper()
+	at := time.Date(2026, 9, 3, 10, 0, 0, 0, time.UTC)
+	s := agentsession.New(agentsession.Header{ID: "rb-red", CreatedAt: at, Redacted: true,
+		RedactedFrom: &agentsession.RedactedFrom{Session: "rb-original"}})
+	for i, e := range []agentsession.Entry{
+		&agentsession.ConfigEntry{Model: "m-1"},
+		agentsession.NewItemEntry(openresponses.UserText("Hi [REDACTED].")),
+		agentsession.NewItemEntry(openresponses.UserText("Go on.")),
+	} {
+		if err := agentsession.SetRedacted(e, []agentsession.Span{{From: i + 1, To: i + 1}}); err != nil {
+			t.Fatal(err)
+		}
+		at = at.Add(time.Second)
+		e.Base().Timestamp = at
+		if _, err := s.Append(e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return s
+}
+
+// TestRebuildVisibleAndLeaf: since format 0.18 an entry matches only
+// when its step shows what it projects, and the whole path reaches the
+// leaf with every step naming an entry. A document edited in a step's
+// visible message alone, or with a step appended after the export, is
+// not restored as redacted, and says why; nor is one whose root says
+// redacted false.
+func TestRebuildVisibleAndLeaf(t *testing.T) {
+	s := redactedHistory(t)
+	if res := convertFixture(t, exportDoc(t, s, nil), Options{}); !reread(t, res.Sessions[0]).Header().Redacted {
+		t.Fatal("the unedited document is not restored as redacted")
+	}
+	for name, edit := range map[string]func(map[string]any){
+		"visible message": func(m map[string]any) {
+			for _, sv := range m["steps"].([]any) {
+				if step := sv.(map[string]any); step["message"] == "Hi [REDACTED]." {
+					step["message"] = "Hi Sam."
+				}
+			}
+		},
+		"appended step": func(m map[string]any) {
+			steps := m["steps"].([]any)
+			m["steps"] = append(steps, map[string]any{"step_id": len(steps) + 1, "timestamp": "2026-09-03T10:00:09Z", "source": "user", "message": "Added later."})
+		},
+		"redacted false": func(m map[string]any) {
+			as := m["extra"].(map[string]any)["agentsession"].(map[string]any)
+			as["redacted"] = false
+			delete(as, "redacted_from")
+		},
+	} {
+		res := convertFixture(t, exportDoc(t, s, edit), Options{})
+		if reread(t, res.Sessions[0]).Header().Redacted {
+			t.Errorf("%s: the header is restored as redacted", name)
+		}
+		codes := res.Report.Codes()
+		switch name {
+		case "visible message":
+			if !slices.Contains(codes, "atif/entry-not-rebuilt") || !slices.Contains(codes, "atif/redaction-not-restored") {
+				t.Errorf("%s: %v", name, codes)
+			}
+		case "appended step":
+			if !slices.Contains(codes, "atif/step-not-rebuilt") || !slices.Contains(codes, "atif/redaction-not-restored") {
+				t.Errorf("%s: %v", name, codes)
+			}
+		}
+	}
+}

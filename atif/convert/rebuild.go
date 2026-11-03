@@ -11,6 +11,7 @@ import (
 	"github.com/ChristopherDavenport/agentimport"
 	"github.com/ChristopherDavenport/agentimport/atif"
 	"github.com/ChristopherDavenport/agentsession"
+	"github.com/ChristopherDavenport/agentsession/export"
 	"github.com/ChristopherDavenport/openresponses"
 )
 
@@ -48,9 +49,10 @@ func (c *docConv) rebuildBlocked() string {
 type rebuilt struct {
 	id   string
 	line map[string]json.RawMessage
-	// verified: the line hashes to the id the document names.
-	verified bool
-	parent   string
+	// verified: the line hashes to the id the document names, and its
+	// step shows what it projects; visible says the step did not.
+	verified, visible bool
+	parent            string
 	// step is the step, by index, that carried the entry's body, or -1.
 	step int
 }
@@ -60,14 +62,6 @@ type rebuilt struct {
 func (c *docConv) rebuildEntries(h agentsession.Header, recs map[string]json.RawMessage) (*agentsession.Session, error) {
 	c.report.Line(agentimport.LineMapped)
 	bodies, steps := c.stepBodies()
-	for i, s := range c.t.Steps {
-		if s == nil || s.Err != nil {
-			c.report.Line(agentimport.LineMalformed)
-			c.addf(agentimport.Repaired, "atif/step-malformed", i+1, "a step that is not an object is skipped; the entries carry what the exporter wrote")
-			continue
-		}
-		c.report.Line(agentimport.LineMapped)
-	}
 	ents := map[string]*rebuilt{}
 	for id, raw := range recs {
 		rec := object(raw)
@@ -98,6 +92,41 @@ func (c *docConv) rebuildEntries(h agentsession.Header, recs map[string]json.Raw
 		ents[id] = r
 	}
 	order, whole := rebuildOrder(ents)
+	// The whole path reaches the leaf the document names, every entry
+	// from it up held (RFC 0001, Projections/ATIF, 0.18).
+	leaf := c.docLeaf()
+	for id, n := leaf, 0; ; n++ {
+		r, ok := ents[id]
+		if !ok || n > len(ents) {
+			whole = false
+			break
+		}
+		if r.parent == "" {
+			break
+		}
+		id = r.parent
+	}
+	// Every step names an entry of the document: one that names none,
+	// such as a step appended after the export, is not of the path, and
+	// what it holds is in no entry.
+	for i, st := range c.t.Steps {
+		switch {
+		case st == nil || st.Err != nil:
+			c.report.Line(agentimport.LineMalformed)
+			c.addf(agentimport.Repaired, "atif/step-malformed", i+1, "a step that is not an object is skipped; the entries carry what the exporter wrote")
+			whole = false
+		case ents[stepID(st)] == nil:
+			c.report.Line(agentimport.LineDropped)
+			c.addf(agentimport.Dropped, "atif/step-not-rebuilt", i+1,
+				"the step names no entry the document carries, as one appended after the export does not; it is not of the exported path, and is left out")
+			whole = false
+		default:
+			c.report.Line(agentimport.LineMapped)
+		}
+	}
+	// An entry matches only when its step shows what it projects (0.18):
+	// the id covers the raw item, not what a reader of the step sees.
+	c.checkVisible(ents, order, leaf)
 
 	s := agentsession.New(h)
 	newID := map[string]string{}
@@ -105,6 +134,8 @@ func (c *docConv) rebuildEntries(h agentsession.Header, recs map[string]json.Raw
 	for _, r := range order {
 		why := ""
 		switch {
+		case r.visible:
+			why = "its step shows other text than it projects, as an edit of the document's visible fields alone leaves it"
 		case !r.verified:
 			why = "its members hash to another id, as an edit after the export, or a document stripped of a body, leaves them"
 		case r.parent != "" && ents[r.parent] == nil:
@@ -133,7 +164,7 @@ func (c *docConv) rebuildEntries(h agentsession.Header, recs map[string]json.Raw
 	}
 	as := object(object(c.t.Ext)["agentsession"])
 	restore := false
-	if as["redacted"] != nil || as["redacted_from"] != nil {
+	if isTrue(as["redacted"]) || object(as["redacted_from"]) != nil {
 		switch {
 		case unrebuilt > 0:
 			c.addf(agentimport.Lossy, "atif/redaction-not-restored", 0,
@@ -170,7 +201,7 @@ func (c *docConv) rebuildEntries(h agentsession.Header, recs map[string]json.Raw
 func (c *docConv) rebuiltHeader(h agentsession.Header, as map[string]json.RawMessage, restore bool) (agentsession.Header, error) {
 	if restore {
 		var from *agentsession.RedactedFrom
-		if raw := as["redacted_from"]; raw != nil {
+		if raw := as["redacted_from"]; object(raw) != nil {
 			from = &agentsession.RedactedFrom{}
 			if err := json.Unmarshal(raw, from); err != nil {
 				c.addf(agentimport.Lossy, "atif/redaction-not-restored", 0,
@@ -456,6 +487,173 @@ func remapIDs(raw json.RawMessage, newID map[string]string) json.RawMessage {
 	out, err := json.Marshal(v)
 	if err != nil {
 		return raw
+	}
+	return out
+}
+
+// isTrue reports a JSON true.
+func isTrue(raw json.RawMessage) bool {
+	return string(bytes.TrimSpace(raw)) == "true"
+}
+
+// docLeaf is the entry the document was built at: its trajectory_id,
+// which agentsession's exporter sets to the leaf, or the leaf its root
+// extra names.
+func (c *docConv) docLeaf() string {
+	if leaf := str(object(object(c.t.Ext)["agentsession"])["leaf"]); leaf != "" {
+		return leaf
+	}
+	return c.t.TrajectoryID
+}
+
+// stepID is the entry a step names under agentsession in its extra.
+func stepID(s *atif.Step) string {
+	return str(object(object(s.Ext)["agentsession"])["entry_id"])
+}
+
+// stepEntries are the ids of the entries a step is made from: its own,
+// its items' and response's, and its observation results'.
+func stepEntries(s *atif.Step) []string {
+	ext := object(s.Ext)
+	var ids []string
+	add := func(id string) {
+		if id != "" {
+			ids = append(ids, id)
+		}
+	}
+	add(stepID(s))
+	var items []string
+	_ = json.Unmarshal(ext["item_entry_ids"], &items)
+	for _, id := range items {
+		add(id)
+	}
+	add(str(object(object(ext["openresponses"])["response"])["entry_id"]))
+	if o := s.Observation; o != nil && o.Err == nil {
+		for _, r := range o.Results {
+			if r != nil && r.Err == nil {
+				add(str(object(object(r.Ext)["agentsession"])["entry_id"]))
+			}
+		}
+	}
+	return ids
+}
+
+// visibleFields is what a reader of a step sees that the projection
+// fills from its entries: message, reasoning_content, tool_calls and each
+// observation result's source_call_id and content, as canonical JSON.
+func visibleFields(step map[string]any) string {
+	v := map[string]any{"message": step["message"], "reasoning_content": step["reasoning_content"], "tool_calls": step["tool_calls"]}
+	if o, ok := step["observation"].(map[string]any); ok {
+		var results []any
+		rs, _ := o["results"].([]any)
+		for _, rv := range rs {
+			res, _ := rv.(map[string]any)
+			results = append(results, map[string]any{"source_call_id": res["source_call_id"], "content": res["content"]})
+		}
+		v["observation"] = results
+	}
+	data, _ := json.Marshal(v)
+	return string(data)
+}
+
+// decodeAny decodes JSON keeping numbers as written.
+func decodeAny(data []byte, v any) error {
+	d := json.NewDecoder(bytes.NewReader(data))
+	d.UseNumber()
+	return d.Decode(v)
+}
+
+// checkVisible projects the entries that rebuilt to their ids, those
+// whose parents did too, again at the document's leaf, and unmarks the
+// entries of every step whose visible fields differ from what the
+// projection shows. When the leaf did not rebuild no step is confirmed,
+// and every entry of a step is unmarked.
+func (c *docConv) checkVisible(ents map[string]*rebuilt, order []*rebuilt, leaf string) {
+	projected := c.reproject(ents, order, leaf)
+	for _, st := range c.t.Steps {
+		if st == nil || st.Err != nil {
+			continue
+		}
+		raw, err := json.Marshal(st)
+		var step map[string]any
+		if err == nil {
+			err = decodeAny(raw, &step)
+		}
+		if want, ok := projected[stepID(st)]; err == nil && ok && want == visibleFields(step) {
+			continue
+		}
+		for _, id := range stepEntries(st) {
+			if r := ents[id]; r != nil && r.verified {
+				r.verified, r.visible = false, true
+			}
+		}
+	}
+}
+
+// reproject is each step's visible fields, by the entry it names, in the
+// document agentsession's exporter writes from the entries that rebuilt
+// to their ids at leaf; nil when the leaf did not rebuild.
+func (c *docConv) reproject(ents map[string]*rebuilt, order []*rebuilt, leaf string) map[string]string {
+	closed := map[string]bool{}
+	as := object(object(c.t.Ext)["agentsession"])
+	header := map[string]any{"type": "session", "format": agentsession.Format, "id": c.t.SessionID,
+		"created_at": "2026-01-01T00:00:00Z", "payload": agentsession.Payload}
+	if isTrue(as["redacted"]) && object(as["redacted_from"]) != nil {
+		header["redacted"], header["redacted_from"] = true, as["redacted_from"]
+	}
+	if c.t.SessionID == "" {
+		header["id"] = "atif"
+	}
+	var buf bytes.Buffer
+	write := func(v any) bool {
+		data, err := json.Marshal(v)
+		if err != nil {
+			return false
+		}
+		buf.Write(append(data, '\n'))
+		return true
+	}
+	if !write(header) {
+		return nil
+	}
+	for _, r := range order {
+		if r.verified && (r.parent == "" || closed[r.parent]) {
+			if write(r.line) {
+				closed[r.id] = true
+			}
+		}
+	}
+	if !closed[leaf] {
+		return nil
+	}
+	s, err := agentsession.Read(&buf)
+	if err != nil {
+		return nil
+	}
+	tr, err := export.At(s, leaf)
+	if err != nil {
+		return nil
+	}
+	doc, err := export.ToATIF(tr, export.Options{})
+	if err != nil {
+		return nil
+	}
+	data, err := json.Marshal(doc)
+	if err != nil {
+		return nil
+	}
+	var again map[string]any
+	if decodeAny(data, &again) != nil {
+		return nil
+	}
+	out := map[string]string{}
+	steps, _ := again["steps"].([]any)
+	for _, sv := range steps {
+		step, _ := sv.(map[string]any)
+		extra, _ := step["extra"].(map[string]any)
+		as, _ := extra["agentsession"].(map[string]any)
+		id, _ := as["entry_id"].(string)
+		out[id] = visibleFields(step)
 	}
 	return out
 }

@@ -39,12 +39,15 @@ versions may break the API.
   entries (format 0.17) is rebuilt to the document's own ids
   (breaking: such an import's entry ids, and a redacted session's
   header, change).** Each entry is put back together from
-  `extra.agentsession.entries` and its step, its id checked; an entry
+  `extra.agentsession.entries` and its step, its id checked and its
+  step's visible fields compared with what it projects (as format 0.18
+  asks; a step edited in its visible text alone does not match); an entry
   that matches keeps its history members, any other is a new entry,
   listed (`atif/entry-not-rebuilt`), its history members `atif:<name>`.
   The header's `redacted` and `redacted_from` are restored exactly when
-  every entry matched over the whole path (`atif/redaction-not-restored`
-  says why not). A document with sub-agent trajectories or a
+  every entry matched over the whole path, which reaches the document's
+  leaf with every step naming an entry (`atif/redaction-not-restored`
+  says why not; a step that names none is `atif/step-not-rebuilt`). A document with sub-agent trajectories or a
   continuation is still mapped from its steps (`atif/not-rebuilt`),
   where `failed`, `trust`, `copied_from`, `from_link` and
   `instructions_part` now come back as core members
