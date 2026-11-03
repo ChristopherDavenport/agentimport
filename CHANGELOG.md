@@ -32,8 +32,11 @@ versions may break the API.
   members, which a test holds the report to. The Claude Code converter
   reports its own: `sessionId`, `agentId`, `cwd`, a `credential_org`
   attachment's `organizationUuid`, a `session_context` attachment's
-  `userEmail`, and an `api-request` record's `classifier_context`
-  `user_identity` and `home_dir`.
+  `userEmail`, an `api-request` record's `classifier_context`
+  `user_identity` and `home_dir`, and the paths that become an
+  `instructions_part` id or an `agentskill:read` location. A Claude Code
+  sub-agent is named in findings by its place (`subagents/agent-#<n>`),
+  never its ID.
 
 - **Changed: an ATIF document agentsession's exporter wrote with its
   entries (format 0.17) is rebuilt to the document's own ids

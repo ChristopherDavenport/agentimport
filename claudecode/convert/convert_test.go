@@ -454,6 +454,29 @@ func TestIdentity(t *testing.T) {
 	}
 }
 
+// TestIdentityAgents: the report of a session with sub-agents names
+// no agent by its ID, in a finding's file or its detail; it counts the
+// agentId members carried.
+func TestIdentityAgents(t *testing.T) {
+	_, res := convertFixture(t, fixtures(t)["subagents"], Options{})
+	raw, err := json.Marshal(res.Report)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var text bytes.Buffer
+	if err := res.Report.WriteText(&text); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"a0001", "a0002", "a0004", "a0005", "ateam-0003", "ateam-0006"} {
+		if strings.Contains(string(raw), id) || strings.Contains(text.String(), id) {
+			t.Errorf("the report names agent %s", id)
+		}
+	}
+	if !strings.Contains(text.String(), "agentId") {
+		t.Error("the report does not count the agentId members")
+	}
+}
+
 // TestSlim checks that a slim conversion leaves the sidecars out and
 // still accounts for them.
 func TestSlim(t *testing.T) {

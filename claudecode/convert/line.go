@@ -119,6 +119,7 @@ func (c *converter) skillRead(l *claudecode.Line, tail string) (string, error) {
 		r.Name = path.Base(strings.TrimRight(dir, "/"))
 	}
 	r.Served(text)
+	c.report.Identity(c.file, l.No, "message.content (skill base directory)", "the agentskill:read record's location")
 	e, err := r.Entry(sc.callID)
 	if err != nil {
 		return "", err
@@ -748,11 +749,13 @@ func (c *converter) layer(l *claudecode.Line) *agentsession.LayerRef {
 		}
 		_ = json.Unmarshal(a.Content, &content)
 		if a.Path != "" {
+			c.report.Identity(c.file, l.No, "attachment.path", "the message's instructions_part id")
 			return &agentsession.LayerRef{ID: a.Path, Source: source(content.Type)}
 		}
 	case "instructions":
 		switch {
 		case len(a.Files) == 1 && a.Files[0].Path != "":
+			c.report.Identity(c.file, l.No, "attachment.files[].path", "the message's instructions_part id")
 			return &agentsession.LayerRef{ID: a.Files[0].Path, Source: source(a.Files[0].Type)}
 		case len(a.Files) > 1:
 			c.addf(agentimport.Lossy, "claudecode/instructions-layers", l,

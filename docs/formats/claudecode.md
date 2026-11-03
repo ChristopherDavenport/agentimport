@@ -181,6 +181,17 @@ harvest the values from the original and check its output for them
 | `attachment.context.userEmail` | a `session_context` attachment's `claudecode:attachment`, and the text of the message it rendered, under Slim too | the account's email |
 | `params.safeguards[].classifier_context.user_identity` | an `api-request` record's custom entry (`claudecode/request-log`); left out under Slim | the login name |
 | `params.safeguards[].classifier_context.home_dir` | the same | the home directory |
+| `attachment.path` | a `nested_memory` message's `instructions_part` `id` | the home directory, through the file's path |
+| `attachment.files[].path` | a one-file `instructions` message's `instructions_part` `id` | the home directory, through the file's path |
+| `message.content (skill base directory)` | an `agentskill:read` record's `location` | the home directory, through the skill's path |
+
+A sub-agent is named in the report by its place among the session's
+(`subagents/agent-#<n>`), never by its ID. The command's own listing of
+what it read and wrote (`-report json`'s `path`, and `written`'s `id`
+and `file`) names input files and sessions, which carry the native
+session ID and the dash-encoded home directory: it is the command's
+record for its user, not the conversion's report, whose groups are what
+to share.
 
 Paths built from the session ID and the dash-encoded project directory
 (`scratchpadDirectory`, `tool_results_dir`, a task's output file) stand

@@ -48,10 +48,14 @@ func Convert(s *claudecode.Session, opts Options) (*agentimport.Result, error) {
 	cv := &conversion{opts: opts, report: agentimport.NewReport(Source), session: s}
 	cv.children = map[string][]*claudecode.Agent{}
 	cv.done = map[string]bool{}
+	cv.agentNo = map[string]int{}
+	for i, a := range s.Agents {
+		cv.agentNo[a.ID] = i + 1
+	}
 	for _, a := range s.Agents {
 		if a.Transcript == nil {
-			cv.report.Addf(agentimport.Dropped, "claudecode/agent-meta-only", agentFile(a.ID), 0,
-				"sub-agent %s has a meta file and no transcript", a.ID)
+			cv.report.Addf(agentimport.Dropped, "claudecode/agent-meta-only", cv.agentFile(a.ID), 0,
+				"sub-agent %s has a meta file and no transcript", cv.agentName(a.ID))
 			continue
 		}
 		parent := ""
@@ -90,9 +94,9 @@ func Convert(s *claudecode.Session, opts Options) (*agentimport.Result, error) {
 			if p := parentOf(a); p != "" && cv.sessionOf[p] != "" {
 				parentID, parentTr = cv.sessionOf[p], cv.transcripts[p]
 			}
-			cv.report.Addf(agentimport.Lossy, "claudecode/agent-unlinked", agentFile(a.ID), 0,
-				"no call in the transcripts spawned sub-agent %s; it is a session with parent_session alone", a.ID)
-			more, _, err := cv.transcript(a.Transcript, agentFile(a.ID), target{
+			cv.report.Addf(agentimport.Lossy, "claudecode/agent-unlinked", cv.agentFile(a.ID), 0,
+				"no call in the transcripts spawned sub-agent %s; it is a session with parent_session alone", cv.agentName(a.ID))
+			more, _, err := cv.transcript(a.Transcript, cv.agentFile(a.ID), target{
 				id: agentsession.SubsessionID(parentID, "agent-"+a.ID), parent: parentID, agent: a, parentTr: parentTr,
 			})
 			if err != nil {
@@ -140,6 +144,21 @@ type conversion struct {
 	// transcripts to its transcript.
 	sessionOf   map[string]string
 	transcripts map[string]*claudecode.Transcript
+	// agentNo numbers the sub-agents in the session's order, so the
+	// report names an agent's file without its ID, an identity value.
+	agentNo map[string]int
+}
+
+// agentFile names a sub-agent's transcript in the report:
+// subagents/agent-#<n>, the agent's place among the session's, never
+// its ID.
+func (cv *conversion) agentFile(id string) string {
+	return fmt.Sprintf("subagents/agent-#%d", cv.agentNo[id])
+}
+
+// agentName names a sub-agent in a finding's detail, by its place.
+func (cv *conversion) agentName(id string) string {
+	return fmt.Sprintf("#%d", cv.agentNo[id])
 }
 
 // target is the session a transcript becomes.
@@ -153,8 +172,6 @@ type target struct {
 	// agent, whose responses a fork's transcript opens with a copy of.
 	parentTr *claudecode.Transcript
 }
-
-func agentFile(id string) string { return "subagents/agent-" + id + ".jsonl" }
 
 // transcript converts one transcript into the session t names, and
 // each agent its calls spawned. It returns the session and then every
@@ -182,7 +199,7 @@ func (cv *conversion) transcript(tr *claudecode.Transcript, file string, t targe
 	out := []*agentsession.Session{read}
 	for _, ch := range c.spawned {
 		if ch.sessions == nil {
-			more, _, err := cv.transcript(ch.agent.Transcript, agentFile(ch.agent.ID), target{
+			more, _, err := cv.transcript(ch.agent.Transcript, cv.agentFile(ch.agent.ID), target{
 				id: ch.id, parent: t.id, agent: ch.agent, parentTr: tr,
 			})
 			if err != nil {

@@ -656,7 +656,7 @@ func (c *converter) link(a *claudecode.Agent, call *claudecode.Call, callID, tai
 	if err != nil {
 		return "", nil, err
 	}
-	sessions, leaf, err := c.cv.transcript(a.Transcript, agentFile(a.ID), target{
+	sessions, leaf, err := c.cv.transcript(a.Transcript, c.cv.agentFile(a.ID), target{
 		id: child, parent: c.t.id, spawnedBy: callID, agent: a, parentTr: c.tr,
 	})
 	if err != nil {
