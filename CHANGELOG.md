@@ -27,7 +27,9 @@ versions may break the API.
   a `nested_memory` or one-file `instructions` attachment names its
   file under `agentsmd`, or `agentmemory` for Claude Code's memory, and
   the skill listing is `agentskill`. A message composed from several
-  files names none and is reported (`claudecode/instructions-layers`).
+  files names each, in message order, as format 0.18's list
+  (`ItemEntry.InstructionsLayers`); one holding a file of an unknown
+  type names none and is reported (`claudecode/instructions-layers`).
   Codex's AGENTS.md instructions message names `agentsmd` with the
   directory Codex names, and its skills catalogue `agentskill`.
 

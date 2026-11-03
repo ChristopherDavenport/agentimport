@@ -551,8 +551,16 @@ func TestInstructionLayers(t *testing.T) {
 	var got []string
 	for _, e := range res.Sessions[0].Entries() {
 		if it, ok := e.(*agentsession.ItemEntry); ok {
-			if p := it.InstructionsPart; p != nil {
-				got = append(got, p.Source+" "+p.ID)
+			if ls := it.Layers(); ls != nil {
+				var names []string
+				for _, p := range ls {
+					names = append(names, p.Source+" "+p.ID)
+				}
+				if it.InstructionsLayers != nil {
+					got = append(got, "["+strings.Join(names, ", ")+"]")
+				} else {
+					got = append(got, names[0])
+				}
 			} else {
 				got = append(got, "-")
 			}
@@ -560,12 +568,14 @@ func TestInstructionLayers(t *testing.T) {
 	}
 	// A memory file of a type Claude Code has not been seen to write
 	// names no layer.
-	want := []string{"-", "agentmemory /home/u/.claude/projects/demo/memory/MEMORY.md", "agentskill ", "-", "agentsmd /work/demo/pkg/CLAUDE.md", "-", "-"}
+	// A message of several files names each, in message order (format
+	// 0.18); one of a single file keeps the single form.
+	want := []string{"[agentsmd /work/demo/CLAUDE.md, agentmemory /home/u/.claude/projects/demo/memory/MEMORY.md]", "agentmemory /home/u/.claude/projects/demo/memory/MEMORY.md", "agentskill ", "-", "agentsmd /work/demo/pkg/CLAUDE.md", "-", "-"}
 	if strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Errorf("instructions_part:\n%q\nwant\n%q", got, want)
 	}
-	if !slices.Contains(res.Report.Codes(), "claudecode/instructions-layers") {
-		t.Errorf("no claudecode/instructions-layers: %v", res.Report.Codes())
+	if slices.Contains(res.Report.Codes(), "claudecode/instructions-layers") {
+		t.Errorf("a message of known files is reported as naming none: %v", res.Report.Codes())
 	}
 }
 

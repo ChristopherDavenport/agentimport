@@ -284,7 +284,7 @@ func (c *converter) attachment(l *claudecode.Line, tail string, st *pathState) (
 		e := itemEntry(&openresponses.Message{Role: role, Content: openresponses.Contents{&openresponses.InputText{Text: r.Content}}})
 		e.Visible = &hidden
 		if i == 0 {
-			e.InstructionsPart = c.layer(l)
+			e.InstructionsPart, e.InstructionsLayers = c.layer(l)
 			if c.opts.Slim {
 				c.addf(agentimport.Dropped, "claudecode/attachment", l, "the %s attachment's payload is left out; its rendering is the message", l.Attachment.Type)
 			} else {
@@ -713,13 +713,16 @@ func attachmentOnly(raw json.RawMessage) json.RawMessage {
 	return out
 }
 
-// layer names the instruction layer an attachment's message was
+// layer names the instruction layers an attachment's message was
 // composed from, by RFC 0001's well-known sources: an instruction file
 // (CLAUDE.md, a nested one included) agentsmd, memory Claude Code keeps
 // between sessions agentmemory, the skill listing agentskill. A message
-// composed from several layers names none, since instructions_part
-// names one, and is reported.
-func (c *converter) layer(l *claudecode.Line) *agentsession.LayerRef {
+// of one layer names it in the single form; one of several files names
+// each, in the order the message holds them (format 0.18's list); one
+// holding a file of a type Claude Code is not known to write names
+// none, and is reported. Claude Code records no trust of a layer, so
+// the item carries none.
+func (c *converter) layer(l *claudecode.Line) (*agentsession.LayerRef, []agentsession.LayerRef) {
 	var a struct {
 		Type string `json:"type"`
 		Path string `json:"path"`
@@ -732,7 +735,7 @@ func (c *converter) layer(l *claudecode.Line) *agentsession.LayerRef {
 		} `json:"files"`
 	}
 	if json.Unmarshal(attachmentRaw(l.Raw), &a) != nil {
-		return nil
+		return nil, nil
 	}
 	// source is the layer a memory file's type names: the instruction
 	// files Claude Code reads (project, user, local, managed) and its
@@ -748,7 +751,7 @@ func (c *converter) layer(l *claudecode.Line) *agentsession.LayerRef {
 	}
 	switch a.Type {
 	case "skill_listing":
-		return &agentsession.LayerRef{Source: agentsession.LayerAgentSkill}
+		return &agentsession.LayerRef{Source: agentsession.LayerAgentSkill}, nil
 	case "nested_memory":
 		var content struct {
 			Type string `json:"type"`
@@ -756,19 +759,31 @@ func (c *converter) layer(l *claudecode.Line) *agentsession.LayerRef {
 		_ = json.Unmarshal(a.Content, &content)
 		if src := source(content.Type); a.Path != "" && src != "" {
 			c.report.Identity(c.file, l.No, "attachment.path", "the message's instructions_part id")
-			return &agentsession.LayerRef{ID: a.Path, Source: src}
+			return &agentsession.LayerRef{ID: a.Path, Source: src}, nil
 		}
 	case "instructions":
-		switch {
-		case len(a.Files) == 1 && a.Files[0].Path != "" && source(a.Files[0].Type) != "":
+		var layers []agentsession.LayerRef
+		seen := map[string]bool{}
+		for _, f := range a.Files {
+			src := source(f.Type)
+			if f.Path == "" || src == "" || seen[f.Path] {
+				c.addf(agentimport.Lossy, "claudecode/instructions-layers", l,
+					"a message composed from %d instruction files holds one of a type, or a path, that names no layer; instructions_part names none", len(a.Files))
+				return nil, nil
+			}
+			seen[f.Path] = true
+			layers = append(layers, agentsession.LayerRef{ID: f.Path, Source: src})
 			c.report.Identity(c.file, l.No, "attachment.files[].path", "the message's instructions_part id")
-			return &agentsession.LayerRef{ID: a.Files[0].Path, Source: source(a.Files[0].Type)}
-		case len(a.Files) > 1:
-			c.addf(agentimport.Lossy, "claudecode/instructions-layers", l,
-				"a message composed from %d instruction files is sent as one; instructions_part names one layer, so it names none", len(a.Files))
+		}
+		switch len(layers) {
+		case 0:
+		case 1:
+			return &layers[0], nil
+		default:
+			return nil, layers
 		}
 	}
-	return nil
+	return nil, nil
 }
 
 // attachmentRaw is a line's attachment member.

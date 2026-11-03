@@ -91,5 +91,7 @@ sources put their instruction files in the system prompt (pi, Cline,
 the Cline SDK, Hermes), or in a message that also holds the person's
 text (OpenHands' activated knowledge in a user message's extended
 content), which names no single layer; their items carry none. A
-message composed from several layers names none until format 0.18's
-list form.
+message composed from several layers names each, in the order the
+message holds them (format 0.18's list form), and carries in the
+item's `trust` whatever trust the source records of a layer (none of
+the sources records any).
