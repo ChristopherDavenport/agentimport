@@ -1,0 +1,6 @@
+{"timestamp":"2026-10-01T15:00:01.000Z","type":"session_meta","payload":{"id":"01990000-0000-7000-8000-0000000000ea","timestamp":"2026-10-01T15:00:00.000Z","cwd":"/work/demo","originator":"codex_cli_rs","cli_version":"0.160.0","source":"cli","model_provider":"openai","base_instructions":{"text":"You are Codex, a coding agent."}}}
+{"timestamp":"2026-10-01T15:00:02.000Z","type":"turn_context","payload":{"turn_id":"turn-1","cwd":"/work/demo","approval_policy":"on-request","sandbox_policy":{"type":"workspace-write"},"model":"gpt-5-codex","effort":"medium","summary":"auto"}}
+{"timestamp":"2026-10-01T15:00:02.100Z","type":"response_item","payload":{"type":"message","role":"developer","content":[{"type":"input_text","text":"<skills_instructions>\n## Skills\n- docs-style: Write docs.\n</skills_instructions>"}]}}
+{"timestamp":"2026-10-01T15:00:02.200Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"# AGENTS.md instructions for /work/demo\n\n<INSTRUCTIONS>\nUse tabs.\n</INSTRUCTIONS>"}]}}
+{"timestamp":"2026-10-01T15:00:03.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Hello."}]}}
+{"timestamp":"2026-10-01T15:00:04.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Hi."}]}}

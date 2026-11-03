@@ -818,3 +818,27 @@ func TestSkillRead(t *testing.T) {
 		t.Errorf("record %s", recs[0].Data)
 	}
 }
+
+// TestInstructionLayers: the messages Codex composes from the AGENTS.md
+// instructions and from the skills catalogue name their layer in
+// instructions_part; a person's message names none.
+func TestInstructionLayers(t *testing.T) {
+	res := convertFixture(t, fixtures(t)["layers"], Options{})
+	var got []string
+	for _, e := range res.Sessions[0].Entries() {
+		if it, ok := e.(*agentsession.ItemEntry); ok {
+			if _, ok := it.Item.(*openresponses.Message); !ok {
+				continue
+			}
+			if p := it.InstructionsPart; p != nil {
+				got = append(got, p.Source+" "+p.ID)
+			} else {
+				got = append(got, "-")
+			}
+		}
+	}
+	want := []string{"agentskill ", "agentsmd /work/demo", "-", "-"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("instructions_part %q, want %q", got, want)
+	}
+}

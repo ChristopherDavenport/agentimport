@@ -94,7 +94,7 @@ rollouts' session meta lines instead (see Sub-agents and forks).
 | `forked_from_id` | a `fork_of` link, the session's first entry |
 | a `spawn_agent` call's output, or the record naming the thread it started | a `peer` link to the thread's session after the output; the thread's rollout converts into that session, after this one (see below) |
 | `response_item` that is model output (assistant message, reasoning, calls, compaction items) | `item` entries tied to a `response` entry written after them |
-| `response_item` that is input (user, developer messages, outputs, harness-written assistant messages) | `item` entries; after a user message, an `agentskill:read` record per `<skill>` part ([Skill reads](README.md#skill-reads)) |
+| `response_item` that is input (user, developer messages, outputs, harness-written assistant messages) | `item` entries; a message Codex composed from the AGENTS.md instructions (`# AGENTS.md instructions for <dir>`) names `instructions_part` `{id: <dir>, source: agentsmd}`, the directory Codex names, since it may join several files from the repository root down; the skills catalogue (`<skills_instructions>`) `{source: agentskill}`; after a user message, an `agentskill:read` record per `<skill>` part ([Skill reads](README.md#skill-reads)) |
 | a type openresponses types (`message`, `function_call`, `function_call_output`, `reasoning`, `compaction`) | that item; members it has no place for in `codex:item` |
 | `custom_tool_call` | a `function_call`: `call_id`, `name`, and the free-form input as the arguments `{"input": "<text>"}` (the item's own arguments when it records them); the entry carries `codex:tool_kind: "custom"`, and a `ctc_` item id as `codex:item_id`, since a function call's id is an `fc_` id |
 | `custom_tool_call_output` | a `function_call_output` for that call, `codex:tool_kind: "custom"` |
@@ -328,6 +328,7 @@ harvest the values from the original and check its output for them
 | `session_meta.cwd` | the header's `cwd` and the first `env` | the user's home directory, through the project path |
 | `session_meta.git.repository_url` | the vcs member `codex:repository_url` | the repository's owner |
 | `session_meta.originator` | the header's `codex:session_meta` | the client |
+| `AGENTS.md instructions directory` | an AGENTS.md message's `instructions_part` `id` | the home directory, through the project path |
 
 The report lists the session's ID and working directory (`agentimport/identity`); the other members are carried as listed and not yet counted.
 

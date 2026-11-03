@@ -155,6 +155,7 @@ func (c *converter) item(l *codex.Line) error {
 		c.rawReasoning = true
 	}
 	e := agentsession.NewItemEntry(item)
+	e.InstructionsPart = c.layer(item, l)
 	if !output && it.Type == codex.ItemMessage && it.Role == "assistant" {
 		if err := c.b.Member(e, "input", true); err != nil {
 			return err
@@ -1256,6 +1257,41 @@ func (c *converter) skillReads(item openresponses.Item, e *agentsession.ItemEntr
 		if err := c.emit(rec, l); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// agentsMDPrefix opens the user message Codex composes from the
+// project's AGENTS.md files (UserInstructions), naming the directory
+// they are for.
+const agentsMDPrefix = "# AGENTS.md instructions for "
+
+// layer names the instruction layer a message Codex composed from one
+// was sent as, by RFC 0001's well-known sources: the AGENTS.md
+// instructions under agentsmd, their id the directory Codex names, and
+// the skills catalogue (<skills_instructions>) under agentskill. A
+// message holding anything else names none.
+func (c *converter) layer(item openresponses.Item, l *codex.Line) *agentsession.LayerRef {
+	m, ok := item.(*openresponses.Message)
+	if !ok || len(m.Content) != 1 {
+		return nil
+	}
+	t, ok := m.Content[0].(*openresponses.InputText)
+	if !ok {
+		return nil
+	}
+	text := strings.TrimLeft(t.Text, " \t\n\r")
+	switch {
+	case m.Role == openresponses.RoleUser && strings.HasPrefix(text, agentsMDPrefix) && matchesMarked(agentsMDPrefix, "</INSTRUCTIONS>", text):
+		dir, _, _ := strings.Cut(strings.TrimPrefix(text, agentsMDPrefix), "\n")
+		dir = strings.TrimSpace(dir)
+		if dir == "" {
+			return nil
+		}
+		c.report.Identity(c.file, l.No, "AGENTS.md instructions directory", "the message's instructions_part id")
+		return &agentsession.LayerRef{ID: dir, Source: agentsession.LayerAgentsMD}
+	case m.Role == openresponses.RoleDeveloper && matchesMarked("<skills_instructions>", "</skills_instructions>", text):
+		return &agentsession.LayerRef{Source: agentsession.LayerAgentSkill}
 	}
 	return nil
 }

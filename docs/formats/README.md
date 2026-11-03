@@ -78,3 +78,18 @@ Sources that record skill reads: Claude Code (a `Skill` call and the
 hidden message that carries the instructions), OpenCode 2 (a user
 row's `skills`), Codex (a `<skill>` part) and OpenHands
 (`activated_skills`).
+
+## Instruction layers sent as messages
+
+An item a harness composed from an instruction layer and sent as a
+message names the layer in `instructions_part` with RFC 0001's
+well-known `source` (`agentsmd`, `agentskill`, `agentmemory`). Claude
+Code (`nested_memory`, one-file `instructions` and `skill_listing`
+attachments) and Codex (the AGENTS.md instructions message and the
+skills catalogue) send layers as messages of their own. The other
+sources put their instruction files in the system prompt (pi, Cline,
+the Cline SDK, Hermes), or in a message that also holds the person's
+text (OpenHands' activated knowledge in a user message's extended
+content), which names no single layer; their items carry none. A
+message composed from several layers names none until format 0.18's
+list form.

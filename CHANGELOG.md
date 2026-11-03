@@ -28,6 +28,8 @@ versions may break the API.
   file under `agentsmd`, or `agentmemory` for Claude Code's memory, and
   the skill listing is `agentskill`. A message composed from several
   files names none and is reported (`claudecode/instructions-layers`).
+  Codex's AGENTS.md instructions message names `agentsmd` with the
+  directory Codex names, and its skills catalogue `agentskill`.
 
 - Added: skill reads recorded as agentskill records them, a `custom`
   entry `agentskill:read` (`agentimport.SkillReadNS`,
