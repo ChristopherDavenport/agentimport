@@ -76,7 +76,7 @@ func (c *converter) response(r *claudecode.Response, tail string, st *pathState)
 			}
 			_ = json.Unmarshal(call.Use.Input, &in)
 			out, _ := e.Item.(*openresponses.FunctionCallOutput)
-			ds, err := agentimport.DerivedEntries(callID, in.Command, out.Output.String(), call.Result.CWD)
+			ds, err := agentimport.DerivedEntries(callID, in.Command, out.Output.String(), c.b.EnvAt(tail), call.Result.CWD)
 			if err != nil {
 				return "", err
 			}

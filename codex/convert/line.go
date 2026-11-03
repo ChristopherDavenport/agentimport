@@ -187,7 +187,7 @@ func (c *converter) item(l *codex.Line) error {
 		return err
 	}
 	if fo, ok := item.(*openresponses.FunctionCallOutput); ok && c.opts.Derive && shellTools[c.toolNames[fo.CallID]] {
-		ds, err := agentimport.DerivedEntries(fo.CallID, agentimport.ShellCommand(c.toolArgs[fo.CallID]), fo.Output.String(), c.st.cwd)
+		ds, err := agentimport.DerivedEntries(fo.CallID, agentimport.ShellCommand(c.toolArgs[fo.CallID]), fo.Output.String(), c.st.env, c.st.cwd)
 		if err != nil {
 			return err
 		}
@@ -195,6 +195,9 @@ func (c *converter) item(l *codex.Line) error {
 			d.Entry.Base().Timestamp = e.Timestamp
 			if err := c.emit(d.Entry, l); err != nil {
 				return err
+			}
+			if env, ok := d.Entry.(*agentsession.EnvEntry); ok {
+				c.st.env = env
 			}
 			c.addf(agentimport.Kept, d.Code, l, "what the shell call did, as its output says, is a derived entry carrying agentimport:derived and its call_id")
 		}
@@ -949,6 +952,7 @@ func (c *converter) turnContext(l *codex.Line) error {
 	if cwdMoved {
 		c.st.cwd = tc.CWD
 		env := agentsession.NewEnvEntry(tc.CWD)
+		c.st.env = env
 		// An env entry is a whole snapshot, so the git state still in
 		// force is repeated. Codex records it once, for the session's
 		// directory: inside it the same repository is a guess a nested

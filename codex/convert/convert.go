@@ -355,6 +355,8 @@ type state struct {
 	effort  string
 	summary string
 	cwd     string
+	// env is the env entry in force, which a derived one repeats.
+	env *agentsession.EnvEntry
 	// turnContext is the last turn context's members the conversion
 	// keeps in codex:turn_context, to tell a change from a repeat.
 	turnContext string
@@ -674,7 +676,7 @@ func (c *converter) start() error {
 		if err := c.appendNow(env, c.meta); err != nil {
 			return err
 		}
-		c.st.cwd = m.CWD
+		c.st.cwd, c.st.env = m.CWD, env
 	}
 	return nil
 }

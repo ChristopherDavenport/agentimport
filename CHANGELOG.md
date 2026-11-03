@@ -9,8 +9,9 @@ versions may break the API.
 
 - Added: derivation, opt-in (`-derive`, `Options.Derive` for every
   source; `Builder.DeriveAfter`). After a shell call whose output prints
-  the commit it made, an `env` entry repeats the working directory with
-  the revision git printed (`agentimport/commit-revision`). A derived entry carries `agentimport:derived`
+  the commit it made, an `env` entry repeats the one in force, its
+  workspace and `vcs` members included, with the revision git printed
+  and no `dirty` (`agentimport/commit-revision`). A derived entry carries `agentimport:derived`
   (`agentimport.DerivedMember`) naming its rule and the call it read.
   The first rule writes what a shell call published, the refs a `git
   push` reports and the pull request `gh pr create` prints, as an

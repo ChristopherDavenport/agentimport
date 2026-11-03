@@ -123,10 +123,8 @@ type Builder struct {
 	// rules read.
 	Derive     bool
 	ShellTools map[string]bool
-	// calls holds each function call appended, by call_id, and cwd the
-	// working directory the last env entry appended named.
+	// calls holds each function call appended, by call_id.
 	calls map[string]*openresponses.FunctionCall
-	cwd   string
 }
 
 // NewBuilder starts a session with header h.
@@ -186,16 +184,13 @@ func (b *Builder) Member(e agentsession.Entry, name string, v any) error {
 // format would fold into it, is moved a nanosecond later and the move
 // reported.
 func (b *Builder) Append(parent string, e agentsession.Entry) (string, error) {
-	switch v := e.(type) {
-	case *agentsession.ItemEntry:
+	if v, ok := e.(*agentsession.ItemEntry); ok {
 		if fc, ok := v.Item.(*openresponses.FunctionCall); ok {
 			if b.calls == nil {
 				b.calls = map[string]*openresponses.FunctionCall{}
 			}
 			b.calls[fc.CallID] = fc
 		}
-	case *agentsession.EnvEntry:
-		b.cwd = v.CWD
 	}
 	base := e.Base()
 	if parent == "" {
@@ -385,11 +380,7 @@ func (b *Builder) DeriveAfter(id string, e agentsession.Entry) (string, error) {
 	if fc == nil || !b.ShellTools[fc.Name] {
 		return id, nil
 	}
-	cwd := b.cwd
-	if cwd == "" {
-		cwd = b.S.Header().CWD
-	}
-	ds, err := DerivedEntries(out.CallID, ShellCommand(fc.Arguments), out.Output.String(), cwd)
+	ds, err := DerivedEntries(out.CallID, ShellCommand(fc.Arguments), out.Output.String(), b.EnvAt(id), b.S.Header().CWD)
 	if err != nil {
 		return "", err
 	}
@@ -401,4 +392,20 @@ func (b *Builder) DeriveAfter(id string, e agentsession.Entry) (string, error) {
 		b.Report.Addf(Kept, d.Code, b.File, 0, "what the shell call %s did, as its output says, is a derived entry carrying agentimport:derived", d.Code[len("agentimport/"):])
 	}
 	return id, nil
+}
+
+// EnvAt is the env entry in force at the entry id: the last on the path
+// to it, or nil when none is.
+func (b *Builder) EnvAt(id string) *agentsession.EnvEntry {
+	for n := 0; id != "" && n < 1<<20; n++ {
+		e, ok := b.S.Entry(id)
+		if !ok {
+			return nil
+		}
+		if env, ok := e.(*agentsession.EnvEntry); ok {
+			return env
+		}
+		id = e.Base().Parent
+	}
+	return nil
 }

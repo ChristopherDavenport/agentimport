@@ -3,6 +3,8 @@ package agentimport
 import (
 	"reflect"
 	"testing"
+
+	"github.com/ChristopherDavenport/agentsession"
 )
 
 func TestPublishedRefs(t *testing.T) {
@@ -50,5 +52,29 @@ func TestCommitRevision(t *testing.T) {
 	}
 	if got := CommitRevision("git commit -m first", "[main (root-commit) 0a1b2c3d] first"); got != "0a1b2c3d" {
 		t.Errorf("a root commit: %q", got)
+	}
+}
+
+// TestRevisionEnv: the env entry after a commit repeats the one in
+// force, an env entry being a whole snapshot: its working directory,
+// workspace and vcs members, with the commit's revision and no dirty.
+func TestRevisionEnv(t *testing.T) {
+	base := agentsession.NewEnvEntry("/work/demo")
+	base.Workspace = &agentsession.Workspace{Kind: "local"}
+	base.VCS = &agentsession.VCS{System: "git", Revision: "0000000", Dirty: true}
+	if err := base.VCS.SetMember("codex:branch", "main"); err != nil {
+		t.Fatal(err)
+	}
+	ds, err := DerivedEntries("call_1", "git commit -m wip", "[main abc1234] wip", base, "/elsewhere")
+	if err != nil || len(ds) != 1 {
+		t.Fatalf("%v, %v", ds, err)
+	}
+	env := ds[0].Entry.(*agentsession.EnvEntry)
+	if env.CWD != "/work/demo" || env.Workspace == nil || env.Workspace.Kind != "local" || env.VCS == nil ||
+		env.VCS.Revision != "abc1234" || env.VCS.Dirty || string(env.VCS.Unknown["codex:branch"]) != `"main"` {
+		t.Errorf("env %+v, vcs %+v", env, env.VCS)
+	}
+	if base.VCS.Revision != "0000000" || !base.VCS.Dirty {
+		t.Error("the env in force was changed")
 	}
 }

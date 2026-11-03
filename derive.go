@@ -2,6 +2,7 @@ package agentimport
 
 import (
 	"encoding/json"
+	"maps"
 	"regexp"
 	"strings"
 
@@ -178,6 +179,35 @@ func CommitRevision(command, output string) string {
 	return ""
 }
 
+// RevisionEnv is the env entry after a commit: an env entry is a whole
+// snapshot (RFC 0001), so it repeats the one in force, base, its working
+// directory, workspace, tools and vcs members (a branch, the git members
+// a source keeps) among it, with the commit's revision. dirty is unknown
+// after a commit and is left out, and so are the file hashes, which say
+// what the tree held before it. With no env in force it holds cwd and a
+// git vcs alone.
+func RevisionEnv(base *agentsession.EnvEntry, cwd, rev string) *agentsession.EnvEntry {
+	env := agentsession.NewEnvEntry(cwd)
+	if base != nil {
+		env.CWD = base.CWD
+		if base.Workspace != nil {
+			w := *base.Workspace
+			env.Workspace = &w
+		}
+		if len(base.Tools) > 0 {
+			env.Tools = maps.Clone(base.Tools)
+		}
+	}
+	env.VCS = &agentsession.VCS{System: "git"}
+	if base != nil && base.VCS != nil {
+		v := *base.VCS
+		v.Unknown = maps.Clone(base.VCS.Unknown)
+		env.VCS = &v
+	}
+	env.VCS.Revision, env.VCS.Dirty = rev, false
+	return env
+}
+
 // Derived is one entry a rule derived, and the code it is reported under.
 type Derived struct {
 	Entry agentsession.Entry
@@ -190,11 +220,10 @@ type Derived struct {
 // entry is a whole snapshot, so it repeats cwd; vcs.revision may be the
 // abbreviation git printed), then the record of what the call published.
 // Each carries agentimport:derived naming its rule and the call.
-func DerivedEntries(callID, command, output, cwd string) ([]Derived, error) {
+func DerivedEntries(callID, command, output string, base *agentsession.EnvEntry, cwd string) ([]Derived, error) {
 	var out []Derived
 	if rev := CommitRevision(command, output); rev != "" {
-		env := agentsession.NewEnvEntry(cwd)
-		env.VCS = &agentsession.VCS{System: "git", Revision: rev}
+		env := RevisionEnv(base, cwd, rev)
 		mark, err := json.Marshal(Derivation{Rule: "commit-revision", CallID: callID})
 		if err != nil {
 			return nil, err
