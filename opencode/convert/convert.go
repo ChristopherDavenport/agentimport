@@ -55,6 +55,12 @@ type Options struct {
 // database is read once, from one copy, removed when the conversion
 // returns.
 func ConvertFile(path string, opts Options) (*agentimport.Result, error) {
+	res, err := convertFileReport(path, opts)
+	res.ScrubIdentity()
+	return res, err
+}
+
+func convertFileReport(path string, opts Options) (*agentimport.Result, error) {
 	st, err := OpenStores(path, opts)
 	if err != nil {
 		return nil, err
@@ -143,6 +149,12 @@ func (st *Stores) notes(r *agentimport.Report) {
 // failure to read a store fails the conversion: a session that cannot
 // be converted is a finding.
 func Convert(opts Options, stores ...opencode.Store) (*agentimport.Result, error) {
+	res, err := convertReport(opts, stores...)
+	res.ScrubIdentity()
+	return res, err
+}
+
+func convertReport(opts Options, stores ...opencode.Store) (*agentimport.Result, error) {
 	if len(stores) == 0 {
 		return nil, errors.New("opencode: no store")
 	}

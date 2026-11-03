@@ -1,7 +1,7 @@
 hermes: 10 rows: mapped 10 kept 0 dropped 0 malformed 0
   dropped  hermes/system-prompt                              2  the session row holds no system prompt; the settings carry the model alone
   dropped  hermes/tools                                      2  Hermes does not store the session's tool definitions; the settings carry no tools
-  lossy    hermes/subagent-peer                              1  the call ran sub-agent session 20261006_050010_ff0015 in the background: a peer, linked after the call's output, which is Hermes' handle of the run; tied to the call by when it started and the goal it was sent, a heuristic, as Hermes records no tie
+  lossy    hermes/subagent-peer                              1  the call ran sub-agent session session #2 in the background: a peer, linked after the call's output, which is Hermes' handle of the run; tied to the call by when it started and the goal it was sent, a heuristic, as Hermes records no tie
   kept     agentimport/identity                              4  identity member sessions.id is carried into the header's id, or agentimport:source's native_id
              sessions.cwd                                    2
              sessions.id                                     2

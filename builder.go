@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"runtime/debug"
+	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ChristopherDavenport/agentsession"
@@ -272,4 +274,68 @@ func Finish(s *agentsession.Session) (*agentsession.Session, error) {
 func Verify(s *agentsession.Session) error {
 	_, err := Finish(s)
 	return err
+}
+
+// ScrubIdentity takes out of the result's report every ID of a session
+// the conversion made, and every native ID and parent session its
+// headers name, from each finding's file and detail, naming each session
+// by its place among the result's (session #1 for the first) and a
+// parent the result does not hold as "the parent session". A report
+// counts identity members by path and never holds their values (RFC
+// 0001, Conformance): a native session ID reaches a finding through a
+// file named for it, or a detail naming a child or a parent.
+func (res *Result) ScrubIdentity() {
+	if res == nil || res.Report == nil {
+		return
+	}
+	names := map[string]string{}
+	for i, s := range res.Sessions {
+		h := s.Header()
+		place := fmt.Sprintf("session #%d", i+1)
+		names[h.ID] = place
+		var src Source
+		if json.Unmarshal(h.Extra[SourceMember], &src) == nil && src.NativeID != "" {
+			if _, ok := names[src.NativeID]; !ok {
+				names[src.NativeID] = place
+			}
+		}
+	}
+	for _, s := range res.Sessions {
+		if p := s.Header().ParentSession; p != "" {
+			if _, ok := names[p]; !ok {
+				names[p] = "the parent session"
+			}
+		}
+	}
+	// A source may name a session by its ID without the dashes the
+	// header's has (OpenHands' directories): that form too.
+	for v, name := range names {
+		if bare := strings.ReplaceAll(v, "-", ""); bare != v {
+			if _, ok := names[bare]; !ok {
+				names[bare] = name
+			}
+		}
+	}
+	values := make([]string, 0, len(names))
+	for v := range names {
+		// A value this short could stand in other words; no source
+		// writes a session ID so short.
+		if len(v) >= 6 {
+			values = append(values, v)
+		}
+	}
+	// The longest first, so an ID that holds another is replaced whole.
+	slices.SortFunc(values, func(a, b string) int { return len(b) - len(a) })
+	scrub := func(s string) string {
+		for _, v := range values {
+			if strings.Contains(s, v) {
+				s = strings.ReplaceAll(s, v, names[v])
+			}
+		}
+		return s
+	}
+	for i := range res.Report.Findings {
+		f := &res.Report.Findings[i]
+		f.File, f.Detail = scrub(f.File), scrub(f.Detail)
+	}
 }

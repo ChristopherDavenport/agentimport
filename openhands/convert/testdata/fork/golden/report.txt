@@ -1,5 +1,5 @@
 openhands: 7 files: mapped 6 kept 1 dropped 0 malformed 0
-  lossy    openhands/fork-copied                             1  the conversation is a fork of 0000000d-0000-4000-9000-000000000001, named in parent_session; its first 3 events are copies of the source's, converted as this session's own
+  lossy    openhands/fork-copied                             1  the conversation is a fork of the parent session, named in parent_session; its first 3 events are copies of the source's, converted as this session's own
   lossy    openhands/model-from-state                        1  the model is the one base_state names, as last saved; a later switch of model is not recorded per event (at events:1)
   lossy    openhands/no-version                              1  OpenHands records no version of itself or of its format; the harness names none, and shapes are told apart by structure
   lossy    openhands/timestamp-zone                          1  OpenHands writes local time with no zone; the timestamps are read in UTC

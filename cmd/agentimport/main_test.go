@@ -985,3 +985,49 @@ func TestIdentityEverySource(t *testing.T) {
 		}
 	}
 }
+
+// TestIdentityValuesEverySource converts every fixture of every source
+// and holds each report to naming no session by its ID: no header ID,
+// native ID or parent session of any session the conversion made
+// appears in a finding's file or detail, which name files and sessions
+// by place.
+func TestIdentityValuesEverySource(t *testing.T) {
+	ins, _, err := collect(fixtureRoots, "auto")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var skip []skipped
+	newRunner(false, &skip).each(ins, func(o outcome) {
+		if o.err != nil || o.res == nil {
+			return
+		}
+		values := map[string]bool{}
+		for _, s := range o.res.Sessions {
+			h := s.Header()
+			values[h.ID], values[h.ParentSession] = true, true
+			var src agentimport.Source
+			if json.Unmarshal(h.Extra[agentimport.SourceMember], &src) == nil {
+				values[src.NativeID] = true
+			}
+			// OpenHands names a conversation's directory by its ID
+			// without dashes.
+			values[strings.ReplaceAll(h.ID, "-", "")] = true
+		}
+		raw, err := json.Marshal(o.res.Report)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var text bytes.Buffer
+		if err := o.res.Report.WriteText(&text); err != nil {
+			t.Fatal(err)
+		}
+		for v := range values {
+			if len(v) < 6 {
+				continue
+			}
+			if strings.Contains(string(raw), v) || strings.Contains(text.String(), v) {
+				t.Errorf("%s (%s): the report names session %s", o.in.path, o.in.source.name, v)
+			}
+		}
+	})
+}

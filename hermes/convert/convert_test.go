@@ -312,3 +312,22 @@ func short(s string) string {
 	}
 	return s
 }
+
+// TestNoSessionIDsInReports: no report names a session by its ID, its
+// own or a parent's: findings name sessions by place.
+func TestNoSessionIDsInReports(t *testing.T) {
+	for _, name := range fixtures(t) {
+		res := convertFixture(t, name, Options{})
+		var text bytes.Buffer
+		if err := res.Report.WriteText(&text); err != nil {
+			t.Fatal(err)
+		}
+		for _, s := range res.Sessions {
+			for _, v := range []string{s.ID(), s.Header().ParentSession} {
+				if len(v) >= 6 && strings.Contains(text.String(), v) {
+					t.Errorf("%s: the report names session %s", name, v)
+				}
+			}
+		}
+	}
+}

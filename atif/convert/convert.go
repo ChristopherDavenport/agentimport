@@ -83,6 +83,12 @@ func (c *Converted) add(paths []string) {
 // ConvertFile reads the document at path and converts it, with the
 // continuations and sub-agent files it names that its directory holds.
 func ConvertFile(path string, opts Options) (*agentimport.Result, error) {
+	res, err := convertFileReport(path, opts)
+	res.ScrubIdentity()
+	return res, err
+}
+
+func convertFileReport(path string, opts Options) (*agentimport.Result, error) {
 	f, err := atif.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -110,6 +116,12 @@ func ConvertFile(path string, opts Options) (*agentimport.Result, error) {
 // conversion: a sub-agent or continuation that cannot be read or
 // converted is a finding.
 func Convert(f *atif.File, opts Options) (*agentimport.Result, error) {
+	res, err := convertReport(f, opts)
+	res.ScrubIdentity()
+	return res, err
+}
+
+func convertReport(f *atif.File, opts Options) (*agentimport.Result, error) {
 	return newFamily(opts).run(f, "")
 }
 

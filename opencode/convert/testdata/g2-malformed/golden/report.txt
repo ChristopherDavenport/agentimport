@@ -3,7 +3,7 @@ opencode: 33 records: mapped 17 kept 5 dropped 5 malformed 6
   dropped  opencode/orphan                                   4  a part record that belongs to no message of the session is left out: its message cannot be read
   dropped  opencode/system-prompt                            3  OpenCode builds the system prompt and the tool list for each request and does not store them; the settings carry the model alone
   lossy    opencode/step-unfinished                          1  step 1 of the message has no step-finish part: the call did not finish, and its usage is not recorded
-  lossy    opencode/subagent-unlinked                        1  the session is a child of ses_cyc1, linked to no call (no call of the parent names it); its session names the parent in parent_session alone
+  lossy    opencode/subagent-unlinked                        1  the session is a child of session #2, linked to no call (no call of the parent names it); its session names the parent in parent_session alone
   kept     agentimport/identity                              6  identity member session.id is carried into the header's id, or agentimport:source's native_id
              session.directory                               3
              session.id                                      3

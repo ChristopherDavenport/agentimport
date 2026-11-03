@@ -53,6 +53,12 @@ type Options struct {
 // database is read once, from one copy, removed when the conversion
 // returns.
 func ConvertFile(path string, opts Options) (*agentimport.Result, error) {
+	res, err := convertFileReport(path, opts)
+	res.ScrubIdentity()
+	return res, err
+}
+
+func convertFileReport(path string, opts Options) (*agentimport.Result, error) {
 	db, err := OpenDatabase(path, opts)
 	if err != nil {
 		return nil, err
@@ -88,6 +94,12 @@ func OpenDatabase(path string, opts Options) (hermes.Database, error) {
 // read the store fails the conversion: a session that cannot be
 // converted is a finding.
 func Convert(opts Options, st hermes.Store) (*agentimport.Result, error) {
+	res, err := convertReport(opts, st)
+	res.ScrubIdentity()
+	return res, err
+}
+
+func convertReport(opts Options, st hermes.Store) (*agentimport.Result, error) {
 	if st == nil {
 		return nil, errors.New("hermes: no store")
 	}

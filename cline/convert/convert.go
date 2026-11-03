@@ -94,6 +94,12 @@ func taskReal(path string) string {
 // ConvertFile reads the task whose directory, or a file in it, path
 // names, and converts it with the sub-tasks it delegated to.
 func ConvertFile(path string, opts Options) (*agentimport.Result, error) {
+	res, err := convertFileReport(path, opts)
+	res.ScrubIdentity()
+	return res, err
+}
+
+func convertFileReport(path string, opts Options) (*agentimport.Result, error) {
 	t, err := cline.ReadTask(path)
 	if err != nil {
 		return nil, err
@@ -107,6 +113,12 @@ func ConvertFile(path string, opts Options) (*agentimport.Result, error) {
 // failure fails the conversion: a sub-task that cannot be read or
 // converted is a finding.
 func Convert(t *cline.Task, opts Options) (*agentimport.Result, error) {
+	res, err := convertReport(t, opts)
+	res.ScrubIdentity()
+	return res, err
+}
+
+func convertReport(t *cline.Task, opts Options) (*agentimport.Result, error) {
 	if t == nil {
 		return nil, errors.New("cline: no task")
 	}

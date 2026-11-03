@@ -65,6 +65,12 @@ type Options struct {
 // Its index is read from beside the sessions directory, as
 // clinesdk.IndexPaths names it.
 func ConvertFile(path string, opts Options) (*agentimport.Result, error) {
+	res, err := convertFileReport(path, opts)
+	res.ScrubIdentity()
+	return res, err
+}
+
+func convertFileReport(path string, opts Options) (*agentimport.Result, error) {
 	s, err := clinesdk.ReadSession(path)
 	if err != nil {
 		return nil, err
@@ -124,6 +130,12 @@ func openIndex(dir string, opts Options) (clinesdk.Index, []indexNote) {
 // covers them all. Only the main history's failure fails the
 // conversion: a child that cannot be converted is a finding.
 func Convert(s *clinesdk.Session, opts Options) (*agentimport.Result, error) {
+	res, err := convertReport(s, opts)
+	res.ScrubIdentity()
+	return res, err
+}
+
+func convertReport(s *clinesdk.Session, opts Options) (*agentimport.Result, error) {
 	if s == nil {
 		return nil, errors.New("clinesdk: no session")
 	}

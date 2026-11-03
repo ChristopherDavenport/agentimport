@@ -38,6 +38,12 @@ type Options struct {
 // ConvertFile reads the session whose main transcript is path, with its
 // sub-agents, and converts it.
 func ConvertFile(path string, opts Options) (*agentimport.Result, error) {
+	res, err := convertFileReport(path, opts)
+	res.ScrubIdentity()
+	return res, err
+}
+
+func convertFileReport(path string, opts Options) (*agentimport.Result, error) {
 	s, err := claudecode.Open(path)
 	if err != nil {
 		return nil, err
@@ -49,6 +55,12 @@ func ConvertFile(path string, opts Options) (*agentimport.Result, error) {
 // session of the result, and each sub-agent a session of its own after
 // the session that spawned it.
 func Convert(s *claudecode.Session, opts Options) (*agentimport.Result, error) {
+	res, err := convertReport(s, opts)
+	res.ScrubIdentity()
+	return res, err
+}
+
+func convertReport(s *claudecode.Session, opts Options) (*agentimport.Result, error) {
 	cv := &conversion{opts: opts, report: agentimport.NewReport(Source), session: s}
 	cv.children = map[string][]*claudecode.Agent{}
 	cv.done = map[string]bool{}

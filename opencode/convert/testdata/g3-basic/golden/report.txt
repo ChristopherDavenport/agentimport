@@ -9,7 +9,7 @@ opencode: 27 records: mapped 19 kept 6 dropped 1 malformed 1
   lossy    opencode/compaction                               1  a compaction: OpenCode 2's requests from here start with it, and nothing before it is kept
   lossy    opencode/compaction-incomplete                    1  a failed compaction cuts nothing
   lossy    opencode/permission-rejected                      3  the user declined the call: a reject decision by human, and the output is the error OpenCode 2 sends
-  lossy    opencode/subagent-peer                            1  sub-agent session ses_v2bg outlives the call (the call ran it in the background); it is a peer, linked after the call's output, which is OpenCode's acknowledgement
+  lossy    opencode/subagent-peer                            1  sub-agent session session #3 outlives the call (the call ran it in the background); it is a peer, linked after the call's output, which is OpenCode's acknowledgement
   kept     agentimport/exit-code                             1  the command's exit code is agentimport:exit_code
   kept     agentimport/identity                              6  identity member session.id is carried into the header's id, or agentimport:source's native_id
              session.directory                               3
@@ -22,7 +22,7 @@ opencode: 27 records: mapped 19 kept 6 dropped 1 malformed 1
   kept     opencode/pending-input                            2  input OpenCode 2 queued in session_pending and has not put in the history is not context
   kept     opencode/session-record                           3  the session record's members the header has no place for are in the header's opencode:session member
   kept     opencode/shell-background                         1  a shell command run in the background enters context through its result, not here
-  kept     opencode/subagent                                 1  the call ran sub-agent session ses_v2kid in the foreground and alone; it is a subsession, linked before the call's output
+  kept     opencode/subagent                                 1  the call ran sub-agent session session #2 in the foreground and alone; it is a subsession, linked before the call's output
   kept     opencode/unknown-type                             1  a row of type "future-thing", which this converter does not know, is not context
   kept     opencode/usage-member                             4  the cost and the total OpenCode records with the usage are in opencode:usage
   repaired opencode/malformed                                1  a row that cannot be read is skipped: its data is not JSON

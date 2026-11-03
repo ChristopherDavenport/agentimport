@@ -42,6 +42,12 @@ type Options struct {
 // session's parent is resolved by reading the file it names, when that
 // exists.
 func ConvertFile(path string, opts Options) (*agentimport.Result, error) {
+	res, err := convertFileReport(path, opts)
+	res.ScrubIdentity()
+	return res, err
+}
+
+func convertFileReport(path string, opts Options) (*agentimport.Result, error) {
 	f, err := pi.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -65,6 +71,12 @@ func ConvertFile(path string, opts Options) (*agentimport.Result, error) {
 // Convert converts a session file into one session. The file is
 // migrated to the current version first, as pi migrates it on load.
 func Convert(f *pi.File, opts Options) (*agentimport.Result, error) {
+	res, err := convertReport(f, opts)
+	res.ScrubIdentity()
+	return res, err
+}
+
+func convertReport(f *pi.File, opts Options) (*agentimport.Result, error) {
 	c := &converter{
 		opts:   opts,
 		report: agentimport.NewReport(Source),

@@ -57,7 +57,10 @@ versions may break the API.
   `instructions_part` id or an `agentskill:read` location. A Claude Code
   sub-agent is named in findings by its place (`subagents/agent-#<n>`),
   never its ID. Every other converter reports the native session ID and
-  working directory it carries into the header.
+  working directory it carries into the header. No report of any
+  converter names a session by its ID: findings name a session, and a
+  file named for one, by its place (`session #<n>`, `the parent
+  session`; `Result.ScrubIdentity`).
 
 - **Changed: an ATIF document agentsession's exporter wrote with its
   entries (format 0.17) is rebuilt to the document's own ids

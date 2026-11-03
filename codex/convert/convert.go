@@ -55,6 +55,12 @@ type Options struct {
 // directory (see codex.SessionsRoot). An index that cannot be built, or
 // that left rollouts out, is reported.
 func ConvertFile(path string, opts Options) (*agentimport.Result, error) {
+	res, err := convertFileReport(path, opts)
+	res.ScrubIdentity()
+	return res, err
+}
+
+func convertFileReport(path string, opts Options) (*agentimport.Result, error) {
 	f, err := codex.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -100,6 +106,12 @@ func IndexFindings(x *codex.Index) []agentimport.Finding {
 // cannot be read or converted is a finding, and its own sub-agents are
 // converted still.
 func Convert(f *codex.File, opts Options) (*agentimport.Result, error) {
+	res, err := convertReport(f, opts)
+	res.ScrubIdentity()
+	return res, err
+}
+
+func convertReport(f *codex.File, opts Options) (*agentimport.Result, error) {
 	fam := &family{opts: opts, report: agentimport.NewReport(Source), done: map[string]bool{}}
 	c, s, err := fam.one(f, "", nil, fam.report)
 	if err != nil {
