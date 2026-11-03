@@ -60,7 +60,7 @@ var (
 // that does not say, yields nothing.
 func PublishedRefs(command, output string) []PublishedRef {
 	var out []PublishedRef
-	if strings.Contains(command, "git push") && !strings.Contains(command, "--dry-run") && !strings.Contains(command, " -n ") {
+	if strings.Contains(command, "git push") && !dryRun(command) {
 		remote := ""
 		if m := pushTo.FindStringSubmatch(output); m != nil {
 			remote = m[1]
@@ -128,4 +128,15 @@ func ShellCommand(arguments string) string {
 		return strings.Join(argv, " ")
 	}
 	return a.Cmd
+}
+
+// dryRun reports whether a git push command asks for a dry run, which
+// publishes nothing: --dry-run, or -n as an argument of its own.
+func dryRun(command string) bool {
+	for _, f := range strings.Fields(command) {
+		if f == "--dry-run" || f == "-n" {
+			return true
+		}
+	}
+	return false
 }

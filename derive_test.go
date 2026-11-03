@@ -17,6 +17,7 @@ func TestPublishedRefs(t *testing.T) {
 			{Kind: "tag", Ref: "v1.0.0", Remote: "github.com:acme/demo.git"},
 		}},
 		{"dry run", "git push --dry-run origin feat", push, nil},
+		{"dry run, short and last", "git push origin feat -n", push, nil},
 		{"quiet push says nothing", "git push -q origin feat", "", nil},
 		{"pr", "gh pr create --fill", "Creating pull request for feat into main\n\nhttps://github.com/acme/demo/pull/42\n", []PublishedRef{
 			{Kind: "pull_request", URL: "https://github.com/acme/demo/pull/42"},
