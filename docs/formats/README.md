@@ -59,9 +59,16 @@ did, and `data` the shape of agentskill's `Read`:
 agentskill writes `location`, `bytes` and `sha256` always; an imported
 record leaves out what the log does not say. This module cannot import
 agentskill, so the shape is held here as a contract
-(`agentimport.SkillRead`). The record sits before the serving call's
-output, or after the item that carried the skill when no call served
-it or, as in Claude Code, the instructions follow the call's output.
+(`agentimport.SkillRead`).
+
+Where the record sits: before the serving call's output when that output
+carries what was served, as agentskill's tool returns it; otherwise
+after the item that carried the skill to the model. Claude Code serves
+a skill's instructions in a hidden user message after the `Skill`
+call's output, which says only that the skill launched, so its record
+follows that message and names the call; OpenCode 2 sends a skill's
+text in the user message, with no call, so its record follows the
+message and names none.
 Sources that record skill reads: Claude Code (a `Skill` call and the
 hidden message that carries the instructions) and OpenCode 2 (a user
 row's `skills`).
