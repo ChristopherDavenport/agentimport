@@ -26,6 +26,10 @@ type Derivation struct {
 	CallID string `json:"call_id,omitempty"`
 }
 
+// DeriveRules are the derivation rules a conversion that asks for
+// derivation runs, as agentimport:source's derived names them.
+var DeriveRules = []string{"published-refs"}
+
 // PublishedNS is the namespace of the custom entry that records what a
 // call published: a branch or tag pushed, a pull request opened. What
 // a tool did is not the environment, so it is a record of the call,

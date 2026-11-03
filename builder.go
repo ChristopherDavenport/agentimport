@@ -47,6 +47,10 @@ type Source struct {
 	NativeID string `json:"native_id,omitempty"`
 	// Converter is this module and its version.
 	Converter string `json:"converter"`
+	// Derived names the derivation rules the conversion ran, when it
+	// ran any: entries after a derived one have other ids than a
+	// conversion without derivation gives them.
+	Derived []string `json:"derived,omitempty"`
 }
 
 // Converter names this module at the version the running binary was

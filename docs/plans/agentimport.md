@@ -157,7 +157,10 @@ each source opts in rule by rule. The first rule, published refs
 updated and the URL `gh pr create` prints, and writes an
 `agentimport:published` custom entry after the call's output, carrying
 its `call_id` (Claude Code's `Bash`, Codex's shell tools; the command
-takes `-derive`). A revision a commit prints, written as an `env`
+takes `-derive`). A session derivation ran on says so in its
+header's `agentimport:source`, `derived` naming the rules, since the
+entries after a derived one have other ids than a plain conversion
+gives them. A revision a commit prints, written as an `env`
 entry's `vcs.revision`, is the next rule.
 
 ### Findings

@@ -13,8 +13,11 @@ versions may break the API.
   The first rule writes what a shell call published, the refs a `git
   push` reports and the pull request `gh pr create` prints, as an
   `agentimport:published` custom entry after the call's output with the
-  call's `call_id` (`agentimport/published-refs`). Without `-derive`
-  the output is as before.
+  call's `call_id` (`agentimport/published-refs`); `git push` with
+  `--dry-run` or `-n` publishes nothing. A session derivation ran on
+  names the rules in its header's `agentimport:source` (`derived`),
+  since later entry IDs differ. Without `-derive` the output is as
+  before.
 
 - Added: the leaf label a converter writes when a session resumes at an
   entry that is not its last, an entry no native line maps to, is

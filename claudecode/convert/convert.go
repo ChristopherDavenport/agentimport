@@ -270,6 +270,9 @@ func (cv *conversion) header(tr *claudecode.Transcript, file string, t target) (
 		cv.report.Identity(file, 0, "cwd", "the header's cwd")
 	}
 	src := agentimport.Source{Format: Source}
+	if cv.opts.Derive {
+		src.Derived = agentimport.DeriveRules
+	}
 	if t.agent != nil {
 		src.NativeID = t.agent.ID
 	}

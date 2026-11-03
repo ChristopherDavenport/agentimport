@@ -451,6 +451,9 @@ func (c *converter) header() (agentsession.Header, error) {
 	}
 	h.Harness = &agentsession.Harness{Name: Harness}
 	src := agentimport.Source{Format: Source}
+	if c.opts.Derive {
+		src.Derived = agentimport.DeriveRules
+	}
 	if m != nil {
 		h.Harness.Version = m.CLIVersion
 	}

@@ -612,4 +612,17 @@ func TestPublished(t *testing.T) {
 			}
 		}
 	}
+	// A session derivation wrote to says so, and with which rules, in
+	// its header, since the entries after a derived one have other ids.
+	for _, derive := range []bool{false, true} {
+		var res *agentimport.Result
+		_, res = convertFixture(t, fixtures(t)["published"], Options{Derive: derive})
+		var src agentimport.Source
+		if err := json.Unmarshal(res.Sessions[0].Header().Extra[agentimport.SourceMember], &src); err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.Join(src.Derived, ","); (derive && got != "published-refs") || (!derive && got != "") {
+			t.Errorf("derive %v: agentimport:source derived %q", derive, got)
+		}
+	}
 }

@@ -795,6 +795,18 @@ func TestPublished(t *testing.T) {
 			t.Errorf("derive %v: %d records, want %d", derive, n, want)
 		}
 	}
+	// A session derivation wrote to says so, and with which rules, in
+	// its header, since the entries after a derived one have other ids.
+	for _, derive := range []bool{false, true} {
+		res := convertFixture(t, fixtures(t)["published"], Options{Derive: derive})
+		var src agentimport.Source
+		if err := json.Unmarshal(res.Sessions[0].Header().Extra[agentimport.SourceMember], &src); err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.Join(src.Derived, ","); (derive && got != "published-refs") || (!derive && got != "") {
+			t.Errorf("derive %v: agentimport:source derived %q", derive, got)
+		}
+	}
 }
 
 // TestSkillRead: a <skill> part Codex's skills extension sends in a user
