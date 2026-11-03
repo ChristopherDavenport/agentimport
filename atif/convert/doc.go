@@ -73,6 +73,9 @@ func (fam *family) one(in docInput, tgt target, report *agentimport.Report) ([]*
 	if err != nil {
 		return nil, "", err
 	}
+	if !in.synthetic {
+		c.report.HeaderIdentity("", h, "session_id", "extra.agentsession.cwd")
+	}
 	if recs := c.entryRecords(); c.exporter && !in.synthetic && len(recs) > 0 {
 		why := c.rebuildBlocked()
 		if why == "" {

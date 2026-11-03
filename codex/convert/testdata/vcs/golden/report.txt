@@ -5,6 +5,9 @@ codex: 10 lines: mapped 10 kept 0 dropped 0 malformed 0
   lossy    codex/tools-unrecorded                            1  Codex does not record the tool definitions it sends the model; the session's config has none (at 1)
   lossy    codex/vcs-after-cwd                               1  the working directory moved outside the session's; Codex records no git state for it, so the env entry has no vcs (at 8)
   lossy    codex/vcs-carried                                 1  the working directory moved inside the session's; the session meta's git state is repeated, which a nested repository would make wrong (at 5)
+  kept     agentimport/identity                              2  identity member session_meta.id is carried into the header's id, or agentimport:source's native_id
+             session_meta.cwd                                1
+             session_meta.id                                 1
   kept     agentimport/provenance                            1  the import is recorded in the header member agentimport:source
   kept     codex/git-members                                 1  git members x_upstream are vcs members under codex: (at 1)
   kept     codex/repository-url                              1  the repository URL is the vcs member codex:repository_url (at 1)

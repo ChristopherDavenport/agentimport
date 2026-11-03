@@ -3,6 +3,9 @@ openhands: 8 files: mapped 6 kept 2 dropped 0 malformed 0
   lossy    openhands/no-version                              1  OpenHands records no version of itself or of its format; the harness names none, and shapes are told apart by structure
   lossy    openhands/timestamp-zone                          1  OpenHands writes local time with no zone; the timestamps are read in UTC
   lossy    openhands/tools-unrecorded                        1  2 tools are recorded without the parameter schema the model was sent, as OpenHands records them from 1.7; the config carries their names and descriptions, and the definitions are kept in openhands:event (at events:1)
+  kept     agentimport/identity                              2  identity member id is carried into the header's id, or agentimport:source's native_id
+             id                                              1
+             workspace.working_dir                           1
   kept     agentimport/provenance                            1  the import is recorded in the header member agentimport:source
   kept     openhands/cost-unplaced                           1  per-call costs name no response, so they cannot be placed on one; they are in the header member openhands:stats with the metrics' totals
   kept     openhands/event-members                           1  members tools are kept in openhands:event (at events:1)

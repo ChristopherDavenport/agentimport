@@ -156,6 +156,7 @@ func (fam *family) one(f *codex.File, file string, parent *parentRef, report *ag
 	if err != nil {
 		return nil, nil, err
 	}
+	c.report.HeaderIdentity("", h, "session_meta.id", "session_meta.cwd")
 	fam.done[h.ID] = true
 	c.b = agentimport.NewBuilder(h, Source, c.report)
 	c.b.File = file

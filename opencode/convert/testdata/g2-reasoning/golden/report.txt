@@ -7,6 +7,9 @@ opencode: 40 records: mapped 39 kept 1 dropped 0 malformed 0
   lossy    opencode/reasoning-unverified                     1  reasoning with no provider metadata from provider google, whose AI SDK package OpenCode does not record and this converter cannot tell; it is taken as sent back, which @ai-sdk/anthropic and @ai-sdk/openai would not do
   lossy    opencode/reminder-unrecorded                      1  the session ran the plan agent: OpenCode adds its plan-mode reminders to a request's last user message in memory and does not store them, so those requests are missing them
   lossy    opencode/usage-version                            1  a step's total says its output tokens leave out reasoning, against the rule of the release that created the session, 1.3.10; each step's usage is read by its total where it settles it
+  kept     agentimport/identity                              2  identity member session.id is carried into the header's id, or agentimport:source's native_id
+             session.directory                               1
+             session.id                                      1
   kept     agentimport/provenance                            1  the import is recorded in the header's agentimport:source member
   kept     opencode/hosted-tool                              1  a tool the provider ran, its call and result in the response, is an opencode.hosted_tool item holding the part
   kept     opencode/members                                 25  kept in opencode:message

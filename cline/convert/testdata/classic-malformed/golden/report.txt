@@ -8,6 +8,8 @@ cline: 20 elements and files: mapped 3 kept 6 dropped 2 malformed 9
   lossy    cline/missing-index                               1  the task has no entry in state/taskHistory.json, which older releases kept in VS Code's state database; the working directory is unknown and the deleted range is taken from the UI messages alone
   lossy    cline/mistyped-member                             1  a text block's members text are not of their type; they are kept in cline:block and read as empty (at api_conversation_history.json:4)
   lossy    cline/range-invalid                               1  a deleted range that is not two counts in order is ignored (at ui_messages.json:5)
+  kept     agentimport/identity                              1  identity member task id is carried into the header's id, or agentimport:source's native_id
+             task id                                         1
   kept     agentimport/provenance                            1  the import is recorded in the header member agentimport:source
   kept     cline/anthropic-block                             1  a server_tool_use block is an anthropic.server_tool_use item (at api_conversation_history.json:4)
   kept     cline/content-malformed                           1  a message whose content is neither text nor blocks is a custom entry (at api_conversation_history.json:5)

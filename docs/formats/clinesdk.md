@@ -312,10 +312,11 @@ harvest the values from the original and check its output for them
 
 | Member | Lands in | Names |
 | --- | --- | --- |
-| `session_id` (manifest) | the header's `id` | the native session |
-| `cwd`, `workspace_root` (manifest) | the header's `cwd` and `clinesdk:*` members | the user's home directory, through the project path |
+| `session_id` | the header's `id` (the manifest's) | the native session |
+| `cwd` | the header's `cwd` (the manifest's) | the user's home directory, through the project path |
+| `workspace_root` | `clinesdk:*` members | the same |
 
-The report does not list these members yet; Claude Code's converter is the first to report them (`agentimport/identity`), and the others follow.
+The report lists the session's ID and working directory (`agentimport/identity`); the other members are carried as listed and not yet counted.
 
 ## Extension types
 

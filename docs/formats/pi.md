@@ -232,10 +232,10 @@ harvest the values from the original and check its output for them
 
 | Member | Lands in | Names |
 | --- | --- | --- |
-| `id` (session header) | the header's `id` | the native session |
-| `cwd` (session header) | the header's `cwd` | the user's home directory, through the project path |
+| `session.id` | the header's `id` | the native session |
+| `session.cwd` | the header's `cwd` | the user's home directory, through the project path |
 
-The report does not list these members yet; Claude Code's converter is the first to report them (`agentimport/identity`), and the others follow.
+The report lists the session's ID and working directory (`agentimport/identity`); the other members are carried as listed and not yet counted.
 
 ## Extension types
 

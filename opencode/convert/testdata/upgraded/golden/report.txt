@@ -9,6 +9,9 @@ opencode: 105 records: mapped 93 kept 0 dropped 12 malformed 0
   lossy    opencode/revert-staged                            1  the session stages a revert from this row: it and the 2 rows after it are on a branch the session does not resume, as OpenCode deletes them before its next step
   lossy    opencode/session-id                               4  OpenCode 2 carried on a session it migrated from the V1 tables, which converts under the native ID; this one's ID is derived from it, as SubsessionID(native ID, "opencode2")
   lossy    opencode/state-namespaced                         1  the provider state is under its namespace, anthropic, as OpenCode 2's migration copied it from V1, where OpenCode 2 keeps it bare; it is read either way
+  kept     agentimport/identity                             24  identity member session.id is carried into the header's id, or agentimport:source's native_id
+             session.directory                              12
+             session.id                                     12
   kept     agentimport/provenance                           12  the import is recorded in the header's agentimport:source member
   kept     opencode/fork-usage                               4  the response is a copy, a fork's or a migration's, and its usage, the origin's, is kept in opencode:copied_usage
   kept     opencode/members                                 59  kept in opencode:message

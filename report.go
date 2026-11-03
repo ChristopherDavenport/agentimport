@@ -3,6 +3,7 @@ package agentimport
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/ChristopherDavenport/agentsession"
 	"io"
 	"slices"
 	"strings"
@@ -260,4 +261,14 @@ func (r *Report) MarshalJSON() ([]byte, error) {
 		Lines  int     `json:"lines"`
 		Groups []Group `json:"groups,omitempty"`
 	}{(*report)(r), r.Lines(), r.Groups()})
+}
+
+// HeaderIdentity reports the identity members a converter carried into a
+// session's header: the native session's ID, from idPath, and its
+// working directory, from cwdPath, when the header has one.
+func (r *Report) HeaderIdentity(file string, h agentsession.Header, idPath, cwdPath string) {
+	r.Identity(file, 0, idPath, "the header's id, or "+SourceMember+"'s native_id")
+	if h.CWD != "" && cwdPath != "" {
+		r.Identity(file, 0, cwdPath, "the header's cwd")
+	}
 }

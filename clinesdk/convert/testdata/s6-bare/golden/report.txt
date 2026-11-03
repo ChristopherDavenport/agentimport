@@ -3,4 +3,6 @@ clinesdk: 3 files and elements: mapped 3 kept 0 dropped 0 malformed 0
   lossy    clinesdk/no-stop-reason                           1  Cline records no stop reason; every response is completed
   lossy    clinesdk/no-system-prompt                         1  the history holds no system prompt; the settings carry the model alone
   lossy    clinesdk/version                                  1  the file is a bare array of messages, as Cline wrote before its messages file had a version
+  kept     agentimport/identity                              1  identity member session_id is carried into the header's id, or agentimport:source's native_id
+             session_id                                      1
   kept     agentimport/provenance                            1  the import is recorded in the header member agentimport:source

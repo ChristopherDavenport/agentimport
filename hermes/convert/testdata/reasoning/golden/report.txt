@@ -3,6 +3,9 @@ hermes: 21 rows: mapped 21 kept 0 dropped 0 malformed 0
   dropped  hermes/system-prompt                              1  the session row holds no system prompt; the settings carry the model alone
   dropped  hermes/tools                                      1  Hermes does not store the session's tool definitions; the settings carry no tools
   lossy    hermes/reasoning-text                             3  the reasoning is the row's reasoning_content text, a reasoning item's content, which a chat-completions route replays only into the field its provider reads
+  kept     agentimport/identity                              2  identity member sessions.id is carried into the header's id, or agentimport:source's native_id
+             sessions.cwd                                    1
+             sessions.id                                     1
   kept     agentimport/provenance                            1  the import is recorded in the header's agentimport:source member
   kept     hermes/members                                   11  kept in hermes:columns
   kept     hermes/reasoning-carrier                          1  1 entries of reasoning_details no item holds, such as a provider's native carrier, are kept in the row's columns

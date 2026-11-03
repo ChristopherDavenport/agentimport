@@ -3,6 +3,9 @@ opencode: 32 records: mapped 28 kept 0 dropped 4 malformed 0
   lossy    agentimport/leaf-label                            2  the session resumes at an entry that is not its last; a leaf label, which no native line maps to, names it
   lossy    opencode/revert-staged                            2  the session stages a revert from this message: it and the 1 messages after it are on a branch the session does not resume, as OpenCode deletes them before its next request
   lossy    opencode/step-unfinished                          1  step 1 of the message has no step-finish part: the call did not finish, and its usage is not recorded
+  kept     agentimport/identity                              4  identity member session.id is carried into the header's id, or agentimport:source's native_id
+             session.directory                               2
+             session.id                                      2
   kept     agentimport/provenance                            2  the import is recorded in the header's agentimport:source member
   kept     opencode/members                                 12  kept in opencode:message
   kept     opencode/session-record                           2  the session record's members the header has no place for are in the header's opencode:session member

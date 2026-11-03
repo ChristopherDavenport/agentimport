@@ -5,6 +5,9 @@ opencode: 91 records: mapped 91 kept 0 dropped 0 malformed 0
   lossy    opencode/subagent-peer                            3  sub-agent session ses_kid2 outlives the call (several calls ran it); it is a peer, linked after the call's output, which is OpenCode's acknowledgement
   lossy    opencode/subagent-unlinked                        2  the session is a child of ses_kid1, linked to no call (no call of the parent names it); its session names the parent in parent_session alone
   lossy    opencode/subtask                                  2  a subtask part: OpenCode sends "The following tool was executed by the user" in its place and runs the task tool itself, in the assistant message that follows
+  kept     agentimport/identity                             16  identity member session.id is carried into the header's id, or agentimport:source's native_id
+             session.directory                               8
+             session.id                                      8
   kept     agentimport/provenance                            8  the import is recorded in the header's agentimport:source member
   kept     opencode/fork-usage                               1  the step is a copy an OpenCode 1 fork made, created before the fork, and its usage, the origin's, is kept in opencode:copied_usage
   kept     opencode/members                                 42  kept in opencode:message

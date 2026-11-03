@@ -7,6 +7,9 @@ opencode: 15 records: mapped 15 kept 0 dropped 0 malformed 0
   lossy    opencode/fork-copied                              1  the session is a fork of ses_orig, named in parent_session and by a fork_of link; its first 2 rows are copies of the origin's, converted as its own, their usage kept off the responses
   lossy    opencode/native-checkpoint-skipped                1  the request is to openai/gpt-x, which cannot replay the native checkpoint of anthropic/claude-x at opencode.db:session_message/msg_f7: OpenCode 2 sent the history from the compaction before it instead, which the path does not rebuild
   lossy    opencode/revert-staged                            1  the session stages a revert from this row: it and the 1 rows after it are on a branch the session does not resume, as OpenCode deletes them before its next step
+  kept     agentimport/identity                              4  identity member session.id is carried into the header's id, or agentimport:source's native_id
+             session.directory                               2
+             session.id                                      2
   kept     agentimport/provenance                            2  the import is recorded in the header's agentimport:source member
   kept     opencode/fork-usage                               1  the response is a copy, a fork's or a migration's, and its usage, the origin's, is kept in opencode:copied_usage
   kept     opencode/members                                 14  kept in opencode:row

@@ -3,6 +3,8 @@ atif: 8 roots and steps: mapped 8 kept 0 dropped 0 malformed 0
   lossy    atif/reasoning-text                               1  reasoning_content is a reasoning item's summary text with no encrypted_content, which a provider that signs its reasoning will not take back (steps: 1) (at 2)
   lossy    atif/response-status                              2  ATIF records no response status, so no response has one (responses: 1) (at #sidechain-a1:5, 2)
   lossy    atif/sidechain                                    2  Harbor's Claude Code adapter interleaves sub-agent a1's 2 steps with the main session's by time; they are not the main model's context and are session 18fbba9e-4c46-5dbe-b836-1382876082b9, a subsession of call toolu_2, whose result names the agent (at 4, 6)
+  kept     agentimport/identity                              1  identity member session_id is carried into the header's id, or agentimport:source's native_id
+             session_id                                      1
   kept     agentimport/provenance                            3  the import is recorded in the header member agentimport:source
   kept     agentimport/usage-detail                          1  Responses usage has no cost and no place for the producer's extra counts; they are kept in atif:metrics (at 2)
   kept     atif/extra                                       10  the agent's extra: kept in the header member atif:agent_extra (at 1, 2, 2, 2, #sidechain-a1:4)

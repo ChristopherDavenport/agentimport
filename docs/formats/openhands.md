@@ -373,10 +373,10 @@ harvest the values from the original and check its output for them
 
 | Member | Lands in | Names |
 | --- | --- | --- |
-| the state's `id` | the header's `id` | the native conversation |
+| `id` | the header's `id` (the conversation state's) | the native conversation |
 | `workspace.working_dir` | the header's `cwd`; `openhands:state` | the user's home directory, through the project path |
 
-The report does not list these members yet; Claude Code's converter is the first to report them (`agentimport/identity`), and the others follow.
+The report lists the session's ID and working directory (`agentimport/identity`); the other members are carried as listed and not yet counted.
 
 ## Extension types
 

@@ -203,6 +203,7 @@ func (sc *sconv) run() error {
 	if err != nil {
 		return err
 	}
+	sc.report.HeaderIdentity("", h, "session_id", "cwd")
 	sc.b = agentimport.NewBuilder(h, Source, sc.report)
 	sc.b.File = sc.name()
 	if err := sc.start(); err != nil {

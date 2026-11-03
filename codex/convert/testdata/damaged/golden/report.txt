@@ -5,6 +5,9 @@ codex: 19 lines: mapped 7 kept 8 dropped 1 malformed 3
   lossy    codex/no-model                                    1  no turn context named the model before this response (older rollouts record none); the response has no model (at 10)
   lossy    codex/response-id                                 1  the rollout names no response ids (only the token usage records of newer rollouts do); a response is named codex-line-<n> after its first item's line (at 10)
   lossy    codex/tools-unrecorded                            1  Codex does not record the tool definitions it sends the model; the session's config has none (at 1)
+  kept     agentimport/identity                              2  identity member session_meta.id is carried into the header's id, or agentimport:source's native_id
+             session_meta.cwd                                1
+             session_meta.id                                 1
   kept     agentimport/provenance                            1  the import is recorded in the header member agentimport:source
   kept     codex/custom-tool-call                            1  a Responses custom_tool_call is a function call, marked codex:tool_kind "custom"; its free-form input is the arguments {"input": …} (at 11)
   kept     codex/ghost-snapshot                              1  a ghost snapshot, the git state Codex kept for undo and never sent the model, is a custom entry (at 7)

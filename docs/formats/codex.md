@@ -327,9 +327,9 @@ harvest the values from the original and check its output for them
 | `session_meta.id` | the header's `id` | the native thread |
 | `session_meta.cwd` | the header's `cwd` and the first `env` | the user's home directory, through the project path |
 | `session_meta.git.repository_url` | the vcs member `codex:repository_url` | the repository's owner |
-| `session_meta.originator`, `session_meta.source` | the header's `codex:session_meta` | the client |
+| `session_meta.originator` | the header's `codex:session_meta` | the client |
 
-The report does not list these members yet; Claude Code's converter is the first to report them (`agentimport/identity`), and the others follow.
+The report lists the session's ID and working directory (`agentimport/identity`); the other members are carried as listed and not yet counted.
 
 ## Extension types
 

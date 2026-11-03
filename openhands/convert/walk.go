@@ -239,6 +239,7 @@ func (c *conv) run() error {
 	if err != nil {
 		return err
 	}
+	c.report.HeaderIdentity("", h, "id", "workspace.working_dir")
 	c.b = agentimport.NewBuilder(h, Source, c.report)
 	c.b.File = strings.TrimSuffix(c.prefix, "/")
 	c.files()

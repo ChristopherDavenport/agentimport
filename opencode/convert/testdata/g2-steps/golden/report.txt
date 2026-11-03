@@ -7,6 +7,9 @@ opencode: 39 records: mapped 32 kept 7 dropped 0 malformed 0
   lossy    opencode/file-url                                 1  a file part's URL is not a data URL; the AI SDK sends it by reference for the provider to fetch, and the session carries the reference
   lossy    opencode/permission-text                          2  the call's error is the text OpenCode gives a refused permission; it is a reject decision by human, told by the text alone
   lossy    opencode/user-system                              1  a user message carries system text OpenCode added to the system prompt of its requests, which the session does not hold; it is kept in the message's opencode:message member
+  kept     agentimport/identity                              2  identity member session.id is carried into the header's id, or agentimport:source's native_id
+             session.directory                               1
+             session.id                                      1
   kept     agentimport/provenance                            1  the import is recorded in the header's agentimport:source member
   kept     agentimport/usage-detail                          1  cache writes have no place in Responses usage; they are folded into input tokens, and the count, with the cost, is in opencode:usage
   kept     opencode/empty-text                               1  an empty text part, which the provider is not sent, is no item; it is kept in opencode:parts

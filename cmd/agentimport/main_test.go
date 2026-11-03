@@ -961,3 +961,27 @@ func TestFailed(t *testing.T) {
 		}
 	}
 }
+
+// TestIdentityEverySource: every source's report counts the identity
+// members its converter carries into the header, by path.
+func TestIdentityEverySource(t *testing.T) {
+	code, out, _ := runCmd(t, append([]string{"report", "-json"}, fixtureRoots...)...)
+	if code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	var res struct{ Aggregate map[string]summary }
+	if err := json.Unmarshal([]byte(out), &res); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"claudecode", "pi", "codex", "atif", "cline", "openhands", "opencode", "clinesdk"} {
+		found := false
+		for _, g := range res.Aggregate[name].Groups {
+			if g.Code == agentimport.IdentityCode && len(g.Paths) > 0 {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("%s reports no identity member", name)
+		}
+	}
+}

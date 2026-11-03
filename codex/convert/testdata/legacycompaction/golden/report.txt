@@ -4,6 +4,9 @@ codex: 13 lines: mapped 13 kept 0 dropped 0 malformed 0
   lossy    codex/no-base-instructions                        1  the session meta records no base instructions (older rollouts); Codex rendered the model's default, which is not recorded, so the session has none (at 1)
   lossy    codex/response-id                                 1  the rollout names no response ids (only the token usage records of newer rollouts do); a response is named codex-line-<n> after its first item's line (at 5)
   lossy    codex/tools-unrecorded                            1  Codex does not record the tool definitions it sends the model; the session's config has none (at 1)
+  kept     agentimport/identity                              2  identity member session_meta.id is carried into the header's id, or agentimport:source's native_id
+             session_meta.cwd                                1
+             session_meta.id                                 1
   kept     agentimport/provenance                            1  the import is recorded in the header member agentimport:source
   kept     codex/compaction                                  1  the compaction is a compaction entry after a custom entry holding its record: its window's first item is the summary, 0 items copying the path are pinned, and the 2 after them, new or not pinnable, follow it as hidden entries marked codex:window (at 10)
   kept     codex/item-members                                1  item members content, which the item has no place for and Codex sent beside it, are kept in codex:item (at 7)

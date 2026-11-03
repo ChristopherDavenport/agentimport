@@ -5,6 +5,9 @@ pi: 20 lines: mapped 15 kept 0 dropped 3 malformed 2
   dropped  pi/input-block-members                            1  members of an input block a part has no place for are left out: extra (at 16)
   dropped  pi/invalid-block                                  2  a content block that is not an object (null) is left out (at 16, 16)
   dropped  pi/system-content                                 1  a block of type "image" in a system message is not part of the prompt pi renders (at 9)
+  kept     agentimport/identity                              2  identity member session.id is carried into the header's id, or agentimport:source's native_id
+             session.cwd                                     1
+             session.id                                      1
   kept     agentimport/provenance                            1  the import is recorded in the header member agentimport:source
   kept     agentimport/usage-detail                          4  cache writes are folded into input_tokens; the native usage and its cost are pi:usage (at 4, 8, 12, 20)
   kept     pi/block-members                                  1  members of a text block an item has no place for are pi:block: redacted (at 20)

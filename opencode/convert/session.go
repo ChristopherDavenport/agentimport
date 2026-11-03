@@ -213,6 +213,7 @@ func (sc *sconv) run() error {
 	if err != nil {
 		return err
 	}
+	sc.report.HeaderIdentity("", h, "session.id", "session.directory")
 	sc.b = agentimport.NewBuilder(h, Source, sc.report)
 	sc.kids = sc.findKids()
 	if err := sc.start(); err != nil {

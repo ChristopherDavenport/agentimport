@@ -2,6 +2,9 @@ codex: 12 lines: mapped 12 kept 0 dropped 0 malformed 0
   gap      agentimport/vcs-branch                            1  the git branch is the vcs member codex:branch; the format's vcs has no branch (at 1)
   lossy    codex/response-id                                 1  the rollout names no response ids (only the token usage records of newer rollouts do); a response is named codex-line-<n> after its first item's line (at 4)
   lossy    codex/tools-unrecorded                            1  Codex does not record the tool definitions it sends the model; the session's config has none (at 1)
+  kept     agentimport/identity                              2  identity member session_meta.id is carried into the header's id, or agentimport:source's native_id
+             session_meta.cwd                                1
+             session_meta.id                                 1
   kept     agentimport/provenance                            1  the import is recorded in the header member agentimport:source
   kept     codex/compaction                                  1  the compaction is a compaction entry after a custom entry holding its record: its window's first item is the summary, 0 items copying the path are pinned, and the 3 after them, new or not pinnable, follow it as hidden entries marked codex:window (at 9)
   kept     codex/rate-limits                                 3  the rate limits reported with the usage are kept in codex:rate_limits (at 6, 8, 12)

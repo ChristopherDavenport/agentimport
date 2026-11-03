@@ -341,10 +341,10 @@ harvest the values from the original and check its output for them
 
 | Member | Lands in | Names |
 | --- | --- | --- |
-| the task directory's name | the header's `id` | the native task |
-| `ui_messages.json` and `task_metadata.json` records | custom entries and `cline:*` members | the workspace's paths |
+| `task id` | the header's `id`: the task directory's name | the native task |
+| `history item cwd` | the header's `cwd` (the history item's workspace, its `cwdOnTaskInitialization`, or the shadow git work tree) | the user's home directory, through the project path |
 
-The report does not list these members yet; Claude Code's converter is the first to report them (`agentimport/identity`), and the others follow.
+The report lists the session's ID and working directory (`agentimport/identity`); the other members are carried as listed and not yet counted.
 
 ## Extension types
 

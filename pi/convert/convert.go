@@ -85,6 +85,7 @@ func Convert(f *pi.File, opts Options) (*agentimport.Result, error) {
 	if err != nil {
 		return nil, err
 	}
+	c.report.HeaderIdentity("", h, "session.id", "session.cwd")
 	c.b = agentimport.NewBuilder(h, Source, c.report)
 	if err := c.run(); err != nil {
 		return nil, err
