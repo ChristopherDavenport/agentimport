@@ -124,7 +124,7 @@ the parent's response that spawned it.
 | `stop_reason: refusal` | a `refusal` part in the last text message, or a message of its own, with `stop_details.explanation` or "The request was refused (category)." | as `providers/anthropic` does |
 | line between two blocks of a response | its own mapping, after the response's outputs | |
 | synthetic API-error line | `response`, `status: failed`, `error` the code and text | |
-| attachment with rendered text | `item`, `message` in `renderedRole` (user when absent), `visible: false` | payload in `claudecode:attachment`; a queued prompt's second rendering (`renderedInHumanTurn`) in `claudecode:line` |
+| attachment with rendered text | `item`, `message` in `renderedRole` (user when absent), `visible: false`; one composed from one instruction layer names it in `instructions_part`: `nested_memory` and a one-file `instructions` `{id: the file, source: agentsmd}`, or `agentmemory` for an `AutoMem` file, `skill_listing` `{source: agentskill}`; a message of several files names none (`claudecode/instructions-layers`) | payload in `claudecode:attachment`; a queued prompt's second rendering (`renderedInHumanTurn`) in `claudecode:line` |
 | `prompt_snapshot` attachment, `api-request-shape` record | `config` delta: `instructions`, `tools_added`, `tools_removed` against the tools in force on the path | a server tool (a definition with a `type`) is an `anthropic.<type>` tool carrying it, as `providers/anthropic` sends one |
 | `compact_boundary` and its summary | `compaction` under the logical parent: `summary` the summary message, `first_kept` the first preserved line, `config` the settings in force, `tokens_before` | metadata in `claudecode:compact_metadata` |
 | `ai-title`, `custom-title`, `summary` | `info` with `name` | kind in `claudecode:title_kind` |
@@ -218,6 +218,7 @@ the codes marked "kept, or dropped" are dropped instead.
 | `agentimport/tool-error` | lossy | A tool result had `is_error`, which the model was sent; the output's entry is `failed`, and `function_call_output` has no error flag a request carries (Open Responses), so a rebuilt request does not send it. |
 | `agentimport/usage-detail` | kept | A response's usage has members Responses usage lacks; they are in `claudecode:usage`. |
 | `agentimport/vcs-branch` | gap | The git branch is the vcs member `claudecode:branch`; the format's vcs records a revision, not a branch. |
+| `claudecode/instructions-layers` | lossy | An `instructions` attachment composed from several instruction files (CLAUDE.md files and memory) is sent as one message; RFC 0001's `instructions_part` names one layer, so the item names none. |
 | `claudecode/extension-part` | kept | A user or tool-result block with no Open Responses input part (`tool_reference`, a block kept raw) is the extension part `anthropic.<type>` carrying it; see *Extension types*. |
 | `claudecode/agent-meta` | kept, or dropped | A sub-agent's meta file is the header member `claudecode:agent_meta`. |
 | `claudecode/agent-meta-only` | dropped | A sub-agent has a meta file and no transcript: it never wrote a line. |

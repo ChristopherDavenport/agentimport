@@ -7,6 +7,13 @@ versions may break the API.
 
 ## Unreleased
 
+- Added: Claude Code's instruction layers sent as messages carry RFC
+  0001's `instructions_part` (format 0.17) with the well-known `source`:
+  a `nested_memory` or one-file `instructions` attachment names its
+  file under `agentsmd`, or `agentmemory` for Claude Code's memory, and
+  the skill listing is `agentskill`. A message composed from several
+  files names none and is reported (`claudecode/instructions-layers`).
+
 - Added: skill reads recorded as agentskill records them, a `custom`
   entry `agentskill:read` (`agentimport.SkillReadNS`,
   `agentimport.SkillRead`) with the skill's `name`, and when the log

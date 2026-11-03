@@ -283,6 +283,7 @@ func (c *converter) attachment(l *claudecode.Line, tail string, st *pathState) (
 		e := itemEntry(&openresponses.Message{Role: role, Content: openresponses.Contents{&openresponses.InputText{Text: r.Content}}})
 		e.Visible = &hidden
 		if i == 0 {
+			e.InstructionsPart = c.layer(l)
 			if c.opts.Slim {
 				c.addf(agentimport.Dropped, "claudecode/attachment", l, "the %s attachment's payload is left out; its rendering is the message", l.Attachment.Type)
 			} else {
@@ -709,4 +710,63 @@ func attachmentOnly(raw json.RawMessage) json.RawMessage {
 	}
 	out, _ := json.Marshal(map[string]json.RawMessage{"attachment": m["attachment"]})
 	return out
+}
+
+// layer names the instruction layer an attachment's message was
+// composed from, by RFC 0001's well-known sources: an instruction file
+// (CLAUDE.md, a nested one included) agentsmd, memory Claude Code keeps
+// between sessions agentmemory, the skill listing agentskill. A message
+// composed from several layers names none, since instructions_part
+// names one, and is reported.
+func (c *converter) layer(l *claudecode.Line) *agentsession.LayerRef {
+	var a struct {
+		Type string `json:"type"`
+		Path string `json:"path"`
+		// Content is a nested memory's object, and a skill listing's
+		// text.
+		Content json.RawMessage `json:"content"`
+		Files   []struct {
+			Path string `json:"path"`
+			Type string `json:"type"`
+		} `json:"files"`
+	}
+	if json.Unmarshal(attachmentRaw(l.Raw), &a) != nil {
+		return nil
+	}
+	source := func(typ string) string {
+		if typ == "AutoMem" {
+			return agentsession.LayerAgentMemory
+		}
+		return agentsession.LayerAgentsMD
+	}
+	switch a.Type {
+	case "skill_listing":
+		return &agentsession.LayerRef{Source: agentsession.LayerAgentSkill}
+	case "nested_memory":
+		var content struct {
+			Type string `json:"type"`
+		}
+		_ = json.Unmarshal(a.Content, &content)
+		if a.Path != "" {
+			return &agentsession.LayerRef{ID: a.Path, Source: source(content.Type)}
+		}
+	case "instructions":
+		switch {
+		case len(a.Files) == 1 && a.Files[0].Path != "":
+			return &agentsession.LayerRef{ID: a.Files[0].Path, Source: source(a.Files[0].Type)}
+		case len(a.Files) > 1:
+			c.addf(agentimport.Lossy, "claudecode/instructions-layers", l,
+				"a message composed from %d instruction files is sent as one; instructions_part names one layer, so it names none", len(a.Files))
+		}
+	}
+	return nil
+}
+
+// attachmentRaw is a line's attachment member.
+func attachmentRaw(raw json.RawMessage) json.RawMessage {
+	var m map[string]json.RawMessage
+	if json.Unmarshal(raw, &m) != nil {
+		return nil
+	}
+	return m["attachment"]
 }

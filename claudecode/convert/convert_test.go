@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -514,5 +515,31 @@ func TestSkillRead(t *testing.T) {
 	parent, _ := s.Entry(rec.Parent)
 	if it, ok := parent.(*agentsession.ItemEntry); !ok || it.Visible == nil || *it.Visible {
 		t.Errorf("the record follows %T, want the hidden message that carried the skill", parent)
+	}
+}
+
+// TestInstructionLayers converts instruction layers Claude Code sends as
+// messages: each message composed from one layer names it in
+// instructions_part, with the well-known source (an instruction file,
+// memory, the skill catalogue) and the file; one composed from several
+// names none, which is reported.
+func TestInstructionLayers(t *testing.T) {
+	_, res := convertFixture(t, fixtures(t)["layers"], Options{})
+	var got []string
+	for _, e := range res.Sessions[0].Entries() {
+		if it, ok := e.(*agentsession.ItemEntry); ok {
+			if p := it.InstructionsPart; p != nil {
+				got = append(got, p.Source+" "+p.ID)
+			} else {
+				got = append(got, "-")
+			}
+		}
+	}
+	want := []string{"-", "agentmemory /home/u/.claude/projects/demo/memory/MEMORY.md", "agentskill ", "-", "agentsmd /work/demo/pkg/CLAUDE.md", "-"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("instructions_part:\n%q\nwant\n%q", got, want)
+	}
+	if !slices.Contains(res.Report.Codes(), "claudecode/instructions-layers") {
+		t.Errorf("no claudecode/instructions-layers: %v", res.Report.Codes())
 	}
 }
