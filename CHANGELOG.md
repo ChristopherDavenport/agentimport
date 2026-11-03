@@ -7,6 +7,19 @@ versions may break the API.
 
 ## Unreleased
 
+- Added: identity members in the report. A finding of code
+  `agentimport/identity` (`agentimport.IdentityCode`,
+  `Report.Identity`) names, by its path and never its value, a native
+  member carried into the session that identifies a person, an account
+  or organization, a machine or the native session; `Finding.Path`
+  holds the path and a group's `paths` counts each. Every
+  `docs/formats/<source>.md` has an Identity section listing its
+  members, which a test holds the report to. The Claude Code converter
+  reports its own: `sessionId`, `agentId`, `cwd`, a `credential_org`
+  attachment's `organizationUuid`, a `session_context` attachment's
+  `userEmail`, and an `api-request` record's `classifier_context`
+  `user_identity` and `home_dir`.
+
 - **Changed: an ATIF document agentsession's exporter wrote with its
   entries (format 0.17) is rebuilt to the document's own ids
   (breaking: such an import's entry ids, and a redacted session's

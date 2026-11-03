@@ -1,7 +1,8 @@
 // Package doccheck holds the converters to their documents: every
 // finding code a conversion reports must be listed in the source's
-// docs/formats document, and every gap code in docs/incompatibilities.md
-// as well.
+// docs/formats document, every gap code in docs/incompatibilities.md as
+// well, and every identity member a conversion reports in its
+// document's Identity section.
 package doccheck
 
 import (
@@ -9,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/ChristopherDavenport/agentimport"
@@ -29,6 +31,33 @@ func Codes(path string) (map[string]bool, error) {
 		codes[string(m[1])] = true
 	}
 	return codes, nil
+}
+
+// identityRow matches a backquoted member path at the start of a table
+// row.
+var identityRow = regexp.MustCompile("(?m)^\\|\\s*`([^`]+)`")
+
+// IdentityPaths returns the member paths a document's Identity section
+// lists, as the first cell of a row of its table.
+func IdentityPaths(path string) (map[string]bool, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	text := string(data)
+	start := strings.Index(text, "\n## Identity\n")
+	if start < 0 {
+		return map[string]bool{}, nil
+	}
+	section := text[start+1:]
+	if end := strings.Index(section[3:], "\n## "); end >= 0 {
+		section = section[:end+3]
+	}
+	paths := map[string]bool{}
+	for _, m := range identityRow.FindAllStringSubmatch(section, -1) {
+		paths[m[1]] = true
+	}
+	return paths, nil
 }
 
 // Root is the repository root.
@@ -56,7 +85,14 @@ func Check(t testing.TB, source string, r *agentimport.Report) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	identity, err := IdentityPaths(filepath.Join(docs, "formats", source+".md"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, f := range r.Findings {
+		if f.Code == agentimport.IdentityCode && !identity[f.Path] {
+			t.Errorf("identity member %s is not listed in the Identity section of docs/formats/%s.md", f.Path, source)
+		}
 		if !own[f.Code] && !shared[f.Code] {
 			t.Errorf("finding code %s is not documented in docs/formats/%s.md", f.Code, source)
 		}

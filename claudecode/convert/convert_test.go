@@ -399,8 +399,56 @@ func TestSlimUnrendered(t *testing.T) {
 		if n != 1 {
 			t.Errorf("slim %v: %d attachment-unrendered findings, want 1", slim, n)
 		}
-		if slim && res.Report.Tally[agentimport.LineDropped] != 1 {
-			t.Errorf("slim: tally %v; want the attachment's line dropped", res.Report.Tally)
+		// The attachment's line, and the request log's, which Slim
+		// drops too.
+		if slim && res.Report.Tally[agentimport.LineDropped] != 2 {
+			t.Errorf("slim: tally %v; want the attachment's and the request log's lines dropped", res.Report.Tally)
+		}
+	}
+}
+
+// TestIdentity converts a session whose lines name the account's email,
+// its organization, the login name and home directory, and the native
+// session: the report lists each member carried into the session by
+// path and count, and holds none of their values.
+func TestIdentity(t *testing.T) {
+	values := []string{"sam@example.test", "0a000000-0000-4000-8000-00000000a001", "sam-login", "/home/sam", "11111111-1111-4111-8111-0000000000d1"}
+	for _, tc := range []struct {
+		slim bool
+		want map[string]int
+	}{
+		{false, map[string]int{
+			"sessionId": 3, "cwd": 2, "attachment.organizationUuid": 1, "attachment.context.userEmail": 2,
+			"params.safeguards[].classifier_context.user_identity": 1, "params.safeguards[].classifier_context.home_dir": 1,
+		}},
+		// Slim drops the unrendered attachment, the request log and the
+		// attachment's payload; the email stays in the rendered text.
+		{true, map[string]int{"sessionId": 1, "cwd": 1, "attachment.context.userEmail": 1}},
+	} {
+		_, res := convertFixture(t, fixtures(t)["identity"], Options{Slim: tc.slim})
+		got := map[string]int{}
+		for _, g := range res.Report.Groups() {
+			if g.Code == agentimport.IdentityCode {
+				for _, p := range g.Paths {
+					got[p.Path] = p.Count
+				}
+			}
+		}
+		if fmt.Sprint(got) != fmt.Sprint(tc.want) {
+			t.Errorf("slim %v: identity paths %v, want %v", tc.slim, got, tc.want)
+		}
+		raw, err := json.Marshal(res.Report)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var text bytes.Buffer
+		if err := res.Report.WriteText(&text); err != nil {
+			t.Fatal(err)
+		}
+		for _, v := range values {
+			if strings.Contains(string(raw), v) || strings.Contains(text.String(), v) {
+				t.Errorf("slim %v: the report holds the value %q", tc.slim, v)
+			}
 		}
 	}
 }

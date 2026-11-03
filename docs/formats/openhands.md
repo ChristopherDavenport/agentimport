@@ -362,6 +362,22 @@ holds too is written as a custom entry's `copied_usage`, which a reader
 does not count, and when the source cannot be read every such call is,
 reported as a guess. Without `meta.json` a fork is not recognised.
 
+## Identity
+
+The native members this converter carries into the session that
+identify a person, an account or organization, a machine or the native
+session, and where each lands. A report lists them by path and count
+under `agentimport/identity`, never by value, so a redaction can
+harvest the values from the original and check its output for them
+(RFC 0001, Conformance).
+
+| Member | Lands in | Names |
+| --- | --- | --- |
+| the state's `id` | the header's `id` | the native conversation |
+| `workspace.working_dir` | the header's `cwd`; `openhands:state` | the user's home directory, through the project path |
+
+The report does not list these members yet; Claude Code's converter is the first to report them (`agentimport/identity`), and the others follow.
+
 ## Extension types
 
 Open Responses carries types outside its spec as slug-prefixed

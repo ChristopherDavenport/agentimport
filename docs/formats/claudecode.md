@@ -162,6 +162,29 @@ provider does, `input_tokens` is input + cache read + cache creation,
 `output_tokens_details.thinking_tokens`. The cache-write split, TTLs,
 server tool counts, service tier and the rest stay in `claudecode:usage`.
 
+## Identity
+
+The native members this converter carries into the session that
+identify a person, an account or organization, a machine or the native
+session, and where each lands. A report lists them by path and count
+under `agentimport/identity`, never by value, so a redaction can
+harvest the values from the original and check its output for them
+(RFC 0001, Conformance).
+
+| Member | Lands in | Names |
+| --- | --- | --- |
+| `sessionId` | the header's `id`; every custom entry's `data`, which holds the line | the native session |
+| `agentId` | a sub-agent session's header, `agentimport:source`'s `native_id` | the native sub-agent |
+| `cwd` | the header's `cwd`; every custom entry's `data` | the user's home directory, through the project path |
+| `attachment.organizationUuid` | a `credential_org` attachment's custom entry (`claudecode/attachment-unrendered`); left out under Slim | the account's organization |
+| `attachment.context.userEmail` | a `session_context` attachment's `claudecode:attachment`, and the text of the message it rendered, under Slim too | the account's email |
+| `params.safeguards[].classifier_context.user_identity` | an `api-request` record's custom entry (`claudecode/request-log`); left out under Slim | the login name |
+| `params.safeguards[].classifier_context.home_dir` | the same | the home directory |
+
+Paths built from the session ID and the dash-encoded project directory
+(`scratchpadDirectory`, `tool_results_dir`, a task's output file) stand
+in tool inputs and outputs, which the model saw, and are not listed.
+
 ## Extension types
 
 Open Responses carries types outside its spec as slug-prefixed

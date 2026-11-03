@@ -313,6 +313,24 @@ the inputs, at any depth, after the inputs it descends from: when one
 of their results holds its session it is listed as skipped, and when
 none does it converts on its own, so no input is lost.
 
+## Identity
+
+The native members this converter carries into the session that
+identify a person, an account or organization, a machine or the native
+session, and where each lands. A report lists them by path and count
+under `agentimport/identity`, never by value, so a redaction can
+harvest the values from the original and check its output for them
+(RFC 0001, Conformance).
+
+| Member | Lands in | Names |
+| --- | --- | --- |
+| `session_meta.id` | the header's `id` | the native thread |
+| `session_meta.cwd` | the header's `cwd` and the first `env` | the user's home directory, through the project path |
+| `session_meta.git.repository_url` | the vcs member `codex:repository_url` | the repository's owner |
+| `session_meta.originator`, `session_meta.source` | the header's `codex:session_meta` | the client |
+
+The report does not list these members yet; Claude Code's converter is the first to report them (`agentimport/identity`), and the others follow.
+
 ## Extension types
 
 openresponses types the items of the Open Responses specification.

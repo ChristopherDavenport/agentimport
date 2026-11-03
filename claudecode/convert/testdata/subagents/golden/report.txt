@@ -4,6 +4,10 @@ claudecode: 23 lines: mapped 22 kept 1 dropped 0 malformed 0
   lossy    claudecode/agent-unlinked                         1  no call in the transcripts spawned sub-agent ateam-0006; it is a session with parent_session alone
   lossy    claudecode/fork-context                           1  the fork's inherited context, the parent session up to a2, is not in the session; the record is a custom entry (at subagents/agent-a0002.jsonl:1)
   lossy    claudecode/fork-copied-response                   1  response msg_31 is the parent's, copied into the fork; its usage is left off the response (kept in claudecode:usage) so it counts once (at subagents/agent-a0002.jsonl:2)
+  kept     agentimport/identity                             13  identity member sessionId is carried into the header's id (at subagents/agent-a0002.jsonl:1)
+             agentId                                         5
+             cwd                                             6
+             sessionId                                       2
   kept     agentimport/provenance                            6  the import is recorded in the header member agentimport:source
   kept     agentimport/usage-detail                         10  cache writes are folded into input_tokens; the native usage is claudecode:usage (at 2, 4, 6, subagents/agent-a0005.jsonl:2, 8)
   kept     claudecode/agent-meta                             5  the sub-agent's meta file is the header member claudecode:agent_meta

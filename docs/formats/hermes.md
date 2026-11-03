@@ -445,6 +445,23 @@ finding:
   'tool'`, which no call names), is converted after its parent with
   `parent_session` and no link.
 
+## Identity
+
+The native members this converter carries into the session that
+identify a person, an account or organization, a machine or the native
+session, and where each lands. A report lists them by path and count
+under `agentimport/identity`, never by value, so a redaction can
+harvest the values from the original and check its output for them
+(RFC 0001, Conformance).
+
+| Member | Lands in | Names |
+| --- | --- | --- |
+| `sessions.id` | the header's `id` | the native session |
+| `sessions` working directory | the header's `cwd` | the user's home directory, through the project path |
+| `sessions` routing columns, `platform_message_id` | `hermes:session`, `hermes:columns` | the gateway's chat and the platform's message |
+
+The report does not list these members yet; Claude Code's converter is the first to report them (`agentimport/identity`), and the others follow.
+
 ## Extension types
 
 | Type | Where |

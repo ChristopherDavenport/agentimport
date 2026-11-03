@@ -228,6 +228,14 @@ func (cv *conversion) header(tr *claudecode.Transcript, file string, t target) (
 	if h.Harness == nil {
 		h.Harness = &agentsession.Harness{Name: Harness}
 	}
+	if t.agent == nil {
+		cv.report.Identity(file, 0, "sessionId", "the header's id")
+	} else {
+		cv.report.Identity(file, 0, "agentId", "the header's "+agentimport.SourceMember+" native_id")
+	}
+	if h.CWD != "" {
+		cv.report.Identity(file, 0, "cwd", "the header's cwd")
+	}
 	src := agentimport.Source{Format: Source}
 	if t.agent != nil {
 		src.NativeID = t.agent.ID

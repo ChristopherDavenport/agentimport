@@ -301,6 +301,22 @@ child reached twice is converted once.
   session nothing was written in after the copy is the task's alone and
   is not converted.
 
+## Identity
+
+The native members this converter carries into the session that
+identify a person, an account or organization, a machine or the native
+session, and where each lands. A report lists them by path and count
+under `agentimport/identity`, never by value, so a redaction can
+harvest the values from the original and check its output for them
+(RFC 0001, Conformance).
+
+| Member | Lands in | Names |
+| --- | --- | --- |
+| `session_id` (manifest) | the header's `id` | the native session |
+| `cwd`, `workspace_root` (manifest) | the header's `cwd` and `clinesdk:*` members | the user's home directory, through the project path |
+
+The report does not list these members yet; Claude Code's converter is the first to report them (`agentimport/identity`), and the others follow.
+
 ## Extension types
 
 | Type | What it carries |

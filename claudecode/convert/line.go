@@ -239,6 +239,13 @@ func (c *converter) attachment(l *claudecode.Line, tail string, st *pathState) (
 					return "", err
 				}
 				c.addf(agentimport.Kept, "claudecode/attachment", l, "the %s attachment's payload is %s:attachment", l.Attachment.Type, Source)
+				c.identity(&claudecode.Line{Raw: attachmentOnly(l.Raw), No: l.No}, Source+":attachment")
+			}
+			if l.Attachment.Type == "session_context" {
+				var v any
+				if json.Unmarshal(l.Raw, &v) == nil && has(v, []string{"attachment", "context", "userEmail"}) {
+					c.report.Identity(c.file, l.No, "attachment.context.userEmail", "the text of the message it rendered")
+				}
 			}
 			if err := c.lineMembers(e, l, "line"); err != nil {
 				return "", err
@@ -640,4 +647,15 @@ func (c *converter) linkAgents() {
 			}
 		}
 	}
+}
+
+// attachmentOnly is a line's attachment member alone, as a line, for
+// the identity members claudecode:attachment carries.
+func attachmentOnly(raw json.RawMessage) json.RawMessage {
+	var m map[string]json.RawMessage
+	if json.Unmarshal(raw, &m) != nil || m["attachment"] == nil {
+		return nil
+	}
+	out, _ := json.Marshal(map[string]json.RawMessage{"attachment": m["attachment"]})
+	return out
 }

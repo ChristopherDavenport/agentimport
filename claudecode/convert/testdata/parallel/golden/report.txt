@@ -4,6 +4,9 @@ claudecode: 12 lines: mapped 11 kept 0 dropped 1 malformed 0
   dropped  claudecode/last-prompt                            1  the last prompt repeats a user message; only the last record's leaf is used (at 12)
   lossy    agentimport/tool-error                            2  is_error, which the model was sent, is the output's failed; function_call_output has no error flag a request carries (at 8, 10)
   lossy    claudecode/usage-snapshots                        1  the 3 lines of response msg_02 carry 2 different usage snapshots; the last is used (at 5)
+  kept     agentimport/identity                              2  identity member sessionId is carried into the header's id
+             cwd                                             1
+             sessionId                                       1
   kept     agentimport/provenance                            1  the import is recorded in the header member agentimport:source
   kept     agentimport/usage-detail                          4  cache writes are folded into input_tokens; the native usage is claudecode:usage (at 5, 7, 9, 11)
   kept     claudecode/block-members                          4  block members [caller] kept in claudecode:block (at 3, 5, 7, 9)
