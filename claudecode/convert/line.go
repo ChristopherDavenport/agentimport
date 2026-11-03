@@ -2,6 +2,7 @@ package convert
 
 import (
 	"encoding/json"
+	"path"
 	"sort"
 	"strings"
 
@@ -77,6 +78,56 @@ func (c *converter) userLine(l *claudecode.Line, tail string) (string, error) {
 	}
 	c.mark(l, agentimport.LineMapped)
 	c.bind(l, id)
+	if l.IsMeta {
+		if id, err = c.skillRead(l, id); err != nil {
+			return "", err
+		}
+	}
+	return id, nil
+}
+
+// skillBase opens the message Claude Code sends a skill's instructions
+// in, after the Skill call's output.
+const skillBase = "Base directory for this skill: "
+
+// skillRead writes the agentskill:read record of a skill's instructions,
+// which Claude Code sends as a hidden user message after the Skill
+// call's output: after that message, since the call's output is
+// written already, naming the call when the message follows one.
+func (c *converter) skillRead(l *claudecode.Line, tail string) (string, error) {
+	text := l.Message.Content.Text
+	if !l.Message.Content.IsText {
+		for _, b := range l.Message.Content.Blocks {
+			if b.Type == claudecode.BlockText && !b.IsRaw() {
+				text = b.Text
+				break
+			}
+		}
+	}
+	rest, ok := strings.CutPrefix(text, skillBase)
+	if !ok {
+		return tail, nil
+	}
+	dir, _, _ := strings.Cut(rest, "\n")
+	sc, ok := c.skills[l.ParentUUID]
+	var src string
+	if _ = json.Unmarshal(l.Extra["sourceToolUseID"], &src); !ok && src != "" {
+		sc = c.skills[src]
+	}
+	r := agentimport.SkillRead{Name: sc.name, Location: strings.TrimRight(dir, "/") + "/SKILL.md"}
+	if r.Name == "" {
+		r.Name = path.Base(strings.TrimRight(dir, "/"))
+	}
+	r.Served(text)
+	e, err := r.Entry(sc.callID)
+	if err != nil {
+		return "", err
+	}
+	e.Timestamp = l.Time()
+	id, err := c.b.Append(tail, e)
+	if err != nil {
+		return "", err
+	}
 	return id, nil
 }
 

@@ -47,6 +47,14 @@ type converter struct {
 	// copied holds the message IDs of the parent's responses, for a
 	// fork, whose transcript opens with a copy of one.
 	copied map[string]bool
+	// skills maps a Skill call's result line uuid, and its native
+	// tool_use ID, to the call, for the skill's body that follows it.
+	skills map[string]skillCall
+}
+
+// skillCall is a Skill tool call whose output the conversion wrote.
+type skillCall struct {
+	callID, name string
 }
 
 // expected is the envelope a transcript's lines share.

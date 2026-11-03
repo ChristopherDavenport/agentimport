@@ -117,6 +117,7 @@ the parent's response that spawned it.
 | assistant `tool_use` block | `item`, `function_call`, input re-encoded as `arguments` | see arguments below |
 | other assistant blocks | `item`, `anthropic.<type>` carrying `block` | the openresponses Anthropic provider's shape |
 | a response's lines | `response` after its items: `response_id` the message id, `model` the one that answered, `status` from the stop reason, `usage` | native usage in `claudecode:usage`, `requestId` in `claudecode:request_id`, stop reason in `claudecode:stop_reason` |
+| a hidden user message opening `Base directory for this skill:` | the `message` item, then an `agentskill:read` record (`name` the `Skill` call's `skill`, `location` the directory's `SKILL.md`, `bytes` and `sha256` of the message's text, `call_id` the `Skill` call that preceded it), after the message since the call's output comes first; see [Skill reads](README.md#skill-reads) | |
 | `tool_result` | `item`, `function_call_output`, after the response, in call order; `is_error` the entry's `failed` | images as `input_image` data URLs; sidecar in `claudecode:tool_use_result` |
 | refused call (`toolDenialKind` other than `interrupted`, or `permissionDecision.decision: reject`) | `decision` `reject` before the output: `by` `human` (the user), `agent` (the auto-mode classifier) or `policy` (a rule), `reason` the output's text | |
 | approved call (`permissionDecision.decision: accept`) | kept in `claudecode:line` | a `proceed` the RFC asks a writer not to write without a hold or rewritten arguments |

@@ -476,3 +476,43 @@ func TestSlim(t *testing.T) {
 		t.Error("the sidecar drop is not reported")
 	}
 }
+
+// TestSkillRead converts a Skill call whose instructions Claude Code
+// sends as a hidden message after the call's output: the session holds
+// agentskill's read record after that message, naming the call, the
+// skill, its SKILL.md and the digest of the text served.
+func TestSkillRead(t *testing.T) {
+	_, res := convertFixture(t, fixtures(t)["skill"], Options{})
+	s := res.Sessions[0]
+	var rec *agentsession.CustomEntry
+	var callID string
+	for _, e := range s.Entries() {
+		if it, ok := e.(*agentsession.ItemEntry); ok {
+			if fc, ok := it.Item.(*openresponses.FunctionCall); ok && fc.Name == "Skill" {
+				callID = fc.CallID
+			}
+		}
+		if c, ok := e.(*agentsession.CustomEntry); ok && c.NS == agentimport.SkillReadNS {
+			rec = c
+		}
+	}
+	if rec == nil {
+		t.Fatal("no agentskill:read record")
+	}
+	if rec.CallID == "" || rec.CallID != callID {
+		t.Errorf("the record names call %q, want %q", rec.CallID, callID)
+	}
+	text := "Base directory for this skill: /work/demo/.claude/skills/docs-style\n\n# docs-style\n\nWrite short sentences."
+	var want agentimport.SkillRead
+	want.Name, want.Location = "docs-style", "/work/demo/.claude/skills/docs-style/SKILL.md"
+	want.Served(text)
+	var got agentimport.SkillRead
+	if err := json.Unmarshal(rec.Data, &got); err != nil || got.Name != want.Name || got.Location != want.Location ||
+		got.Path != "" || got.Bytes == nil || *got.Bytes != *want.Bytes || got.SHA256 != want.SHA256 {
+		t.Errorf("record %s, want %+v", rec.Data, want)
+	}
+	parent, _ := s.Entry(rec.Parent)
+	if it, ok := parent.(*agentsession.ItemEntry); !ok || it.Visible == nil || *it.Visible {
+		t.Errorf("the record follows %T, want the hidden message that carried the skill", parent)
+	}
+}

@@ -235,11 +235,20 @@ func (w *v2walk) user(r *opencode.Row2, ts time.Time) error {
 	// Each skill's text is sent; the rest of each element, its name
 	// among it, is kept in opencode:skills, an element per skill.
 	var skills []json.RawMessage
+	var reads []agentimport.SkillRead
 	keepSkills := false
 	for _, raw := range d.Skills {
 		t, ok := opencode.SkillText(raw)
 		if ok {
 			content = append(content, &openresponses.InputText{Text: t})
+			var el struct {
+				Name     string `json:"name"`
+				Location string `json:"location"`
+			}
+			_ = json.Unmarshal(raw, &el)
+			r := agentimport.SkillRead{Name: el.Name, Location: el.Location}
+			r.Served(t)
+			reads = append(reads, r)
 		} else {
 			kind := sc.keepKind()
 			sc.addf(kind, "opencode/skill-untexted", r.Unit, "a skill with no text is not sent, as OpenCode sends none; the element is %s", keptOr(kind, "kept in "+Source+":skills"))
@@ -269,7 +278,22 @@ func (w *v2walk) user(r *opencode.Row2, ts time.Time) error {
 			return err
 		}
 	}
-	return w.item(r, e, ts, "text", "skills", "files")
+	if err := w.item(r, e, ts, "text", "skills", "files"); err != nil {
+		return err
+	}
+	// Each skill whose text the message carried is a read, recorded as
+	// agentskill records one, after the message; no call served it.
+	for _, read := range reads {
+		rec, err := read.Entry("")
+		if err != nil {
+			return err
+		}
+		rec.Timestamp = ts
+		if _, err := sc.append(rec); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // keptOr is what a finding of kind says of a value: kept as where says,

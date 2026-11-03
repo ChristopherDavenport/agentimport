@@ -3,6 +3,7 @@ package convert
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -360,7 +361,9 @@ func TestSkills(t *testing.T) {
 			t.Fatal(err)
 		}
 		out := b.String()
-		for _, want := range []string{`"opencode:skills"`, `"name":"docs-style"`, `"x_origin":"global"`, `"name":"no-body"`} {
+		// The skill whose text was sent is named by its agentskill:read
+		// record under Slim too; the rest of the elements go.
+		for _, want := range []string{`"opencode:skills"`, `"x_origin":"global"`, `"name":"no-body"`} {
 			if got := strings.Contains(out, want); got == slim {
 				t.Errorf("slim %v: output holds %s: %v", slim, want, got)
 			}
@@ -391,6 +394,33 @@ func TestSkills(t *testing.T) {
 		}
 		if !strings.Contains(fmt.Sprint(res.Report.Findings), "opencode:skills") && !slim {
 			t.Errorf("the skills member is not reported: %v", res.Report.Findings)
+		}
+	}
+}
+
+// TestSkillReads: each skill whose text a V2 user row sent is recorded
+// as agentskill records a read, after the message, with no call, its
+// name, location and the digest of the text; Slim keeps the records.
+func TestSkillReads(t *testing.T) {
+	for _, slim := range []bool{false, true} {
+		res := convertFixture(t, "g3-skills", Options{Slim: slim})
+		var recs []*agentsession.CustomEntry
+		for _, e := range res.Sessions[0].Entries() {
+			if c, ok := e.(*agentsession.CustomEntry); ok && c.NS == agentimport.SkillReadNS {
+				recs = append(recs, c)
+			}
+		}
+		if len(recs) != 1 {
+			t.Fatalf("slim %v: %d agentskill:read records, want 1", slim, len(recs))
+		}
+		var got agentimport.SkillRead
+		if err := json.Unmarshal(recs[0].Data, &got); err != nil {
+			t.Fatal(err)
+		}
+		var want agentimport.SkillRead
+		want.Served("Write short sentences.")
+		if got.Name != "docs-style" || got.Location != "/work/s/.opencode/skills/docs-style/SKILL.md" || got.SHA256 != want.SHA256 || recs[0].CallID != "" {
+			t.Errorf("slim %v: record %s", slim, recs[0].Data)
 		}
 	}
 }

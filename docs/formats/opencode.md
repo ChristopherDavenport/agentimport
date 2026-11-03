@@ -270,7 +270,11 @@ by `seq`, and `toLLMMessages` renders each:
   attached twice under one mention once), other types not sent
   (`opencode/attachment-mime`). A skill with no text sends nothing
   (`opencode/skill-untexted`); every skill element but its text, its
-  name among it, is kept in `opencode:skills`, one element per skill.
+  name among it, is kept in `opencode:skills`, one element per skill,
+  and each skill whose text was sent is an `agentskill:read` record
+  after the message (`name`, `location`, `bytes` and `sha256` of the
+  text; no `call_id`), under Slim too; see
+  [Skill reads](README.md#skill-reads).
 - `synthetic` and `skill`: user text; `system`: a system message;
   `shell`: user text giving the command and its output, but for a
   background command, whose result comes back later

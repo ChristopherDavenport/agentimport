@@ -70,6 +70,20 @@ func (c *converter) response(r *claudecode.Response, tail string, st *pathState)
 			return "", err
 		}
 		tail = id
+		if call.Use.Name == "Skill" {
+			var in struct {
+				Skill string `json:"skill"`
+			}
+			_ = json.Unmarshal(call.Use.Input, &in)
+			if c.skills == nil {
+				c.skills = map[string]skillCall{}
+			}
+			sc := skillCall{callID: callID, name: in.Skill}
+			c.skills[call.Use.ID] = sc
+			if call.Result.UUID != "" {
+				c.skills[call.Result.UUID] = sc
+			}
+		}
 		if peer != nil {
 			// The output is the CLI's acknowledgement that the agent
 			// started, not the agent's answer: its peer link follows

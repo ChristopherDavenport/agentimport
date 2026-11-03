@@ -7,6 +7,14 @@ versions may break the API.
 
 ## Unreleased
 
+- Added: skill reads recorded as agentskill records them, a `custom`
+  entry `agentskill:read` (`agentimport.SkillReadNS`,
+  `agentimport.SkillRead`) with the skill's `name`, and when the log
+  says them its `location`, `bytes` and `sha256` of the text served,
+  and the serving call's `call_id`: Claude Code's `Skill` call and the
+  hidden message carrying the instructions, and OpenCode 2's user-row
+  skills. `docs/formats/README.md` documents the shape relied on.
+
 - Added: identity members in the report. A finding of code
   `agentimport/identity` (`agentimport.IdentityCode`,
   `Report.Identity`) names, by its path and never its value, a native
