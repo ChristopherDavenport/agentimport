@@ -659,8 +659,14 @@ func (c *docConv) seedConfig() error {
 		return err
 	}
 	c.settings = c.settings.Apply(cfg)
-	_, err = c.appendEntry(cfg)
-	return err
+	if _, err = c.appendEntry(cfg); err != nil {
+		return err
+	}
+	// A structural entry: the continuation needs the settings in force
+	// where the session it continues ended, and no step of it says them.
+	c.addf(agentimport.Lossy, "atif/continuation-settings", 0,
+		"the continuation's first config carries the settings in force where the session it continues ended; no step of this document maps to it")
+	return nil
 }
 
 // leadingSystem returns a step's text when it is a system step that can

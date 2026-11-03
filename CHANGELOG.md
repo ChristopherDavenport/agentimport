@@ -21,8 +21,10 @@ versions may break the API.
 
 - Added: the leaf label a converter writes when a session resumes at an
   entry that is not its last, an entry no native line maps to, is
-  reported (`agentimport/leaf-label`), so the report says what the
-  conversion added.
+  reported (`agentimport/leaf-label`), and so is an ATIF continuation's
+  first config, seeded with the settings its predecessor ended with
+  (`atif/continuation-settings`), so the report says what the conversion
+  added. The plan lists every structural entry and its code.
 
 - **Added: Claude Code's instruction layers sent as messages carry RFC
   0001's `instructions_part` (format 0.17) (breaking: those entries'

@@ -120,11 +120,20 @@ Converters also write entries no native line maps to, of two kinds:
 - **Structural** entries are ones the format needs: a session's first
   `config`, a `leaf` label, pi's `append`, a `fork_of` link a header
   implies. They say nothing the native log does not; each is reported
-  under a code of its own so the report says what was added: the leaf
-  label every converter writes through the builder is
-  `agentimport/leaf-label`. The others are part of a line's mapping
-  (a first `config` from a header line or a document's root) and are
-  counted with it.
+  under a code of its own so the report says what was added. The
+  structural entries the converters write, and their codes:
+
+  | Entry | Converters | Code |
+  | --- | --- | --- |
+  | a `leaf` label, when the session resumes at an entry that is not its last | all, through the builder | `agentimport/leaf-label` |
+  | a continuation's first `config`, the settings where its predecessor ended | ATIF | `atif/continuation-settings` |
+  | an output for a call no result answers, as the harness sends it | Cline, Cline SDK, OpenCode | `cline/result-missing`, `clinesdk/result-missing`, `opencode/call-unfinished` |
+  | a `fork_of` link, and the copied prefix of a fork | Claude Code, pi, Codex, Cline SDK, Hermes | `claudecode/fork-context`, `pi/fork-prefix`, `codex/fork-prefix`, `clinesdk/fork-copied`, `hermes/branch-copy` |
+  | a decision before an output a refusal or an interruption implies | Claude Code, Cline, Cline SDK, OpenHands, OpenCode | the source's `rejection`, `interrupted` and `permission-*` codes |
+
+  A first `config` made from a header line, a session row or a
+  document's root, and an `env` made from one, are that unit's mapping
+  and counted with it.
 - **Derived** entries are inferred from the content of the converted
   path: a revision a `git commit` printed, a pull request a command
   opened (#29). Only an importer infers entries from content, so by
