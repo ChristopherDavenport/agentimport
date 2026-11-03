@@ -73,6 +73,21 @@ func (fam *family) one(in docInput, tgt target, report *agentimport.Report) ([]*
 	if err != nil {
 		return nil, "", err
 	}
+	if recs := c.entryRecords(); c.exporter && !in.synthetic && len(recs) > 0 {
+		why := c.rebuildBlocked()
+		if why == "" {
+			s, err := c.rebuildEntries(h, recs)
+			if err != nil {
+				return nil, "", fmt.Errorf("%s: %w", displayName(in.name), err)
+			}
+			if s, err = agentimport.Finish(s); err != nil {
+				return nil, "", fmt.Errorf("%s: rebuilt session does not verify: %w", displayName(in.name), err)
+			}
+			return []*agentsession.Session{s}, s.Leaf(), nil
+		}
+		c.addf(agentimport.Lossy, "atif/not-rebuilt", 0,
+			"the document carries the %d entries it was exported from, but %s; it is mapped from its steps, so none of them keeps the document's id", len(recs), why)
+	}
 	c.b = agentimport.NewBuilder(h, Source, report)
 	c.b.File = in.name
 	if err := c.run(); err != nil {

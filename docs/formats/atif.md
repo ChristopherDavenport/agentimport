@@ -241,6 +241,32 @@ the raw items they were built from in `extra.openresponses`, and each
 such step is rebuilt from them rather than mapped from its declared
 fields; a step without them falls back to the mapping above.
 
+From format 0.17 the exporter also writes, under
+`extra.agentsession.entries`, each entry's envelope, its history
+members and every body member its step does not carry. A document that
+holds them is rebuilt entry by entry, as RFC 0001's ATIF read-back rule
+asks (Projections/ATIF): each entry is put back together from its record
+there, its item from its step (by its position in `item_entry_ids`, or
+the item of a step or observation result, a spilled image read back as
+its data URL) and a response's body from its step; its id is computed
+and compared with the one the document names. An entry that matches,
+under a parent that matched, is the exported entry, its meaning
+members (`failed`, `trust`, `copied_from`, `from_link`,
+`instructions_part`, unknown members) and its history members
+(`legacy_id`, `normalised`, `redacted`) as written. Any other entry is a
+new one under the entry its parent became, an id its body names moved
+with it, listed (`atif/entry-not-rebuilt`), its history members
+`atif:<name>` (`atif/history-member`). The header's `redacted` and
+`redacted_from` are restored exactly when every entry matched and the
+document holds the whole path; otherwise they stay in `atif:extra`
+and the report says why (`atif/redaction-not-restored`). Every step is
+counted mapped, since the entries hold what it carried. A document that
+embeds sub-agent trajectories, continues in another or is cut short is
+mapped from its steps as below (`atif/not-rebuilt`); there a step's
+meaning members are restored on the entry it maps to
+(`atif/meaning-restored`) and a response body's history members are
+`atif:<name>`.
+
 | Exporter step | Session |
 | --- | --- |
 | `openresponses.item` | the item entry, with `visible`, `source` and `queued_from` |
@@ -280,6 +306,11 @@ every converter can report are in [README.md](README.md).
 | Code | Kind | Meaning |
 | --- | --- | --- |
 | `agentimport/usage-detail` | kept, or dropped | Metrics carry a cost or extra counts Responses usage has no place for; they are in `atif:metrics`. |
+| `atif/meaning-restored` | lossy | A step or observation result mapped from a document the exporter wrote carries meaning members of its entry under `agentsession` (`failed`, `trust`, `from_link`, `instructions_part`, `copied_from`); they are core members of the entry it maps to, which is a new entry. An agent step merges its items' members, which stay in `atif:extra`. |
+| `atif/not-rebuilt` | lossy | A document agentsession's exporter wrote carries the entries it was exported from (`extra.agentsession.entries`), but embeds sub-agent trajectories, continues in another document or is cut short, so it is mapped from its steps and none of its entries keeps the document's id. |
+| `atif/entry-not-rebuilt` | lossy | An entry of a document carrying its entries does not rebuild to the id the document names: its members hash to another id (an edit after the export, a body stripped), its parent is not in the document, or its parent did not rebuild. It is a new entry, under the entry its parent became, and carries no history member as its own. Each such entry is listed. |
+| `atif/history-member` | kept, or dropped | A history member (`legacy_id`, `normalised`, `redacted`) of an entry that did not rebuild to its id is `atif:<name>`, since it is not true of a new entry; left out under Slim. |
+| `atif/redaction-not-restored` | lossy | A document of a redacted session whose entries do not all rebuild to their ids, or that does not hold the whole path (one built after a compaction), keeps the header's `redacted` and `redacted_from` in `atif:extra`; the session is not the redacted session. |
 | `atif/callless-subagent` | gap | A sub-agent no call spawned is linked by a `subsession` link with no `call_id`, which RFC 0001 does not define. |
 | `atif/compaction-unrecorded` | gap | A replace boundary records no summary, in its results or a user step after it; it is a custom entry and the context keeps what came before. |
 | `atif/context-pruning` | gap | A pruning or truncate boundary names nothing it removed; it is a custom entry and the context keeps everything. |

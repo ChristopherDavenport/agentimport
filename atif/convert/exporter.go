@@ -251,6 +251,9 @@ func (c *docConv) exporterItem(i int, s *atif.Step, ext, or map[string]json.RawM
 	if err != nil {
 		return c.exporterFallback(i, s, err)
 	}
+	if e, err = c.meaning(i, e, ext); err != nil {
+		return err
+	}
 	if out, ok := e.Item.(*openresponses.FunctionCallOutput); ok {
 		if cl := c.findCall(out.CallID, i, nil); cl != nil && !cl.answered {
 			cl.answered = true
@@ -475,6 +478,9 @@ func (c *docConv) exporterResults(i int, s *atif.Step, local map[string][]*call)
 		if err != nil {
 			return nil, nil, err
 		}
+		if e, err = c.meaning(i, e, rext); err != nil {
+			return nil, nil, err
+		}
 		if fo, ok := e.Item.(*openresponses.FunctionCallOutput); ok {
 			if cl := c.findCall(fo.CallID, i, local); cl != nil {
 				cl.answered = true
@@ -546,6 +552,26 @@ func (c *docConv) responseBody(i int, body json.RawMessage) (*agentsession.Respo
 		c.addf(agentimport.Kept, "atif/redacted", i+1,
 			"the response the exporter carried was redacted in the session it exported; its redacted member, positions in that session's original, is %s:redacted, since this session is not a redaction", Source)
 		if err := c.b.Member(r, "redacted", raw); err != nil {
+			return nil, err
+		}
+	}
+	// So too the other history members (legacy_id, normalised): true of
+	// the exported entry, not of the new one this mapping writes.
+	for _, k := range []string{"legacy_id", "normalised"} {
+		raw, ok := r.Unknown[k]
+		if !ok {
+			continue
+		}
+		delete(r.Unknown, k)
+		if len(r.Unknown) == 0 {
+			r.Unknown = nil
+		}
+		if c.fam.opts.Slim {
+			c.addf(agentimport.Dropped, "atif/history-member", i+1, "the %s of the response the exporter carried, which is mapped as a new entry, is left out", k)
+			continue
+		}
+		c.addf(agentimport.Kept, "atif/history-member", i+1, "the %s of the response the exporter carried, which is mapped as a new entry, is %s:%s", k, Source, k)
+		if err := c.b.Member(r, k, raw); err != nil {
 			return nil, err
 		}
 	}
@@ -723,4 +749,73 @@ func (c *docConv) exporterBranchSummary(i int, s *atif.Step, ext, or map[string]
 	}
 	c.mark(i, agentimport.LineMapped)
 	return nil
+}
+
+// meaningMembers are the members RFC 0001 defines for what an item entry
+// holds or says, which the exporter carries under agentsession in the
+// extra of the step or observation result the entry maps to.
+var meaningMembers = []string{"failed", "trust", "from_link", "instructions_part", "copied_from"}
+
+// meaning restores on e the meaning members the extra carries for it,
+// as core members, and takes them out of the extra, so the rest is
+// kept as before. copied_from travels as a list of one.
+func (c *docConv) meaning(i int, e *agentsession.ItemEntry, ext map[string]json.RawMessage) (*agentsession.ItemEntry, error) {
+	as := object(ext["agentsession"])
+	found := map[string]json.RawMessage{}
+	for _, k := range meaningMembers {
+		v, ok := as[k]
+		if !ok {
+			continue
+		}
+		if k == "copied_from" {
+			var list []json.RawMessage
+			if json.Unmarshal(v, &list) != nil || len(list) != 1 {
+				continue
+			}
+			v = list[0]
+		}
+		found[k] = v
+		delete(as, k)
+	}
+	if len(found) == 0 {
+		return e, nil
+	}
+	data, err := agentsession.MarshalEntry(e)
+	if err != nil {
+		return nil, err
+	}
+	var line map[string]json.RawMessage
+	if err := json.Unmarshal(data, &line); err != nil {
+		return nil, err
+	}
+	for k, v := range found {
+		line[k] = v
+	}
+	// The decode wants an id; the append computes the entry's own.
+	line["id"] = json.RawMessage(`"sha256:0"`)
+	if data, err = json.Marshal(line); err != nil {
+		return nil, err
+	}
+	back, err := agentsession.UnmarshalEntry(data)
+	if err != nil {
+		return nil, err
+	}
+	out, ok := back.(*agentsession.ItemEntry)
+	if !ok {
+		return e, nil
+	}
+	out.ID = ""
+	raw, err := json.Marshal(as)
+	if err != nil {
+		return nil, err
+	}
+	ext["agentsession"] = raw
+	names := make([]string, 0, len(found))
+	for k := range found {
+		names = append(names, k)
+	}
+	slices.Sort(names)
+	c.addf(agentimport.Lossy, "atif/meaning-restored", i+1,
+		"the exporter carried %s for the entry; restored as core members on the entry it is mapped to, a new entry", strings.Join(names, ", "))
+	return out, nil
 }

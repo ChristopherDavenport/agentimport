@@ -7,6 +7,22 @@ versions may break the API.
 
 ## Unreleased
 
+- **Changed: an ATIF document agentsession's exporter wrote with its
+  entries (format 0.17) is rebuilt to the document's own ids
+  (breaking: such an import's entry ids, and a redacted session's
+  header, change).** Each entry is put back together from
+  `extra.agentsession.entries` and its step, its id checked; an entry
+  that matches keeps its history members, any other is a new entry,
+  listed (`atif/entry-not-rebuilt`), its history members `atif:<name>`.
+  The header's `redacted` and `redacted_from` are restored exactly when
+  every entry matched over the whole path (`atif/redaction-not-restored`
+  says why not). A document with sub-agent trajectories or a
+  continuation is still mapped from its steps (`atif/not-rebuilt`),
+  where `failed`, `trust`, `copied_from`, `from_link` and
+  `instructions_part` now come back as core members
+  (`atif/meaning-restored`) and a response's `legacy_id` and
+  `normalised` are `atif:` members, not its own.
+
 - **Changed: a failed call's output carries RFC 0001's `failed` (format
   0.14), not `<ns>:is_error` (breaking for readers of that member).**
   Every source maps its error flag (Claude Code's, Cline's and the
