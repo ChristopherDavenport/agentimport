@@ -1,5 +1,6 @@
 claudecode: 15 lines: mapped 11 kept 4 dropped 0 malformed 0
   gap      agentimport/vcs-branch                            2  the git branch is the vcs member claudecode:branch; the format's vcs has no branch (at 1, 12)
+  lossy    agentimport/leaf-label                            1  the session resumes at an entry that is not its last; a leaf label, which no native line maps to, names it
   lossy    claudecode/alternate-rendering                    1  the queued_command attachment has a second rendering, for a new turn, which is kept in claudecode:line, not sent (at 11)
   lossy    claudecode/request-snapshot                       2  the prompt_snapshot attachment is a config delta: its 3 system blocks are joined into one instructions string, and requests before it record none (at 2, 9)
   lossy    claudecode/thinking-dropped                       1  the CLI left 1 earlier thinking blocks out of this request; the path holds them, and the request it names by index is not rebuilt to say which (at 13)

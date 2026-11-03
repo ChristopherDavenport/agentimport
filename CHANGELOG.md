@@ -7,6 +7,11 @@ versions may break the API.
 
 ## Unreleased
 
+- Added: the leaf label a converter writes when a session resumes at an
+  entry that is not its last, an entry no native line maps to, is
+  reported (`agentimport/leaf-label`), so the report says what the
+  conversion added.
+
 - **Added: Claude Code's instruction layers sent as messages carry RFC
   0001's `instructions_part` (format 0.17) (breaking: those entries'
   IDs, and every ID after them, move).** It has the well-known `source`:

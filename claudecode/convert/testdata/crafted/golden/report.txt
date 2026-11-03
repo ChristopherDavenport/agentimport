@@ -1,6 +1,7 @@
 claudecode: 10 lines: mapped 8 kept 2 dropped 0 malformed 0
   gap      agentimport/vcs-branch                            1  the git branch is the vcs member claudecode:branch; the format's vcs has no branch (at 1)
   dropped  claudecode/null-block                             1  a content block that is not an object is left out (at 5)
+  lossy    agentimport/leaf-label                            1  the session resumes at an entry that is not its last; a leaf label, which no native line maps to, names it
   lossy    claudecode/no-stop-reason                         1  no line of response msg_80 has a stop reason; the response has no status (at 3)
   lossy    claudecode/request-snapshot                       1  the api-request-shape record is a config delta: its 1 system blocks are joined into one instructions string, and requests before it record none (at 10)
   kept     agentimport/identity                              6  identity member sessionId is carried into the header's id (at 4, 4, 8, 8)

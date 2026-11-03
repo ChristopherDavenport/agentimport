@@ -1,4 +1,5 @@
 claudecode: 5 lines: mapped 3 kept 2 dropped 0 malformed 0
+  lossy    agentimport/leaf-label                            1  the session resumes at an entry that is not its last; a leaf label, which no native line maps to, names it
   kept     agentimport/identity                             10  identity member sessionId is carried into the header's id (at 2, 2, 2, 3, 3)
              attachment.context.userEmail                    2
              attachment.organizationUuid                     1

@@ -226,8 +226,14 @@ func (b *Builder) Leaf(id string) error {
 	}
 	l := agentsession.NewLabelEntry(id, agentsession.LeafLabel)
 	l.Timestamp = b.last
-	_, err := b.Append(b.tail, l)
-	return err
+	if _, err := b.Append(b.tail, l); err != nil {
+		return err
+	}
+	// A structural entry: the format needs it, and no native line maps
+	// to it.
+	b.Report.Addf(Lossy, "agentimport/leaf-label", b.File, 0,
+		"the session resumes at an entry that is not its last; a leaf label, which no native line maps to, names it")
+	return nil
 }
 
 // Resume returns the entry a reader of the session resumes from: the

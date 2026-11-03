@@ -2,6 +2,7 @@ package agentimport
 
 import (
 	"encoding/json"
+	"slices"
 	"testing"
 	"time"
 
@@ -73,6 +74,11 @@ func TestBuilder(t *testing.T) {
 	}
 	if b.S.Leaf() != a2 {
 		t.Errorf("leaf = %s, want %s", b.S.Leaf(), a2)
+	}
+	// The leaf label is a structural entry no native line maps to, and
+	// is reported under its own code.
+	if !slices.Contains(r.Codes(), "agentimport/leaf-label") {
+		t.Errorf("the leaf label is not reported: %v", r.Codes())
 	}
 	if id, ok := b.ID("u1"); !ok || id != p {
 		t.Errorf("ID(u1) = %s, %v", id, ok)
