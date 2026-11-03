@@ -7,6 +7,19 @@ versions may break the API.
 
 ## Unreleased
 
+- Changed: sessions are written in format 0.17 (agentsession v0.0.34,
+  openresponses v0.0.18; were v0.0.28 and v0.0.15). No entry hash
+  changes but where an item now keeps a member it does not define: an
+  Open Responses item keeps every member as written (openresponses
+  v0.0.17), so Codex's `internal_chat_message_metadata_passthrough`, a
+  message's `encrypted_content` and a call's `namespace` stay in the
+  item instead of `codex:item`, and pi's Responses reasoning items keep
+  their undeclared members, moving those entries' IDs.
+- Fixed: `agentimport convert` wrote a leaf label into a stored session
+  before the first entry of each later branch, as agentsession's store
+  now marks the head when an append leaves its branch; each append now
+  starts from its own parent, so the stored session is the conversion.
+
 - Fixed: `make release` can cut the first release. The release guard
   refused every tag while no `v*` tag was published; it now takes a
   plain `vX.Y.Z` of the module path's major version as the first

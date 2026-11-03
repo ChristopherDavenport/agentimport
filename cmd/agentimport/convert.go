@@ -207,10 +207,18 @@ func write(ctx context.Context, st *jsonl.Store, s *agentsession.Session, force 
 		return written{}, err
 	}
 	for _, e := range s.Entries() {
-		if e.Base().Parent == "" {
-			// A root: the store's session appends under its leaf
-			// otherwise, and a converted session may hold several.
+		// The store's session appends under its leaf, and writes a leaf
+		// label ahead of an entry that leaves the branch the leaf is on,
+		// so the head would not move. A converted session's entries come
+		// in file order, branches included, and its own leaf labels say
+		// where its head is; so each append starts from its parent, or
+		// from the universal root for a root, as a converted session may
+		// hold several.
+		if p := e.Base().Parent; p == "" {
 			sess.ResetLeaf()
+		} else if err := sess.Branch(p); err != nil {
+			st.Delete(ctx, h.ID)
+			return written{}, fmt.Errorf("session %s: %w", h.ID, err)
 		}
 		if _, err := st.Append(ctx, h.ID, e); err != nil {
 			// A session cut short would block the next run; it goes.
