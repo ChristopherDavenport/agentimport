@@ -1,9 +1,9 @@
 cline: 20 elements and files: mapped 3 kept 6 dropped 2 malformed 9
   gap      agentimport/context-replace                       1  from here on Cline sends a block 0 of API message 4 with its text replaced by other text (1 bytes); the session keeps the original, and the edit is a custom entry (at context_history.json:2)
-  gap      agentimport/tool-error                            1  is_error is the member cline:is_error; function_call_output has no error flag (at api_conversation_history.json:7)
   dropped  cline/file-unread                                 1  a file of the task directory the converter does not read
   dropped  cline/null-block                                  1  a content block that is not an object is left out (at api_conversation_history.json:4)
   dropped  cline/ui-restated                                 1  a say task UI message restates the API history, or is a prompt carrying nothing (at ui_messages.json:1)
+  lossy    agentimport/tool-error                            1  is_error, which the model was sent, is the output's failed; function_call_output has no error flag a request carries (at api_conversation_history.json:7)
   lossy    cline/invalid-input                               1  a tool_use input that is not a JSON object is recorded as its JSON text (at api_conversation_history.json:4)
   lossy    cline/missing-index                               1  the task has no entry in state/taskHistory.json, which older releases kept in VS Code's state database; the working directory is unknown and the deleted range is taken from the UI messages alone
   lossy    cline/mistyped-member                             1  a text block's members text are not of their type; they are kept in cline:block and read as empty (at api_conversation_history.json:4)

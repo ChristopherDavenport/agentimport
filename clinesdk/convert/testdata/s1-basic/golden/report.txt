@@ -1,6 +1,6 @@
 clinesdk: 13 files and elements: mapped 12 kept 1 dropped 0 malformed 0
   gap      agentimport/reasoning-provider                    2  a reasoning signature from anthropic in encrypted_content, tagged clinesdk:provider (at 1759312800000_ab12c.messages.json:2, 1759312800000_ab12c.messages.json:10)
-  gap      agentimport/tool-error                            1  is_error is the member clinesdk:is_error; function_call_output has no error flag (at 1759312800000_ab12c.messages.json:8)
+  lossy    agentimport/tool-error                            1  is_error, which the model was sent, is the output's failed; function_call_output has no error flag a request carries (at 1759312800000_ab12c.messages.json:8)
   lossy    clinesdk/file-block                               1  a file block is the text Cline sends for it, the content in <file_content path=...>; the block as written is clinesdk:original (at 1759312800000_ab12c.messages.json:9)
   lossy    clinesdk/no-response-id                           4  Cline records no response ID; the response is resp_2 (at 1759312800000_ab12c.messages.json:2, 1759312800000_ab12c.messages.json:4, 1759312800000_ab12c.messages.json:7, 1759312800000_ab12c.messages.json:10)
   lossy    clinesdk/no-stop-reason                           1  Cline records no stop reason; every response is completed

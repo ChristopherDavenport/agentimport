@@ -905,3 +905,59 @@ func TestClineSDKSession(t *testing.T) {
 		t.Errorf("the index's directory held %v and holds %v; something was written beside the database", before, after)
 	}
 }
+
+// TestFailed converts a fixture of each source whose log flags a call
+// as failed: the output carries failed, no converter keeps the flag in
+// a member of its own, and an exit code is kept beside it without
+// making a call failed.
+func TestFailed(t *testing.T) {
+	for _, tc := range []struct {
+		source, path string
+		// exits is how many outputs carry a nonzero exit code and no
+		// failed.
+		exits int
+	}{
+		{"claudecode", "../../claudecode/convert/testdata/parallel/11111111-1111-4111-8111-000000000002.jsonl", 0},
+		{"pi", "../../pi/convert/testdata/anthropic/2026-09-01T10-00-00-000Z_01a00001-0000-7000-8000-000000000001.jsonl", 0},
+		{"cline", "../../cline/convert/testdata/classic-malformed/saoudrizwan.claude-dev/tasks/1760400000000", 0},
+		{"clinesdk", "../../clinesdk/convert/testdata/s1-basic/sessions/1759312800000_ab12c", 0},
+		{"openhands", "../../openhands/convert/testdata/parallel-calls/conversations/00000003000040009000000000000001", 1},
+	} {
+		s, _ := sourceNamed(tc.source)
+		var ignored []skipped
+		res, err := s.convert(tc.path, newRunner(false, &ignored))
+		if err != nil {
+			t.Fatalf("%s: %v", tc.source, err)
+		}
+		failed, exits := 0, 0
+		for _, sess := range res.Sessions {
+			for _, e := range sess.Entries() {
+				for k := range e.Base().Unknown {
+					if strings.HasSuffix(k, ":is_error") {
+						t.Errorf("%s: an entry keeps %s", tc.source, k)
+					}
+				}
+				ie, ok := e.(*agentsession.ItemEntry)
+				if !ok {
+					continue
+				}
+				if ie.Failed {
+					failed++
+				} else if code, ok := ie.Unknown[agentimport.ExitCodeMember]; ok && string(code) != "0" && ie.Item.ItemType() == "function_call_output" {
+					exits++
+				}
+			}
+		}
+		if failed == 0 {
+			t.Errorf("%s: no output is marked failed", tc.source)
+		}
+		if exits != tc.exits {
+			t.Errorf("%s: %d outputs carry a nonzero exit code and no failed, want %d", tc.source, exits, tc.exits)
+		}
+		for _, f := range res.Report.Findings {
+			if f.Code == "agentimport/tool-error" && f.Kind == agentimport.Gap {
+				t.Errorf("%s: %+v", tc.source, f)
+			}
+		}
+	}
+}

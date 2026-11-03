@@ -7,6 +7,26 @@ versions may break the API.
 
 ## Unreleased
 
+- **Changed: a failed call's output carries RFC 0001's `failed` (format
+  0.14), not `<ns>:is_error` (breaking for readers of that member).**
+  Every source maps its error flag (Claude Code's, Cline's and the
+  Cline SDK's `is_error`, pi's `isError`, OpenHands' `is_error` and
+  agent errors, OpenCode's `error` status), and an output the harness
+  wrote for a call it gave up (Cline's `result missing`, the Cline
+  SDK's missing result, OpenHands' interrupted call, OpenCode's
+  interrupted or unfinished call). `failed` is never inferred from an
+  output's text or an exit status; Codex records no failure, and none
+  is read from its abort texts. `agentimport/tool-error` is no longer a
+  gap: it is `lossy` where the model was sent a flag a request rebuilt
+  from `function_call_output` cannot carry.
+- Added: `agentimport:exit_code` (`agentimport.ExitCodeMember`,
+  `SetExitCode`), a command's exit status where the source structures
+  it (OpenHands' terminal metadata, pi's `bashExecution`, OpenCode's
+  `bash` metadata and OpenCode 2's shell rows; `agentimport/exit-code`)
+  or wraps it in a fixed header (Codex's `Exit code:`, `Process exited
+  with code`, and the older structured output; `codex/exit-code`). It
+  is kept under `-slim` and says nothing of `failed`.
+
 - Changed: Codex `env` entries are whole snapshots, as RFC 0001 0.17
   reads them. A `turn_context` that moves the working directory inside
   the session's repeats the session meta's `vcs`, reported as a guess

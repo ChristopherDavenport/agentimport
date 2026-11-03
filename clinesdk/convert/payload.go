@@ -265,9 +265,8 @@ func (sc *sconv) flushMissing(k int, ts time.Time) error {
 		}
 		out := openresponses.NewFunctionCallOutput(p.id, text)
 		e := itemEntry(out, ts)
-		if err := sc.b.Member(e, "is_error", true); err != nil {
-			return err
-		}
+		// Cline gave the call up and sends this error in its place.
+		e.Failed = true
 		if err := sc.b.Member(e, "synthesized", true); err != nil {
 			return err
 		}
@@ -324,10 +323,8 @@ func (sc *sconv) result(k int, m *clinesdk.Message, b *clinesdk.Block, ts time.T
 	e := itemEntry(out, ts)
 	e.Parents = parents
 	if b.IsError {
-		if err := sc.b.Member(e, "is_error", true); err != nil {
-			return err
-		}
-		sc.at(agentimport.Gap, "agentimport/tool-error", k, "is_error is the member %s:is_error; function_call_output has no error flag", Source)
+		e.Failed = true
+		sc.at(agentimport.Lossy, "agentimport/tool-error", k, "is_error, which the model was sent, is the output's failed; function_call_output has no error flag a request carries")
 	}
 	if projected != content {
 		sc.at(agentimport.Lossy, "clinesdk/request-projection", k, "a tool result Cline cuts to %d characters in the middle for every request; the output holds the cut text, the content as written is %s:original", maxToolResultChars, Source)

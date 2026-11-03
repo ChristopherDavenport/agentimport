@@ -239,11 +239,11 @@ observation is kept beside the output in `openhands:observation`.
 | `MessageEvent` from the user | `item`, user `message`: `input_text`, `input_image` per URL, then `extended_content` as `input_text` | `activated_skills`, `sender` and other members in `openhands:event`; from the environment or a hook, `openhands:source`; OpenHands' content-filter nudge, which it writes as the user, `openhands:source` `harness`. The error OpenHands writes as the user when the model's function call does not validate is the error's own text and cannot be told from a person's message |
 | `MessageEvent` from the agent with `llm_response_id` | reasoning items, an assistant `message`, a `response` | without one, an assistant message with no response (`openhands/assistant-input`) |
 | `ActionEvent`s of one `llm_response_id` | from the first: reasoning items and the `thought` message; then one `function_call` per action (`call_id` the tool call's id through `agentimport.CallIDs`, `arguments` as stored, `id` the Responses `fc_` id); a `response` | the action, `security_risk`, `summary` and the tool call's `origin` in `openhands:event` |
-| `ObservationEvent` | `function_call_output`, rendered as above | `is_error` as `openhands:is_error` (gap `agentimport/tool-error`) |
+| `ObservationEvent` | `function_call_output`, rendered as above; `is_error` the entry's `failed` (OpenHands sends the error header in the text) | a terminal observation's `metadata.exit_code` as `agentimport:exit_code` (`agentimport/exit-code`), whatever `is_error` says |
 | `UserRejectObservation` | a `reject` `decision`, `by` `human` (the user) or `policy` (a hook), `reason` the rejection's, then the output | |
 | `AgentErrorEvent` for a call OpenHands could not run (unknown tool, invalid arguments) | a `reject` `decision` by `policy`, then the output | |
-| `AgentErrorEvent` `Tool call interrupted before completion.` | an `answer` `decision` by `policy`, then the output | |
-| other `AgentErrorEvent` | the output, `openhands:is_error` | |
+| `AgentErrorEvent` `Tool call interrupted before completion.` | an `answer` `decision` by `policy`, then the output, `failed` | |
+| other `AgentErrorEvent` | the output, `failed` | |
 | `Condensation` | a `compaction` or an `omit`, as above | members in `openhands:event` |
 | `critic_result` | an `outcome` of kind `eval` on the judged entry, `score` the critic's, `details` the result | |
 | `CondensationRequest`, `PauseEvent`, `InterruptEvent`, `ConversationErrorEvent`, `ServerErrorEvent`, `HookExecutionEvent`, `SecurityAnalysisEvent`, `ACPToolCallEvent` | a `custom` entry, `ns` `openhands`, the event whole | a hook's `call_id` the call it ran for |
@@ -383,7 +383,6 @@ every converter can report are in [README.md](README.md).
 | --- | --- | --- |
 | `agentimport/fold-head` | gap | OpenHands put a condensation's summary after the events it kept at the head of the context; the compaction puts its summary first and pins the head after it. |
 | `agentimport/reasoning-provider` | gap | A reasoning signature (Anthropic's, OpenAI's encrypted reasoning) is in `encrypted_content`, tagged `openhands:provider`. |
-| `agentimport/tool-error` | gap | A tool result's `is_error`, or an agent error, is `openhands:is_error`. |
 | `agentimport/usage-detail` | kept | Cache writes, counted in the prompt tokens, are `openhands:usage`. |
 | `openhands/bad-content` | dropped | A content part that is not an object or not text or an image, or extended content on an assistant message. |
 | `openhands/bad-file-name` | dropped | A file of `events/` whose name is not an event file's. |
@@ -411,7 +410,7 @@ every converter can report are in [README.md](README.md).
 | `openhands/fork-copied` | lossy | A fork's first events are copies of its source's, converted as its own. |
 | `openhands/fork-copy-unknown` | lossy | A fork whose copied events cannot be told apart. |
 | `openhands/instructions-join` | lossy | The system prompt and the dynamic context are two parts, joined with a blank line, where OpenHands sends two blocks or a newline. |
-| `openhands/interrupted` | lossy | A call a pause or a crash cut: an answer decision before OpenHands' output. |
+| `openhands/interrupted` | lossy | A call a pause or a crash cut: an answer decision before OpenHands' output, which is `failed`. |
 | `openhands/invalid-call` | lossy | A call OpenHands could not run, its arguments as OpenHands stored them. |
 | `openhands/merged-user-messages` | lossy | A user message OpenHands from 1.26 merges with the one before; the session keeps both. |
 | `openhands/model-from-state` | lossy | The model is the state's last saved one; a switch is not recorded per event. |

@@ -723,6 +723,7 @@ func (c *conv) output(i int) error {
 	var members map[string]json.RawMessage
 	var decision *agentsession.DecisionEntry
 	isError := false
+	exitCode := int64(-1)
 	switch ev.Kind {
 	case openhands.KindObservation:
 		o, _ := ev.Observation()
@@ -731,6 +732,9 @@ func (c *conv) output(i int) error {
 		} else {
 			parts = c.render(i, o.Observation)
 			isError = o.Observation.IsError
+			if k := o.Observation.Kind; k == obsTerminal || k == obsExecuteBash {
+				exitCode = o.Observation.Terminal().ExitCode
+			}
 			kind, _ := c.keeping()
 			if c.slim {
 				c.at(kind, "openhands/observation", i, "the structured %s beside the output rendered from it is left out", o.Observation.Kind)
@@ -789,7 +793,8 @@ func (c *conv) output(i int) error {
 			c.at(agentimport.Lossy, "openhands/rejected", i, "OpenHands refused a call it could not run: a reject decision by policy before the error it sent")
 		case strings.HasPrefix(o.Error, openhands.InterruptedPrefix):
 			decision = agentsession.NewDecision(cl.id, cl.entry, agentsession.VerdictAnswer, agentsession.ByPolicy).WithReason(o.Error)
-			c.at(agentimport.Lossy, "openhands/interrupted", i, "the call was cut by a pause or a crash: an answer decision by policy before the output OpenHands wrote for it")
+			isError = true
+			c.at(agentimport.Lossy, "openhands/interrupted", i, "the call was cut by a pause or a crash: an answer decision by policy before the output OpenHands wrote for it, marked failed")
 		default:
 			isError = true
 		}
@@ -813,11 +818,13 @@ func (c *conv) output(i int) error {
 	out := c.outputData(i, parts)
 	e := c.itemEntry(i, &openresponses.FunctionCallOutput{CallID: cl.id, Output: out, Status: openresponses.StatusCompleted}, "")
 	e.Parents = refs
-	if isError {
-		if err := c.b.Member(e, "is_error", true); err != nil {
-			return err
-		}
-		c.at(agentimport.Gap, "agentimport/tool-error", i, "the call failed; the output carries %s:is_error", Source)
+	// The observation's error flag, an agent error, or a call cut by a
+	// pause or a crash: OpenHands says the call failed or was given up.
+	// Its error header is in the output's text, as OpenHands sends it.
+	e.Failed = isError
+	if exitCode != -1 {
+		agentimport.SetExitCode(e, exitCode)
+		c.at(agentimport.Kept, "agentimport/exit-code", i, "the command's exit code, from the observation's metadata, is %s; failed comes from the error flag alone", agentimport.ExitCodeMember)
 	}
 	if err := c.keepAll(i, e, members); err != nil {
 		return err

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/ChristopherDavenport/agentimport"
@@ -198,6 +199,10 @@ func (c *converter) itemMembers(e *agentsession.ItemEntry, l *codex.Line, item o
 	}
 	if fo, ok := item.(*openresponses.FunctionCallOutput); ok {
 		c.checkTruncation(l, fo.Output.String(), hm)
+		if n, ok := wrapperExitCode(fo.Output.String()); ok {
+			agentimport.SetExitCode(e, n)
+			c.addf(agentimport.Kept, "codex/exit-code", l, "the command's exit code, from the fixed wrapper Codex puts around its output, is %s; Codex records no failure of a call, and none is inferred", agentimport.ExitCodeMember)
+		}
 	}
 	if err := c.extraMembers(e, l, extra); err != nil {
 		return err
@@ -1135,4 +1140,49 @@ func cloneVCS(v *agentsession.VCS) *agentsession.VCS {
 	out := *v
 	out.Unknown = maps.Clone(v.Unknown)
 	return &out
+}
+
+// wrapperExitCode reads a command's exit code from the fixed wrapper
+// Codex puts around its output for the model: the shell tools'
+// "Exit code: N" over "Wall time: ...", unified exec's "Process exited
+// with code N" among its header lines, before "Output:", and the older
+// structured {"output": ..., "metadata": {"exit_code": N}}.
+func wrapperExitCode(text string) (int64, bool) {
+	if rest, ok := strings.CutPrefix(text, "Exit code: "); ok {
+		code, after, _ := strings.Cut(rest, "\n")
+		if strings.HasPrefix(after, "Wall time: ") {
+			n, err := strconv.ParseInt(code, 10, 32)
+			return n, err == nil
+		}
+		return 0, false
+	}
+	if strings.HasPrefix(text, "Chunk ID: ") || strings.HasPrefix(text, "Wall time: ") {
+		header, _, ok := strings.Cut(text, "\nOutput:")
+		if !ok {
+			return 0, false
+		}
+		for _, line := range strings.Split(header, "\n") {
+			if code, ok := strings.CutPrefix(line, "Process exited with code "); ok {
+				n, err := strconv.ParseInt(code, 10, 32)
+				return n, err == nil
+			}
+		}
+		return 0, false
+	}
+	if strings.HasPrefix(text, "{") {
+		var w struct {
+			Output   *string `json:"output"`
+			Metadata *struct {
+				ExitCode *json.Number `json:"exit_code"`
+			} `json:"metadata"`
+		}
+		d := json.NewDecoder(strings.NewReader(text))
+		d.UseNumber()
+		if d.Decode(&w) != nil || w.Output == nil || w.Metadata == nil || w.Metadata.ExitCode == nil {
+			return 0, false
+		}
+		n, err := w.Metadata.ExitCode.Int64()
+		return n, err == nil
+	}
+	return 0, false
 }

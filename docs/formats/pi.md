@@ -106,8 +106,8 @@ naming another branch finds it converted.
 | `message`, role `user` | `item`, user `message` | images as `input_image` data URLs |
 | `message`, role `assistant` | a `config` delta when its model is not the one in force; items for its content blocks in order; then a `response` | see below |
 | `message`, role `assistant`, stopped `error` or `aborted` | as above, then a `config` delta whose `omit.items` names its items | pi leaves the attempt out of every later request |
-| `message`, role `toolResult` | `item`, `function_call_output`, marked `pi:tool_kind` for a custom tool call | one text block is the output string; otherwise parts; `details` in `pi:details`; a `toolName` other than the call's in `pi:tool_name` |
-| `message`, role `bashExecution` | `item`, user `message` with the text pi renders for it | the record in `pi:bash_execution`; one kept out of context is a `custom` entry |
+| `message`, role `toolResult` | `item`, `function_call_output`, marked `pi:tool_kind` for a custom tool call; `isError` the entry's `failed` | one text block is the output string; otherwise parts; `details` in `pi:details`; a `toolName` other than the call's in `pi:tool_name` |
+| `message`, role `bashExecution` | `item`, user `message` with the text pi renders for it | the record in `pi:bash_execution`; `exitCode` as `agentimport:exit_code`, under Slim too (`agentimport/exit-code`); one kept out of context is a `custom` entry |
 | `message`, role `custom`; `custom_message` | `item`, user `message` with the content, `visible: false` when not displayed | `customType` in `pi:custom_type`, `details` in `pi:details` |
 | `usage` | `custom`, `ns` `pi`, `data` with `usage` in the Responses shape and `model`: the format's record of a paid call with no response | native usage in `data["pi:usage"]` |
 | `compaction` | `compaction`: `summary` the user message pi sends (its framing and the summary), `first_kept` the first entry made from `firstKeptEntryId`, `config` the settings in force with pi's `systemMessage` checkpoint, `tokens_before`, `usage` | `details`, `fromHook` and native usage in `pi:` members; see below |
@@ -242,7 +242,7 @@ every converter can report are in [README.md](README.md).
 | Code | Kind | Meaning |
 | --- | --- | --- |
 | `agentimport/reasoning-provider` | gap | An Anthropic, Bedrock or Gemini signature is in `encrypted_content`, which says nothing of the provider that can replay it; the entry carries `pi:provider`. |
-| `agentimport/tool-error` | gap | A tool result had `isError`; `function_call_output` has no error flag, so it is `pi:is_error`. |
+| `agentimport/tool-error` | lossy | A tool result had `isError`, which pi sends a provider that takes it; the output's entry is `failed`, and `function_call_output` has no error flag a request carries (Open Responses), so a rebuilt request does not send it. |
 | `agentimport/usage-detail` | kept | Usage has members Responses usage lacks (cache writes, the dollar cost); they are in `pi:usage`. |
 | `agentimport/context-replace` | gap | A context edit replaced a message's content: a user or extension message is omitted and its replacement written after; an assistant message or tool result stays and the edit is a custom entry. |
 | `agentimport/omit-summary` | gap | A context edit left a branch summary out of context; `omit` names items alone, so it stays. |

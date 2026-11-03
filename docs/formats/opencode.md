@@ -201,10 +201,13 @@ messages. The converter follows each rule:
   reasoning. Its items are written and left out from then on by an
   `omit` of their entries (`opencode/error-turn`).
 - **Calls.** A completed call's output, with data-URL attachments as
-  media; an error's text, flagged (`opencode:is_error`); a call cleaned
+  media; an error's text, the entry `failed`; a call cleaned
   up after an abort (`metadata.interrupted`) sends the output it had
-  from 1.4.2, its error before (`opencode/call-interrupted`). A call still `pending` or `running`
-  sends `[Tool execution was interrupted]`: written after a `reject`
+  from 1.4.2, its error before (`opencode/call-interrupted`), `failed`
+  either way. A `bash` call's `metadata.exit` is
+  `agentimport:exit_code` (`agentimport/exit-code`), which says nothing
+  of `failed`. A call still `pending` or `running`
+  sends `[Tool execution was interrupted]`, `failed`: written after a `reject`
   decision by `policy` for one that never started, an `answer` for one
   that may have run (`opencode/call-unfinished`). For a provider whose
   AI SDK package takes no media in a tool result, OpenCode moves the
@@ -409,7 +412,7 @@ every converter can report are in [README.md](README.md).
 | `agentimport/context-replace` | gap | OpenCode replaced an item in later requests: a pruned output, another model's reasoning, a failed V2 step's reasoning sent as text. The item stays as first sent. |
 | `agentimport/fold-head` | gap | OpenCode's compacted context starts with a message it sent verbatim; the compaction's summary is that message and the rest follows it. |
 | `agentimport/reasoning-provider` | gap | A reasoning signature or encrypted content is in `encrypted_content`, its provider in `opencode:provider`. |
-| `agentimport/tool-error` | gap | A failed call's output carries `opencode:is_error`. |
+| `agentimport/tool-error` | lossy | A V1 call's error, which OpenCode sends as an error result, makes the output's entry `failed`; `function_call_output` has no error flag a request carries (Open Responses), so a rebuilt request does not send it. OpenCode 2 sends the error as JSON text, so its failed outputs report nothing. |
 | `agentimport/usage-detail` | kept | Cache writes, folded into input, and the cost are `opencode:usage`. |
 | `opencode/attachment-mime` | dropped | An OpenCode 2 attachment of a type it does not send. |
 | `opencode/attachment-repeated` | lossy | An image attached twice under one mention, sent once. |

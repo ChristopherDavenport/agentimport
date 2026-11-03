@@ -129,7 +129,8 @@ type Finding struct {
 ```
 
 - `lossy`: mapped, with a change of meaning or precision. Anthropic
-  usage summed into Responses usage; a tool result's `is_error`.
+  usage summed into Responses usage; a tool result's `is_error`, which
+  is the output's `failed` and reaches no request.
 - `kept`: carried as a namespaced extension. Opaque to other readers,
   but present.
 - `dropped`: not in the output.

@@ -1,7 +1,7 @@
 opencode: 39 records: mapped 32 kept 7 dropped 0 malformed 0
   gap      agentimport/reasoning-provider                    1  the reasoning's signature or encrypted content is anthropic's, which encrypted_content does not say; the item entry carries opencode:provider
-  gap      agentimport/tool-error                            4  a function_call_output has no error flag; the item entry carries opencode:is_error
   dropped  opencode/system-prompt                            1  OpenCode builds the system prompt and the tool list for each request and does not store them; the settings carry the model alone
+  lossy    agentimport/tool-error                            4  the call's error, which OpenCode sends as an error result, is the output's failed; function_call_output has no error flag a request carries
   lossy    opencode/call-unfinished                          2  the call was pending when the message ended; OpenCode sends "[Tool execution was interrupted]" as its output, which follows a decision, reject by policy
   lossy    opencode/error-turn                               1  the message ended in APIError; OpenCode leaves it out of every later request, so its 1 items are left out by omit
   lossy    opencode/file-url                                 1  a file part's URL is not a data URL; the AI SDK sends it by reference for the provider to fetch, and the session carries the reference

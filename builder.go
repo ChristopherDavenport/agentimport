@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"runtime/debug"
+	"strconv"
 	"time"
 
 	"github.com/ChristopherDavenport/agentsession"
@@ -17,6 +18,23 @@ const Module = "github.com/ChristopherDavenport/agentimport"
 // imported from. The format defines no import provenance, so it is a
 // namespaced member.
 const SourceMember = "agentimport:source"
+
+// ExitCodeMember is the member an item entry carries for the exit status
+// a source records of a command, structured or in a fixed wrapper of
+// the harness's: the tool's own detail, which RFC 0001 does not define.
+// A converter never infers failed from it; a command may exit nonzero
+// without failing. It is kept under Slim, as it says how the command
+// ended, not what the model was sent.
+const ExitCodeMember = "agentimport:exit_code"
+
+// SetExitCode sets [ExitCodeMember] on e.
+func SetExitCode(e agentsession.Entry, code int64) {
+	base := e.Base()
+	if base.Unknown == nil {
+		base.Unknown = map[string]json.RawMessage{}
+	}
+	base.Unknown[ExitCodeMember] = json.RawMessage(strconv.FormatInt(code, 10))
+}
 
 // Source is the value of [SourceMember].
 type Source struct {

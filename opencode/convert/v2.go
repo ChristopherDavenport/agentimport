@@ -154,7 +154,12 @@ func (w *v2walk) row(r *opencode.Row2) error {
 			return sc.custom(ts, r.Unit, "a background shell command", map[string]any{"id": r.ID, "type": r.Type, "data": json.RawMessage(r.Raw)})
 		}
 		text := "The following shell command was executed by the user:\n\nCommand:\n" + d.Command + "\n\nOutput:\n" + opencode.ShellOutput(d.Output)
-		return w.item(r, agentsession.NewItemEntry(userText(text)), ts, "command", "output")
+		e := agentsession.NewItemEntry(userText(text))
+		if n, ok := exitCode(d.Exit); ok {
+			agentimport.SetExitCode(e, n)
+			sc.addf(agentimport.Kept, "agentimport/exit-code", r.Unit, "the command's exit code is %s", agentimport.ExitCodeMember)
+		}
+		return w.item(r, e, ts, "command", "output")
 	case opencode.TypeAssistant:
 		return w.assistant(r, ts)
 	case opencode.TypeCompaction:
@@ -662,12 +667,8 @@ func (w *v2walk) output(r *opencode.Row2, c *opencode.Content2, st *opencode.Too
 	out := agentsession.NewItemEntry(&openresponses.FunctionCallOutput{CallID: callID, Output: data})
 	out.Timestamp = ts
 	out.Parents = refs
-	if isError {
-		if err := sc.b.Member(out, "is_error", true); err != nil {
-			return err
-		}
-		sc.addf(agentimport.Gap, "agentimport/tool-error", r.Unit, "a function_call_output has no error flag; OpenCode 2 sends the error as JSON text, and the item entry carries %s:is_error", Source)
-	}
+	// OpenCode 2 sends the error as JSON text, which the output holds.
+	out.Failed = isError
 	if _, err := sc.append(out); err != nil {
 		return err
 	}
@@ -835,4 +836,17 @@ func (sc *sconv) queued() error {
 		}
 	}
 	return nil
+}
+
+// exitCode reads an exit code: an integer, which null or any other
+// value is not.
+func exitCode(raw json.RawMessage) (int64, bool) {
+	var n json.Number
+	d := json.NewDecoder(bytes.NewReader(raw))
+	d.UseNumber()
+	if len(raw) == 0 || d.Decode(&n) != nil {
+		return 0, false
+	}
+	v, err := n.Int64()
+	return v, err == nil
 }

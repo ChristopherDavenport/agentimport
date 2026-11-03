@@ -522,10 +522,8 @@ func (c *converter) output(l *claudecode.Line, b *claudecode.ContentBlock, callI
 	}
 	e := itemEntry(out)
 	if b.IsError {
-		if err := c.b.Member(e, "is_error", true); err != nil {
-			return nil, err
-		}
-		c.addf(agentimport.Gap, "agentimport/tool-error", l, "is_error is the member %s:is_error; function_call_output has no error flag", Source)
+		e.Failed = true
+		c.addf(agentimport.Lossy, "agentimport/tool-error", l, "is_error, which the model was sent, is the output's failed; function_call_output has no error flag a request carries")
 	}
 	if err := c.blockMembers(e, l, b); err != nil {
 		return nil, err

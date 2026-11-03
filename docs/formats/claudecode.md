@@ -117,7 +117,7 @@ the parent's response that spawned it.
 | assistant `tool_use` block | `item`, `function_call`, input re-encoded as `arguments` | see arguments below |
 | other assistant blocks | `item`, `anthropic.<type>` carrying `block` | the openresponses Anthropic provider's shape |
 | a response's lines | `response` after its items: `response_id` the message id, `model` the one that answered, `status` from the stop reason, `usage` | native usage in `claudecode:usage`, `requestId` in `claudecode:request_id`, stop reason in `claudecode:stop_reason` |
-| `tool_result` | `item`, `function_call_output`, after the response, in call order | images as `input_image` data URLs; sidecar in `claudecode:tool_use_result` |
+| `tool_result` | `item`, `function_call_output`, after the response, in call order; `is_error` the entry's `failed` | images as `input_image` data URLs; sidecar in `claudecode:tool_use_result` |
 | refused call (`toolDenialKind` other than `interrupted`, or `permissionDecision.decision: reject`) | `decision` `reject` before the output: `by` `human` (the user), `agent` (the auto-mode classifier) or `policy` (a rule), `reason` the output's text | |
 | approved call (`permissionDecision.decision: accept`) | kept in `claudecode:line` | a `proceed` the RFC asks a writer not to write without a hold or rewritten arguments |
 | `stop_reason: refusal` | a `refusal` part in the last text message, or a message of its own, with `stop_details.explanation` or "The request was refused (category)." | as `providers/anthropic` does |
@@ -191,7 +191,7 @@ the codes marked "kept, or dropped" are dropped instead.
 | --- | --- | --- |
 | `agentimport/provenance` | kept | Once per session: the import is recorded in the header member `agentimport:source`. |
 | `agentimport/reasoning-provider` | gap | A thinking signature is in `encrypted_content`, which says nothing of the provider that can replay it; the entry carries `claudecode:provider`. |
-| `agentimport/tool-error` | gap | A tool result had `is_error`; `function_call_output` has no error flag, so it is `claudecode:is_error`. |
+| `agentimport/tool-error` | lossy | A tool result had `is_error`, which the model was sent; the output's entry is `failed`, and `function_call_output` has no error flag a request carries (Open Responses), so a rebuilt request does not send it. |
 | `agentimport/usage-detail` | kept | A response's usage has members Responses usage lacks; they are in `claudecode:usage`. |
 | `agentimport/vcs-branch` | gap | The git branch is the vcs member `claudecode:branch`; the format's vcs records a revision, not a branch. |
 | `claudecode/extension-part` | kept | A user or tool-result block with no Open Responses input part (`tool_reference`, a block kept raw) is the extension part `anthropic.<type>` carrying it; see *Extension types*. |

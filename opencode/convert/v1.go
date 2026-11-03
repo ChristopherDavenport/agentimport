@@ -1039,7 +1039,8 @@ func (v *v1walk) output(i int, p *opencode.PartRecord, info *opencode.Message) e
 		}
 	}
 	var data openresponses.FunctionCallOutputData
-	isError, synthesized := false, false
+	// gaveUp: OpenCode cleaned the call up after an abort.
+	isError, synthesized, gaveUp := false, false, false
 	switch st.Status {
 	case opencode.ToolCompleted:
 		var nmedia int
@@ -1053,7 +1054,8 @@ func (v *v1walk) output(i int, p *opencode.PartRecord, info *opencode.Message) e
 	case opencode.ToolError:
 		if out, ok := st.Interrupted(); ok && v.ruleAt(r142, v.msgs[i].Created, p.Unit, "an interrupted call sends the output it had") {
 			data = openresponses.FunctionCallOutputData{Text: out}
-			sc.addf(agentimport.Lossy, "opencode/call-interrupted", p.Unit, "the call was cleaned up after an abort, and OpenCode sends the output it had as the call's output")
+			gaveUp = true
+			sc.addf(agentimport.Lossy, "opencode/call-interrupted", p.Unit, "the call was cleaned up after an abort, and OpenCode sends the output it had as the call's output, marked failed")
 			break
 		}
 		data = openresponses.FunctionCallOutputData{Text: st.Error}
@@ -1086,12 +1088,21 @@ func (v *v1walk) output(i int, p *opencode.PartRecord, info *opencode.Message) e
 	}
 	out := v.itemEntry(&openresponses.FunctionCallOutput{CallID: cc.id, Output: data}, ts)
 	out.Parents = refs
-	if isError {
-		if err := sc.b.Member(out, "is_error", true); err != nil {
-			return err
+	out.Failed = isError || gaveUp
+	if pt.Tool == "bash" {
+		var m struct {
+			Exit json.RawMessage `json:"exit"`
 		}
+		if json.Unmarshal(st.Metadata, &m) == nil {
+			if n, ok := exitCode(m.Exit); ok {
+				agentimport.SetExitCode(out, n)
+				sc.addf(agentimport.Kept, "agentimport/exit-code", p.Unit, "the command's exit code, from the tool's metadata, is %s; failed comes from the call's status alone", agentimport.ExitCodeMember)
+			}
+		}
+	}
+	if isError {
 		if !synthesized {
-			sc.addf(agentimport.Gap, "agentimport/tool-error", p.Unit, "a function_call_output has no error flag; the item entry carries %s:is_error", Source)
+			sc.addf(agentimport.Lossy, "agentimport/tool-error", p.Unit, "the call's error, which OpenCode sends as an error result, is the output's failed; function_call_output has no error flag a request carries")
 		}
 	}
 	if synthesized {
