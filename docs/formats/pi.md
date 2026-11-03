@@ -221,6 +221,16 @@ place as an update, depending on whether the provider accepts system
 messages mid-conversation. The conversion writes the folded form, a
 config delta, and reports the difference.
 
+## Instruction layers
+
+pi composes its system prompt from contents and named sections, which
+the session holds as instruction parts `content/<n>` and
+`section/<name>`. An extension names its sections as it likes, and
+none of pi's names says a part is an instruction file, the skill
+catalogue or memory, so no part carries a well-known `source`; pi sends
+no instruction layer as a message of its own, so no item carries
+`instructions_part`.
+
 ## Identity
 
 The native members this converter carries into the session that

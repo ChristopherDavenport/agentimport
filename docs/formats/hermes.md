@@ -445,6 +445,15 @@ finding:
   'tool'`, which no call names), is converted after its parent with
   `parent_session` and no link.
 
+## Instruction layers
+
+Hermes stores the session's system prompt, or its hash, whole, the
+memory and context files inside it with nothing marking their bounds,
+and strips its memory blocks from what it sends as `api_content`
+before a request; no layer reaches the messages as a message of its
+own, so no item carries `instructions_part`, and the instructions are
+not split into parts.
+
 ## Identity
 
 The native members this converter carries into the session that

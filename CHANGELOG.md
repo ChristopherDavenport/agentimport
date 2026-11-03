@@ -38,7 +38,8 @@ versions may break the API.
   (`ItemEntry.InstructionsLayers`); one holding a file of an unknown
   type names none and is reported (`claudecode/instructions-layers`).
   Codex's AGENTS.md instructions message names `agentsmd` with the
-  directory Codex names, and its skills catalogue `agentskill`.
+  directory Codex names, and its skills catalogue `agentskill`. Each
+  other source's format page says why it has no layer to name.
 
 - Added: skill reads recorded as agentskill records them, a `custom`
   entry `agentskill:read` (`agentimport.SkillReadNS`,

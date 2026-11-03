@@ -330,6 +330,14 @@ deleted requests' usage, and are custom entries. Checkpoint
 repositories are not read; the UI records naming their commits are
 kept.
 
+## Instruction layers
+
+Cline builds its system prompt, `.clinerules` and the custom
+instructions in it, for each request and does not store it, so the
+session holds no instructions from it; no layer reaches the log as a
+message of its own. So no item carries `instructions_part`, and there
+is no instruction part to name.
+
 ## Identity
 
 The native members this converter carries into the session that

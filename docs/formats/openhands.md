@@ -362,6 +362,15 @@ holds too is written as a custom entry's `copied_usage`, which a reader
 does not count, and when the source cannot be read every such call is,
 reported as a guess. Without `meta.json` a fork is not recognised.
 
+## Instruction layers
+
+OpenHands' system prompt event holds the prompt as one text, the
+repository's instructions inside it, and the knowledge a message
+activates is appended to that user message's extended content, beside
+the person's text, which a skill read records (`agentskill:read`). No
+layer reaches the events as a message of its own, so no item carries
+`instructions_part`, and the instructions are not split into parts.
+
 ## Identity
 
 The native members this converter carries into the session that

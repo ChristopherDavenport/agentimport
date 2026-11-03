@@ -302,6 +302,14 @@ compaction's checkpoint): the first config is the agent's model and
 tools, and a step's model a config delta. An image the exporter spilled
 to `images/` is read back as a data URL.
 
+## Instruction layers
+
+ATIF records no instruction layer: a document's system steps are text.
+A document agentsession's exporter wrote carries an item's
+`instructions_part` under `extra.agentsession`, which the rebuild, and
+the mapping from steps (`atif/meaning-restored`), put back as written;
+any other producer's document names none.
+
 ## Identity
 
 The native members this converter carries into the session that

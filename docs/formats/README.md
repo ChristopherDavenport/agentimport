@@ -84,15 +84,12 @@ row's `skills`), Codex (a `<skill>` part) and OpenHands
 
 An item a harness composed from an instruction layer and sent as a
 message names the layer in `instructions_part` with RFC 0001's
-well-known `source` (`agentsmd`, `agentskill`, `agentmemory`). Claude
-Code (`nested_memory`, one-file `instructions` and `skill_listing`
-attachments) and Codex (the AGENTS.md instructions message and the
-skills catalogue) send layers as messages of their own. The other
-sources put their instruction files in the system prompt (pi, Cline,
-the Cline SDK, Hermes), or in a message that also holds the person's
-text (OpenHands' activated knowledge in a user message's extended
-content), which names no single layer; their items carry none. A
-message composed from several layers names each, in the order the
-message holds them (format 0.18's list form), and carries in the
-item's `trust` whatever trust the source records of a layer (none of
-the sources records any).
+well-known `source` (`agentsmd`, `agentskill`, `agentmemory`); a message
+of several layers names each, in the order it holds them (format 0.18's
+list), and the item's `trust` carries any trust the source records of a
+layer (none does). Claude Code (`nested_memory`, `instructions` and
+`skill_listing` attachments) and Codex (the AGENTS.md instructions
+message and the skills catalogue) send layers as messages of their
+own, and their items name them. Every other source's page says, under
+Instruction layers, why it has none to name: the layers are inside a
+system prompt stored whole or not at all, or beside a person's text.

@@ -395,6 +395,15 @@ its creation time with it, so in such a session the messages created
 before the session are the copies: their usage is in
 `opencode:copied_usage` (`opencode/fork-usage`).
 
+## Instruction layers
+
+OpenCode builds the system prompt, its AGENTS.md files among it, for
+each request and does not store it (`opencode/system-prompt`). An
+OpenCode 2 `system` row saying the instructions changed carries the
+new text and a description, not the file, and `agentsmd` asks for the
+file in `id`, so its item carries no `instructions_part`; a user row's
+skills are recorded as skill reads (`agentskill:read`).
+
 ## Identity
 
 The native members this converter carries into the session that

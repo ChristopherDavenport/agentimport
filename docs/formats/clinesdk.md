@@ -301,6 +301,14 @@ child reached twice is converted once.
   session nothing was written in after the copy is the task's alone and
   is not converted.
 
+## Instruction layers
+
+The Cline SDK stores the system prompt it sent as one text, its rules
+and instructions inside it with nothing that marks where one ends;
+the session holds it as the instructions, and no part can be named by
+a well-known `source`. No layer reaches the history as a message of its
+own, so no item carries `instructions_part`.
+
 ## Identity
 
 The native members this converter carries into the session that
