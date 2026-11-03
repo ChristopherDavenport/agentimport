@@ -42,6 +42,11 @@ type Options struct {
 	// agent server's state updates, token IDs, completion logs and
 	// stream fragments. Each drop is still reported.
 	Slim bool
+	// Derive writes the entries the module's derivation rules infer
+	// from the converted path, each marked agentimport:derived: what a
+	// shell call published and the revision a commit printed
+	// (docs/plans/agentimport.md).
+	Derive bool
 	// Location is the zone of OpenHands' timestamps, which are local
 	// time written with no zone; nil reads them as UTC. Either is
 	// reported.
@@ -96,6 +101,12 @@ func conversationReal(path string) string {
 // ConvertFile reads the conversation whose directory, or a file in it,
 // path names, and converts it with its sub-agents.
 func ConvertFile(path string, opts Options) (*agentimport.Result, error) {
+	res, err := convertFileReport(path, opts)
+	res.ScrubIdentity()
+	return res, err
+}
+
+func convertFileReport(path string, opts Options) (*agentimport.Result, error) {
 	c, err := openhands.ReadConversation(path)
 	if err != nil {
 		return nil, err
@@ -109,6 +120,12 @@ func ConvertFile(path string, opts Options) (*agentimport.Result, error) {
 // conversation's failure fails the conversion: a sub-agent that cannot
 // be read or converted is a finding.
 func Convert(c *openhands.Conversation, opts Options) (*agentimport.Result, error) {
+	res, err := convertReport(c, opts)
+	res.ScrubIdentity()
+	return res, err
+}
+
+func convertReport(c *openhands.Conversation, opts Options) (*agentimport.Result, error) {
 	if c == nil {
 		return nil, errors.New("openhands: no conversation")
 	}

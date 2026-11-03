@@ -12,7 +12,7 @@ import (
 	"github.com/ChristopherDavenport/agentsession/jsonl"
 )
 
-const convertUsage = `usage: agentimport convert -o <store> [-from auto|claudecode|pi|codex|atif|cline|clinesdk|openhands|opencode|hermes] [-strict] [-slim] [-force] [-report text|json] <file|dir>...
+const convertUsage = `usage: agentimport convert -o <store> [-from auto|claudecode|pi|codex|atif|cline|clinesdk|openhands|opencode|hermes] [-strict [-accept code,...]] [-slim] [-force] [-report text|json] <file|dir>...
 
 Converts each session and writes every session the conversion makes,
 the main session and its subsessions, into the agentsession jsonl store
@@ -22,8 +22,9 @@ A session already in the store is kept as it is, and listed, unless
 all the same, so converting a tree again adds what is new.
 Prints the report: in full for one input, and a line per input with
 the reports added up per source for several. Exits 1 when a conversion
-or a write failed, or with -strict when a report holds a dropped or gap
-finding.
+or a write failed, or with -strict when a report holds a dropped
+finding, or a gap docs/incompatibilities.md does not list, whose code
+-accept does not name.
 `
 
 // written is one session written to the store.
@@ -89,9 +90,9 @@ func convertCmd(args []string, stdout, stderr io.Writer) int {
 	defer st.Close()
 
 	ctx := context.Background()
-	t := newTotals()
+	t := newTotals(c.accept)
 	var results []convertJSON
-	newRunner(c.slim, &skip).each(ins, func(o outcome) {
+	newRunner(c.slim, &skip).withDerive(c.derive).each(ins, func(o outcome) {
 		var ws []written
 		var kept []string
 		if o.err == nil {
@@ -207,10 +208,18 @@ func write(ctx context.Context, st *jsonl.Store, s *agentsession.Session, force 
 		return written{}, err
 	}
 	for _, e := range s.Entries() {
-		if e.Base().Parent == "" {
-			// A root: the store's session appends under its leaf
-			// otherwise, and a converted session may hold several.
+		// The store's session appends under its leaf, and writes a leaf
+		// label ahead of an entry that leaves the branch the leaf is on,
+		// so the head would not move. A converted session's entries come
+		// in file order, branches included, and its own leaf labels say
+		// where its head is; so each append starts from its parent, or
+		// from the universal root for a root, as a converted session may
+		// hold several.
+		if p := e.Base().Parent; p == "" {
 			sess.ResetLeaf()
+		} else if err := sess.Branch(p); err != nil {
+			st.Delete(ctx, h.ID)
+			return written{}, fmt.Errorf("session %s: %w", h.ID, err)
 		}
 		if _, err := st.Append(ctx, h.ID, e); err != nil {
 			// A session cut short would block the next run; it goes.

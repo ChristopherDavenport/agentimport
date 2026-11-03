@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/ChristopherDavenport/agentimport"
@@ -152,6 +155,7 @@ func (c *converter) item(l *codex.Line) error {
 		c.rawReasoning = true
 	}
 	e := agentsession.NewItemEntry(item)
+	e.InstructionsPart = c.layer(item, l)
 	if !output && it.Type == codex.ItemMessage && it.Role == "assistant" {
 		if err := c.b.Member(e, "input", true); err != nil {
 			return err
@@ -179,6 +183,25 @@ func (c *converter) item(l *codex.Line) error {
 	if err := c.emit(e, l); err != nil {
 		return err
 	}
+	if err := c.skillReads(item, e, l); err != nil {
+		return err
+	}
+	if fo, ok := item.(*openresponses.FunctionCallOutput); ok && c.opts.Derive && shellTools[c.toolNames[fo.CallID]] {
+		ds, err := agentimport.DerivedEntries(fo.CallID, agentimport.ShellCommand(c.toolArgs[fo.CallID]), fo.Output.String(), c.st.env, c.st.cwd)
+		if err != nil {
+			return err
+		}
+		for _, d := range ds {
+			d.Entry.Base().Timestamp = e.Timestamp
+			if err := c.emit(d.Entry, l); err != nil {
+				return err
+			}
+			if env, ok := d.Entry.(*agentsession.EnvEntry); ok {
+				c.st.env = env
+			}
+			c.addf(agentimport.Kept, d.Code, l, "what the shell call did, as its output says, is a derived entry carrying agentimport:derived and its call_id")
+		}
+	}
 	c.countSpawn(l, it)
 	if answerTypes[it.Type] && !output && it.CallID != "" {
 		if err := c.linkSpawn(l, it); err != nil {
@@ -197,6 +220,10 @@ func (c *converter) itemMembers(e *agentsession.ItemEntry, l *codex.Line, item o
 	}
 	if fo, ok := item.(*openresponses.FunctionCallOutput); ok {
 		c.checkTruncation(l, fo.Output.String(), hm)
+		if n, ok := wrapperExitCode(fo.Output.String()); ok && shellTools[c.toolNames[fo.CallID]] {
+			agentimport.SetExitCode(e, n)
+			c.addf(agentimport.Kept, "codex/exit-code", l, "the command's exit code, from the fixed wrapper Codex puts around its output, is %s; Codex records no failure of a call, and none is inferred", agentimport.ExitCodeMember)
+		}
 	}
 	if err := c.extraMembers(e, l, extra); err != nil {
 		return err
@@ -313,6 +340,18 @@ func (c *converter) convertItem(l *codex.Line, raw json.RawMessage, it *codex.It
 				"call id %q is held by another call of the session, is empty, or has characters providers refuse; it is %q, and the native one is %s:call_id", it.CallID, id, Source)
 		}
 		c.st.addCall(it.CallID, id)
+		if c.toolNames == nil {
+			c.toolNames = map[string]string{}
+		}
+		c.toolNames[id] = it.Name
+		if c.toolArgs == nil {
+			c.toolArgs = map[string]string{}
+		}
+		var args string
+		if json.Unmarshal(it.Arguments, &args) != nil {
+			args = string(it.Arguments)
+		}
+		c.toolArgs[id] = args
 	case answerTypes[it.Type] && it.CallID != "":
 		if rec, ok := c.st.calls[it.CallID]; ok {
 			id = rec
@@ -587,7 +626,7 @@ func (c *converter) responseEntry(p *pending, respID string) (*agentsession.Resp
 				if err := c.b.Member(e, "usage", p.usage); err != nil {
 					return nil, nil, err
 				}
-				c.addf(agentimport.Gap, "agentimport/usage-detail", src,
+				c.addf(agentimport.Kept, "agentimport/usage-detail", src,
 					"usage has members Responses usage lacks (cache writes); the native usage is %s:usage", Source)
 			}
 		}
@@ -913,6 +952,21 @@ func (c *converter) turnContext(l *codex.Line) error {
 	if cwdMoved {
 		c.st.cwd = tc.CWD
 		env := agentsession.NewEnvEntry(tc.CWD)
+		c.st.env = env
+		// An env entry is a whole snapshot, so the git state still in
+		// force is repeated. Codex records it once, for the session's
+		// directory: inside it the same repository is a guess a nested
+		// one would make wrong; outside it the state is unknown.
+		if c.metaVCS != nil {
+			if under(c.metaCWD, tc.CWD) {
+				env.VCS = cloneVCS(c.metaVCS)
+				c.addf(agentimport.Lossy, "codex/vcs-carried", l,
+					"the working directory moved inside the session's; the session meta's git state is repeated, which a nested repository would make wrong")
+			} else {
+				c.addf(agentimport.Lossy, "codex/vcs-after-cwd", l,
+					"the working directory moved outside the session's; Codex records no git state for it, so the env entry has no vcs")
+			}
+		}
 		if !changed {
 			if err := c.lineMembers(env, l); err != nil {
 				return err
@@ -1098,5 +1152,150 @@ func (c *converter) customMembers(e agentsession.Entry, l *codex.Line, it *codex
 	}
 	c.addf(agentimport.Kept, "codex/custom-tool-call", l,
 		"a Responses %s is a %s, marked %s:tool_kind \"custom\"; its free-form input is the arguments {\"input\": …}", it.Type, map[bool]string{true: "function call", false: "function call output"}[it.Type == codex.ItemCustomToolCall], Source)
+	return nil
+}
+
+// under reports whether dir is base or a directory below it, with
+// either path separator, as Codex records paths of the host it ran on.
+func under(base, dir string) bool {
+	base = strings.TrimRight(base, `/\`)
+	if base == "" {
+		return false
+	}
+	if dir == base {
+		return true
+	}
+	rest, ok := strings.CutPrefix(dir, base)
+	return ok && (strings.HasPrefix(rest, "/") || strings.HasPrefix(rest, `\`))
+}
+
+// cloneVCS copies a vcs, its members included.
+func cloneVCS(v *agentsession.VCS) *agentsession.VCS {
+	out := *v
+	out.Unknown = maps.Clone(v.Unknown)
+	return &out
+}
+
+// shellTools are the tools whose output Codex wraps in an exit code
+// header: the shell tools and unified exec.
+var shellTools = map[string]bool{"shell": true, "shell_command": true, "local_shell": true, "container.exec": true, "exec_command": true, "write_stdin": true}
+
+// wrapperExitCode reads a command's exit code from the fixed wrapper
+// Codex puts around its output for the model: the shell tools'
+// "Exit code: N" over "Wall time: ...", unified exec's "Process exited
+// with code N" among its header lines, before "Output:", and the older
+// structured {"output": ..., "metadata": {"exit_code": N}}.
+func wrapperExitCode(text string) (int64, bool) {
+	if rest, ok := strings.CutPrefix(text, "Exit code: "); ok {
+		code, after, _ := strings.Cut(rest, "\n")
+		if strings.HasPrefix(after, "Wall time: ") {
+			n, err := strconv.ParseInt(code, 10, 32)
+			return n, err == nil
+		}
+		return 0, false
+	}
+	if strings.HasPrefix(text, "Chunk ID: ") || strings.HasPrefix(text, "Wall time: ") {
+		header, _, ok := strings.Cut(text, "\nOutput:")
+		if !ok {
+			return 0, false
+		}
+		for _, line := range strings.Split(header, "\n") {
+			if code, ok := strings.CutPrefix(line, "Process exited with code "); ok {
+				n, err := strconv.ParseInt(code, 10, 32)
+				return n, err == nil
+			}
+		}
+		return 0, false
+	}
+	if strings.HasPrefix(text, "{") {
+		var w struct {
+			Output   *string `json:"output"`
+			Metadata *struct {
+				ExitCode *json.Number `json:"exit_code"`
+			} `json:"metadata"`
+		}
+		d := json.NewDecoder(strings.NewReader(text))
+		d.UseNumber()
+		if d.Decode(&w) != nil || w.Output == nil || w.Metadata == nil || w.Metadata.ExitCode == nil {
+			return 0, false
+		}
+		n, err := w.Metadata.ExitCode.Int64()
+		return n, err == nil
+	}
+	return 0, false
+}
+
+var (
+	skillName = regexp.MustCompile(`(?s)^\s*<skill>\s*<name>(.*?)</name>`)
+	skillPath = regexp.MustCompile(`(?s)</name>\s*<path>(.*?)</path>`)
+)
+
+// skillReads writes the agentskill:read record of each skill a user
+// message carried, after it: Codex's skills extension sends a selected
+// skill's instructions as a <skill> part, <name> and <path> first
+// (ext/skills/src/fragments.rs), with no call.
+func (c *converter) skillReads(item openresponses.Item, e *agentsession.ItemEntry, l *codex.Line) error {
+	m, ok := item.(*openresponses.Message)
+	if !ok || m.Role != openresponses.RoleUser {
+		return nil
+	}
+	for _, p := range m.Content {
+		t, ok := p.(*openresponses.InputText)
+		if !ok || !matchesMarked("<skill>", "</skill>", t.Text) {
+			continue
+		}
+		name := skillName.FindStringSubmatch(t.Text)
+		if name == nil {
+			continue
+		}
+		r := agentimport.SkillRead{Name: name[1]}
+		if path := skillPath.FindStringSubmatch(t.Text); path != nil {
+			r.Location = path[1]
+		}
+		r.Served(t.Text)
+		rec, err := r.Entry("")
+		if err != nil {
+			return err
+		}
+		rec.Timestamp = e.Timestamp
+		if err := c.emit(rec, l); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// agentsMDPrefix opens the user message Codex composes from the
+// project's AGENTS.md files (UserInstructions), naming the directory
+// they are for.
+const agentsMDPrefix = "# AGENTS.md instructions for "
+
+// layer names the instruction layer a message Codex composed from one
+// was sent as, by RFC 0001's well-known sources: the AGENTS.md
+// instructions under agentsmd, their id the directory Codex names, and
+// the skills catalogue (<skills_instructions>) under agentskill. A
+// message holding anything else names none.
+func (c *converter) layer(item openresponses.Item, l *codex.Line) *agentsession.LayerRef {
+	m, ok := item.(*openresponses.Message)
+	if !ok || len(m.Content) != 1 {
+		return nil
+	}
+	t, ok := m.Content[0].(*openresponses.InputText)
+	if !ok {
+		return nil
+	}
+	text := strings.TrimLeft(t.Text, " \t\n\r")
+	switch {
+	case m.Role == openresponses.RoleUser && strings.HasPrefix(text, agentsMDPrefix) && matchesMarked(agentsMDPrefix, "</INSTRUCTIONS>", text):
+		dir, _, _ := strings.Cut(strings.TrimPrefix(text, agentsMDPrefix), "\n")
+		dir = strings.TrimSpace(dir)
+		if dir == "" {
+			return nil
+		}
+		c.report.Identity(c.file, l.No, "AGENTS.md instructions directory", "the message's instructions_part id")
+		return &agentsession.LayerRef{ID: dir, Source: agentsession.LayerAgentsMD}
+	case m.Role == openresponses.RoleDeveloper && matchesMarked("<skills_instructions>", "</skills_instructions>", text):
+		return &agentsession.LayerRef{Source: agentsession.LayerAgentSkill}
+	}
 	return nil
 }

@@ -218,6 +218,13 @@ func (c *conv) appendEntry(e agentsession.Entry) (string, error) {
 		return "", err
 	}
 	c.tail = id
+	// Derivation writes after a shell call's output what its output
+	// says the call did, when asked for; the session goes on from there.
+	if tail, err := c.b.DeriveAfter(id, e); err != nil {
+		return "", err
+	} else {
+		c.tail = tail
+	}
 	if base.Timestamp.After(c.last) {
 		c.last = base.Timestamp
 	}
@@ -230,7 +237,14 @@ func (c *conv) run() error {
 	if err != nil {
 		return err
 	}
+	c.report.HeaderIdentity("", h, "task id", "history item cwd")
+	if c.fam.opts.Derive {
+		if err := agentimport.MarkDerived(&h); err != nil {
+			return err
+		}
+	}
 	c.b = agentimport.NewBuilder(h, Source, c.report)
+	c.b.Derive, c.b.ShellTools = c.fam.opts.Derive, shellTools
 	c.b.File = strings.TrimSuffix(c.prefix, "/")
 	c.files()
 	if err := c.root(); err != nil {
@@ -413,7 +427,7 @@ func (c *conv) header() (agentsession.Header, error) {
 	if err := agentimport.SetSource(&h, src); err != nil {
 		return h, err
 	}
-	c.addf(agentimport.Gap, "agentimport/provenance", "", 0, "the import is recorded in the header member %s", agentimport.SourceMember)
+	c.addf(agentimport.Kept, "agentimport/provenance", "", 0, "the import is recorded in the header member %s", agentimport.SourceMember)
 	if c.tgt.derived != "" {
 		c.addf(agentimport.Lossy, "cline/session-id", "", 0, "%s", c.tgt.derived)
 	}
@@ -983,3 +997,6 @@ func (c *conv) unanswered() {
 			"the last response's calls %s have no result: the task ended before they were answered", strings.Join(names, ", "))
 	}
 }
+
+// shellTools are the shell tools whose calls the derivation rules read.
+var shellTools = map[string]bool{"execute_command": true}

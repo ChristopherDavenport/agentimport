@@ -12,6 +12,7 @@ import (
 
 	"github.com/ChristopherDavenport/agentimport"
 	"github.com/ChristopherDavenport/agentimport/internal/doccheck"
+	"github.com/ChristopherDavenport/agentimport/internal/testfix"
 	"github.com/ChristopherDavenport/agentimport/pi"
 	"github.com/ChristopherDavenport/agentsession"
 	"github.com/ChristopherDavenport/openresponses"
@@ -358,6 +359,71 @@ func TestShortHash(t *testing.T) {
 	} {
 		if got := shortHash(in); got != want {
 			t.Errorf("shortHash(%q) = %s, want %s", in, got, want)
+		}
+	}
+}
+
+// TestDerive: with derivation, a shell call whose output prints the
+// commit it made is followed by a derived env entry carrying the
+// revision, marked agentimport:derived with the call's call_id, and the
+// header names the rules; without it, no derived entry is written.
+func TestDerive(t *testing.T) {
+	for _, derive := range []bool{false, true} {
+		res := func() *agentimport.Result {
+			dir := testfix.Variant(t, "testdata/anthropic", `"command":"ls"`, `"command":"git commit -m wip"`, `"text":"logo.png\nmain.go"`, `"text":"[main abc1234] wip\n 1 file changed"`)
+			matches, _ := filepath.Glob(filepath.Join(dir, "*.jsonl"))
+			r, err := ConvertFile(matches[0], Options{Derive: derive})
+			if err != nil {
+				t.Fatal(err)
+			}
+			return r
+		}()
+		n := 0
+		for _, s := range res.Sessions {
+			for _, e := range s.Entries() {
+				env, ok := e.(*agentsession.EnvEntry)
+				if !ok || env.Unknown[agentimport.DerivedMember] == nil {
+					continue
+				}
+				n++
+				if env.VCS == nil || env.VCS.Revision != "abc1234" || !strings.Contains(string(env.Unknown[agentimport.DerivedMember]), `"commit-revision"`) {
+					t.Errorf("derived env %+v %s", env.VCS, env.Unknown[agentimport.DerivedMember])
+				}
+			}
+		}
+		if want := map[bool]int{false: 0, true: 1}[derive]; n != want {
+			t.Errorf("derive %v: %d derived env entries, want %d", derive, n, want)
+		}
+		if derive && !strings.Contains(string(res.Sessions[0].Header().Extra[agentimport.SourceMember]), `"derived"`) {
+			t.Errorf("the header does not name the rules: %s", res.Sessions[0].Header().Extra[agentimport.SourceMember])
+		}
+	}
+}
+
+// TestInstructionLayers: pi renders the context files (AGENTS.md and the
+// like) in its project_context section and the skill catalogue in its
+// skills section (core/system-prompt.js, buildSystemPromptSections), so
+// those instruction parts carry the well-known sources; the others none.
+func TestInstructionLayers(t *testing.T) {
+	dir := testfix.Variant(t, "testdata/anthropic", `"cwd":"Working directory: /work/demo"`,
+		`"project_context":"<project_context>\nUse tabs.\n</project_context>","skills":"<skills>\n- docs-style\n</skills>","cwd":"Working directory: /work/demo"`)
+	matches, _ := filepath.Glob(filepath.Join(dir, "*.jsonl"))
+	res, err := ConvertFile(matches[0], Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, err := reread(t, res.Sessions[0]).Context()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, p := range ctx.Settings.InstructionsParts {
+		got[p.ID] = p.Source
+	}
+	want := map[string]string{"section/project_context": agentsession.LayerAgentsMD, "section/skills": agentsession.LayerAgentSkill, "section/preamble": "", "section/cwd": ""}
+	for id, src := range want {
+		if s, ok := got[id]; !ok || s != src {
+			t.Errorf("part %s: source %q (present %v), want %q", id, s, ok, src)
 		}
 	}
 }

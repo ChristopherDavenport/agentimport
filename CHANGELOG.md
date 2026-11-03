@@ -7,6 +7,178 @@ versions may break the API.
 
 ## Unreleased
 
+- Added: derivation, opt-in (`-derive`, `Options.Derive` for every
+  source; `Builder.DeriveAfter`). After a shell call whose output prints
+  the commit it made, an `env` entry repeats the one in force, its
+  workspace and `vcs` members included, with the revision git printed
+  and no `dirty` (`agentimport/commit-revision`). A derived entry carries `agentimport:derived`
+  (`agentimport.DerivedMember`) naming its rule and the call it read.
+  The first rule writes what a shell call published, the refs a `git
+  push` reports and the pull request `gh pr create` prints, as an
+  `agentimport:published` custom entry after the call's output with the
+  call's `call_id` (`agentimport/published-refs`); `git push` with
+  `--dry-run` or `-n` publishes nothing. A session derivation ran on
+  names the rules in its header's `agentimport:source` (`derived`),
+  since later entry IDs differ. Without `-derive` the output is as
+  before.
+
+- Added: the leaf label a converter writes when a session resumes at an
+  entry that is not its last, an entry no native line maps to, is
+  reported (`agentimport/leaf-label`), and so is an ATIF continuation's
+  first config, seeded with the settings its predecessor ended with
+  (`atif/continuation-settings`), so the report says what the conversion
+  added. The plan lists every structural entry and its code.
+
+- **Added: Claude Code's instruction layers sent as messages carry RFC
+  0001's `instructions_part` (format 0.17) (breaking: those entries'
+  IDs, and every ID after them, move).** It has the well-known `source`:
+  a `nested_memory` or one-file `instructions` attachment names its
+  file under `agentsmd`, or `agentmemory` for Claude Code's memory, and
+  the skill listing is `agentskill`. A message composed from several
+  files names each, in message order, as format 0.18's list
+  (`ItemEntry.InstructionsLayers`); one holding a file of an unknown
+  type names none and is reported (`claudecode/instructions-layers`).
+  Codex's AGENTS.md instructions message names `agentsmd` with the
+  directory Codex names, and its skills catalogue `agentskill`. pi's
+  `project_context` and `skills` system sections are instruction parts
+  with `source` `agentsmd` and `agentskill`. OpenCode 2's `system` row
+  for changed instruction files names each file under `agentsmd`. Each
+  other source's format page says why it has no layer to name.
+
+- Added: skill reads recorded as agentskill records them, a `custom`
+  entry `agentskill:read` (`agentimport.SkillReadNS`,
+  `agentimport.SkillRead`) with the skill's `name`, and when the log
+  says them its `location`, `bytes` and `sha256` of the text served,
+  and the serving call's `call_id`: Claude Code's `Skill` call and the
+  hidden message carrying the instructions, and OpenCode 2's user-row
+  skills, Codex's `<skill>` parts and OpenHands' `activated_skills`.
+  `docs/formats/README.md` documents the shape relied on.
+
+- Added: identity members in the report. A finding of code
+  `agentimport/identity` (`agentimport.IdentityCode`,
+  `Report.Identity`) names, by its path and never its value, a native
+  member carried into the session that identifies a person, an account
+  or organization, a machine or the native session; `Finding.Path`
+  holds the path and a group's `paths` counts each. Every
+  `docs/formats/<source>.md` has an Identity section listing its
+  members, which a test holds the report to. The Claude Code converter
+  reports its own: `sessionId`, `agentId`, `cwd`, a `credential_org`
+  attachment's `organizationUuid`, a `session_context` attachment's
+  `userEmail`, an `api-request` record's `classifier_context`
+  `user_identity` and `home_dir`, and the paths that become an
+  `instructions_part` id or an `agentskill:read` location. A Claude Code
+  sub-agent is named in findings by its place (`subagents/agent-#<n>`),
+  never its ID. Every other converter reports the native session ID and
+  working directory it carries into the header. No report of any
+  converter names a session by its ID: findings name a session, and a
+  file named for one, by its place (`session #<n>`, `the parent
+  session`; `Result.ScrubIdentity`).
+
+- **Changed: an ATIF document agentsession's exporter wrote with its
+  entries (format 0.17) is rebuilt to the document's own ids
+  (breaking: such an import's entry ids, and a redacted session's
+  header, change).** Each entry is put back together from
+  `extra.agentsession.entries` and its step, its id checked and, as
+  format 0.18 asks, the document's and its step's visible fields held to
+  the hashes the export records, the media put back inline first (a
+  document without them rebuilds no entry to its id); an entry
+  that matches keeps its history members, any other is a new entry,
+  listed (`atif/entry-not-rebuilt`), its history members `atif:<name>`.
+  The header's `redacted` and `redacted_from` are restored exactly when
+  every entry matched over the whole path, which reaches the document's
+  leaf with every step naming an entry (`atif/redaction-not-restored`
+  says why not; a step that names none is `atif/step-not-rebuilt`). Embedded sub-agent trajectories are rebuilt
+  with it, each into the session its own document names. A document
+  that continues in another is still mapped from its steps
+  (`atif/not-rebuilt`),
+  where `failed`, `trust`, `copied_from`, `from_link` and
+  `instructions_part` now come back as core members
+  (`atif/meaning-restored`) and a response's `legacy_id` and
+  `normalised` are `atif:` members, not its own.
+
+- **Changed: a failed call's output carries RFC 0001's `failed` (format
+  0.14), not `<ns>:is_error` (breaking for readers of that member).**
+  Every source maps its error flag (Claude Code's, Cline's and the
+  Cline SDK's `is_error`, pi's `isError`, OpenHands' `is_error` and
+  agent errors, OpenCode's `error` status), and an output the harness
+  wrote for a call it gave up with an error flag or status of its own
+  (the Cline SDK's missing result, OpenHands' interrupted call,
+  OpenCode's interrupted or unfinished call). Classic Cline's `result
+  missing` carries no flag, so it is not marked. `failed` is never inferred from an
+  output's text or an exit status; Codex records no failure, and none
+  is read from its abort texts. `agentimport/tool-error` is no longer a
+  gap: it is `lossy` where the model was sent a flag a request rebuilt
+  from `function_call_output` cannot carry.
+- Added: `agentimport:exit_code` (`agentimport.ExitCodeMember`,
+  `SetExitCode`), a command's exit status where the source structures
+  it (OpenHands' terminal metadata, pi's `bashExecution`, OpenCode's
+  `bash` metadata and OpenCode 2's shell rows; `agentimport/exit-code`)
+  or wraps it in a fixed header around a shell tool's output (Codex's
+  `Exit code:`, `Process exited with code`, and the older structured
+  output, for `shell`, `shell_command`, `local_shell`, `container.exec`,
+  `exec_command` and `write_stdin`; `codex/exit-code`). It
+  is kept under `-slim` and says nothing of `failed`.
+
+- **Changed: Codex `env` entries are whole snapshots, as RFC 0001 0.17
+  reads them (breaking: the IDs of `env` entries after a move inside the
+  session's directory, and every ID after them, move).** A `turn_context` that moves the working directory inside
+  the session's repeats the session meta's `vcs`, reported as a guess
+  (`codex/vcs-carried`, lossy), and one that moves outside it writes
+  none (`codex/vcs-after-cwd`); before, every later `env` dropped the
+  git state. Members of `git` Codex adds are kept as `codex:<name>` vcs
+  members (`codex/git-members`); they were lost.
+
+- **Fixed: an OpenCode 2 user row's skills kept only their text
+  (breaking: the IDs of user rows with skills, and every ID after them,
+  move).** The text is sent; the rest of each element, the skill's name among it, was
+  lost unreported. Each element but its text is now `opencode:skills`
+  on the item (`opencode/members`, dropped under `-slim`), and a skill
+  with no text, which OpenCode does not send, is reported
+  (`opencode/skill-untexted`).
+
+- **Fixed: `-slim` drops a Claude Code attachment that rendered
+  nothing (breaking: a slim conversion's IDs after one move)** into the
+  request (`credential_org`, `deferred_tools_record`), which
+  the model never saw, and reports it `dropped`; it kept each as a
+  custom entry, carrying the account's organization ID into every slim
+  import.
+
+- **Changed: `-strict` fails only on a dropped finding and on a gap
+  `docs/incompatibilities.md` does not list (breaking for scripts that
+  relied on it failing on every gap).** A listed gap is a known shape
+  of the session format and says nothing of one transcript, so every
+  conversion failed `-strict` on `agentimport/provenance` alone.
+  `-accept code,...` names finding codes `-strict` lets through.
+  `agentimport.DocumentedGap` reads the table, embedded in the module.
+- **Changed: `agentimport/provenance` and `agentimport/usage-detail`
+  are `kept` findings, no longer gaps (breaking for readers of the
+  report's kinds).** Both are the converter's or the source's own
+  detail in a member under its namespace, where RFC 0001's core test
+  puts it, and leave `docs/incompatibilities.md`. Under `-slim`, ATIF's
+  usage detail is reported `dropped`.
+
+- **Changed: sessions are written in format 0.18 (breaking: a reader of
+  0.17 refuses them, and some entry IDs move)** (agentsession v0.0.35; first v0.0.34, format 0.17,
+  openresponses v0.0.18; were v0.0.28 and v0.0.15). No entry hash
+  changes but where an item now keeps a member it does not define: an
+  Open Responses item keeps every member as written (openresponses
+  v0.0.17), so Codex's `internal_chat_message_metadata_passthrough`, a
+  message's `encrypted_content` and a call's `namespace` stay in the
+  item instead of `codex:item`, and pi's Responses reasoning items keep
+  their undeclared members, moving those entries' IDs.
+- Fixed: `agentimport convert` wrote a leaf label into a stored session
+  before the first entry of each later branch, as agentsession's store
+  now marks the head when an append leaves its branch; each append now
+  starts from its own parent, so the stored session is the conversion.
+
+- Fixed: `make release` can cut the first release. The release guard
+  refused every tag while no `v*` tag was published; it now takes a
+  plain `vX.Y.Z` of the module path's major version as the first
+  release when origin, read fail-closed, and the local repository hold
+  none. Prereleases and other `v*` tags no longer raise the floor, and
+  the guard refuses them. `scripts/release-guard-test.sh` tests it
+  (`make guard-test`, part of `make check`).
+
 - Added: Hermes Agent (NousResearch/hermes-agent), which keeps every
   session of a profile in SQLite, `~/.hermes/state.db` and
   `~/.hermes/profiles/<name>/state.db`. `hermes` reads its sessions and

@@ -180,6 +180,13 @@ func (sc *sconv) appendEntry(e agentsession.Entry) (string, error) {
 		return "", err
 	}
 	sc.tail = id
+	// Derivation writes after a shell call's output what its output
+	// says the call did, when asked for; the session goes on from there.
+	if tail, err := sc.b.DeriveAfter(id, e); err != nil {
+		return "", err
+	} else {
+		sc.tail = tail
+	}
 	if base.Timestamp.After(sc.last) {
 		sc.last = base.Timestamp
 	}
@@ -203,7 +210,14 @@ func (sc *sconv) run() error {
 	if err != nil {
 		return err
 	}
+	sc.report.HeaderIdentity("", h, "session_id", "cwd")
+	if sc.fam.opts.Derive {
+		if err := agentimport.MarkDerived(&h); err != nil {
+			return err
+		}
+	}
 	sc.b = agentimport.NewBuilder(h, Source, sc.report)
+	sc.b.Derive, sc.b.ShellTools = sc.fam.opts.Derive, shellTools
 	sc.b.File = sc.name()
 	if err := sc.start(); err != nil {
 		return err
@@ -416,7 +430,7 @@ func (sc *sconv) header() (agentsession.Header, error) {
 	if err := agentimport.SetSource(&h, src); err != nil {
 		return h, err
 	}
-	sc.addf(agentimport.Gap, "agentimport/provenance", "", 0, "the import is recorded in the header member %s", agentimport.SourceMember)
+	sc.addf(agentimport.Kept, "agentimport/provenance", "", 0, "the import is recorded in the header member %s", agentimport.SourceMember)
 	if sc.tgt.derived != "" {
 		sc.addf(agentimport.Lossy, "clinesdk/session-id", "", 0, "%s", sc.tgt.derived)
 	}
@@ -775,3 +789,6 @@ func itemEntry(item openresponses.Item, ts time.Time) *agentsession.ItemEntry {
 	e.Timestamp = ts
 	return e
 }
+
+// shellTools are the shell tools whose calls the derivation rules read.
+var shellTools = map[string]bool{"run_commands": true, "execute_command": true}

@@ -70,6 +70,38 @@ func (c *converter) response(r *claudecode.Response, tail string, st *pathState)
 			return "", err
 		}
 		tail = id
+		if call.Use.Name == "Bash" && c.opts.Derive {
+			var in struct {
+				Command string `json:"command"`
+			}
+			_ = json.Unmarshal(call.Use.Input, &in)
+			out, _ := e.Item.(*openresponses.FunctionCallOutput)
+			ds, err := agentimport.DerivedEntries(callID, in.Command, out.Output.String(), c.b.EnvAt(tail), call.Result.CWD)
+			if err != nil {
+				return "", err
+			}
+			for _, d := range ds {
+				d.Entry.Base().Timestamp = e.Timestamp
+				if tail, err = c.b.Append(tail, d.Entry); err != nil {
+					return "", err
+				}
+				c.addf(agentimport.Kept, d.Code, call.Result, "what the Bash call did, as its output says, is a derived entry carrying agentimport:derived and its call_id")
+			}
+		}
+		if call.Use.Name == "Skill" {
+			var in struct {
+				Skill string `json:"skill"`
+			}
+			_ = json.Unmarshal(call.Use.Input, &in)
+			if c.skills == nil {
+				c.skills = map[string]skillCall{}
+			}
+			sc := skillCall{callID: callID, name: in.Skill}
+			c.skills[call.Use.ID] = sc
+			if call.Result.UUID != "" {
+				c.skills[call.Result.UUID] = sc
+			}
+		}
 		if peer != nil {
 			// The output is the CLI's acknowledgement that the agent
 			// started, not the agent's answer: its peer link follows
@@ -481,7 +513,7 @@ func (c *converter) responseEntry(r *claudecode.Response, stop string) (*agentse
 			return nil, err
 		}
 		if !copied {
-			c.addf(agentimport.Gap, "agentimport/usage-detail", last,
+			c.addf(agentimport.Kept, "agentimport/usage-detail", last,
 				"cache writes are folded into input_tokens; the native usage is %s:usage", Source)
 		}
 		if len(usages) > 1 {
@@ -522,10 +554,8 @@ func (c *converter) output(l *claudecode.Line, b *claudecode.ContentBlock, callI
 	}
 	e := itemEntry(out)
 	if b.IsError {
-		if err := c.b.Member(e, "is_error", true); err != nil {
-			return nil, err
-		}
-		c.addf(agentimport.Gap, "agentimport/tool-error", l, "is_error is the member %s:is_error; function_call_output has no error flag", Source)
+		e.Failed = true
+		c.addf(agentimport.Lossy, "agentimport/tool-error", l, "is_error, which the model was sent, is the output's failed; function_call_output has no error flag a request carries")
 	}
 	if err := c.blockMembers(e, l, b); err != nil {
 		return nil, err
@@ -644,7 +674,7 @@ func (c *converter) link(a *claudecode.Agent, call *claudecode.Call, callID, tai
 	if err != nil {
 		return "", nil, err
 	}
-	sessions, leaf, err := c.cv.transcript(a.Transcript, agentFile(a.ID), target{
+	sessions, leaf, err := c.cv.transcript(a.Transcript, c.cv.agentFile(a.ID), target{
 		id: child, parent: c.t.id, spawnedBy: callID, agent: a, parentTr: c.tr,
 	})
 	if err != nil {

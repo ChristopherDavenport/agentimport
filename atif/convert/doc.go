@@ -73,7 +73,35 @@ func (fam *family) one(in docInput, tgt target, report *agentimport.Report) ([]*
 	if err != nil {
 		return nil, "", err
 	}
+	if !in.synthetic {
+		c.report.HeaderIdentity("", h, "session_id", "extra.agentsession.cwd")
+	}
+	if recs := c.entryRecords(); c.exporter && !in.synthetic && len(recs) > 0 {
+		why := c.rebuildBlocked()
+		if why == "" {
+			s, err := c.rebuildEntries(h, recs)
+			if err != nil {
+				return nil, "", fmt.Errorf("%s: %w", displayName(in.name), err)
+			}
+			if s, err = agentimport.Finish(s); err != nil {
+				return nil, "", fmt.Errorf("%s: rebuilt session does not verify: %w", displayName(in.name), err)
+			}
+			children, err := c.rebuildChildren()
+			if err != nil {
+				return nil, "", err
+			}
+			return append([]*agentsession.Session{s}, children...), s.Leaf(), nil
+		}
+		c.addf(agentimport.Lossy, "atif/not-rebuilt", 0,
+			"the document carries the %d entries it was exported from, but %s; it is mapped from its steps, so none of them keeps the document's id", len(recs), why)
+	}
+	if c.fam.opts.Derive {
+		if err := agentimport.MarkDerived(&h); err != nil {
+			return nil, "", err
+		}
+	}
 	c.b = agentimport.NewBuilder(h, Source, report)
+	c.b.Derive, c.b.ShellTools = c.fam.opts.Derive, shellTools
 	c.b.File = in.name
 	if err := c.run(); err != nil {
 		return nil, "", fmt.Errorf("%s: %w", displayName(in.name), err)
@@ -217,7 +245,7 @@ func (c *docConv) header() (agentsession.Header, error) {
 	if err := agentimport.SetSource(&h, src); err != nil {
 		return h, err
 	}
-	c.addf(agentimport.Gap, "agentimport/provenance", 0, "the import is recorded in the header member %s", agentimport.SourceMember)
+	c.addf(agentimport.Kept, "agentimport/provenance", 0, "the import is recorded in the header member %s", agentimport.SourceMember)
 	if c.tgt.derived != "" {
 		c.addf(agentimport.Repaired, "atif/session-id", 0, "%s", c.tgt.derived)
 	}
@@ -637,8 +665,14 @@ func (c *docConv) seedConfig() error {
 		return err
 	}
 	c.settings = c.settings.Apply(cfg)
-	_, err = c.appendEntry(cfg)
-	return err
+	if _, err = c.appendEntry(cfg); err != nil {
+		return err
+	}
+	// A structural entry: the continuation needs the settings in force
+	// where the session it continues ended, and no step of it says them.
+	c.addf(agentimport.Lossy, "atif/continuation-settings", 0,
+		"the continuation's first config carries the settings in force where the session it continues ended; no step of this document maps to it")
+	return nil
 }
 
 // leadingSystem returns a step's text when it is a system step that can
@@ -702,6 +736,13 @@ func (c *docConv) appendEntry(e agentsession.Entry) (string, error) {
 		return "", err
 	}
 	c.tail = id
+	// Derivation writes after a shell call's output what its output
+	// says the call did, when asked for; the session goes on from there.
+	if tail, err := c.b.DeriveAfter(id, e); err != nil {
+		return "", err
+	} else {
+		c.tail = tail
+	}
 	c.last = base.Timestamp
 	return id, nil
 }
@@ -778,3 +819,6 @@ func parseTime(s string) (t time.Time, naive, ok bool) {
 	}
 	return time.Time{}, false, false
 }
+
+// shellTools are the shell tools whose calls the derivation rules read.
+var shellTools = map[string]bool{"bash_command": true, "bash": true, "Bash": true, "shell": true, "shell_command": true, "exec_command": true, "terminal": true, "execute_bash": true, "execute_command": true}

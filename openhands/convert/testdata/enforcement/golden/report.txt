@@ -1,5 +1,4 @@
 openhands: 12 files: mapped 11 kept 1 dropped 0 malformed 0
-  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
   gap      agentimport/reasoning-provider                    1  a reasoning signature from anthropic in encrypted_content, tagged openhands:provider (at events:3)
   lossy    openhands/condensation                            1  a condensation with no summary forgets 1 events; an omit config entry leaves out their items (at events:10)
   lossy    openhands/model-from-state                        1  the model is the one base_state names, as last saved; a later switch of model is not recorded per event (at events:1)
@@ -9,6 +8,11 @@ openhands: 12 files: mapped 11 kept 1 dropped 0 malformed 0
   lossy    openhands/timestamp-zone                          1  OpenHands writes local time with no zone; the timestamps are read in UTC
   lossy    openhands/tools-unrecorded                        1  2 tools are recorded without the parameter schema the model was sent, as OpenHands records them from 1.7; the config carries their names and descriptions, and the definitions are kept in openhands:event (at events:1)
   lossy    openhands/version-guess                           1  the view is built as SDK 1.17 and later built it: base_state has invoked_skills, which SDK 1.18 and later write; base_state names the release that last saved it, and events an earlier release wrote are read the same way
+  kept     agentimport/exit-code                             2  the command's exit code, from the observation's metadata, is agentimport:exit_code; failed comes from the error flag alone (at events:4, events:6)
+  kept     agentimport/identity                              2  identity member id is carried into the header's id, or agentimport:source's native_id
+             id                                              1
+             workspace.working_dir                           1
+  kept     agentimport/provenance                            1  the import is recorded in the header member agentimport:source
   kept     openhands/cost-unplaced                           1  per-call costs name no response, so they cannot be placed on one; they are in the header member openhands:stats with the metrics' totals
   kept     openhands/duplicate-output                        1  a second answer to call call_l2; OpenHands sends the first alone, and this one is a custom entry (at events:7)
   kept     openhands/event-members                           7  members tools are kept in openhands:event (at events:1, events:3, events:4, events:5, events:6)

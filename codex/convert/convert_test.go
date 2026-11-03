@@ -2,6 +2,7 @@ package convert
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -685,5 +686,171 @@ func TestRepeatedSpawnID(t *testing.T) {
 	}
 	if len(got) != 2 || !strings.HasPrefix(got[0], "t-one@c") || !strings.HasPrefix(got[1], "t-two@") || got[1] == "t-two@c" {
 		t.Errorf("links = %v", got)
+	}
+}
+
+// TestVCSCarried checks an env entry is a whole snapshot: a move inside
+// the session's directory repeats the session meta's git state, as a
+// guess reported lossy; a move out of it writes no vcs, reported; and
+// git members Codex adds are kept as vcs members.
+func TestVCSCarried(t *testing.T) {
+	res := convertFixture(t, fixtures(t)["vcs"], Options{})
+	var envs []*agentsession.EnvEntry
+	for _, e := range res.Sessions[0].Entries() {
+		if e, ok := e.(*agentsession.EnvEntry); ok {
+			envs = append(envs, e)
+		}
+	}
+	if len(envs) != 3 {
+		t.Fatalf("%d env entries, want 3", len(envs))
+	}
+	first := envs[0].VCS
+	if first == nil || first.Revision != "abc123def4567890abc123def4567890abc12345" || string(first.Unknown["codex:x_upstream"]) != `"origin/main"` {
+		t.Fatalf("session meta vcs = %+v", first)
+	}
+	in := envs[1]
+	if in.CWD != "/work/demo/pkg" || in.VCS == nil || in.VCS.Revision != first.Revision ||
+		string(in.VCS.Unknown["codex:branch"]) != `"main"` || string(in.VCS.Unknown["codex:x_upstream"]) != `"origin/main"` {
+		t.Errorf("env inside the session's directory = %+v, vcs %+v", in, in.VCS)
+	}
+	if out := envs[2]; out.CWD != "/work/demo-other" || out.VCS != nil {
+		t.Errorf("env outside the session's directory = %+v, vcs %+v", out, out.VCS)
+	}
+	want := map[string]agentimport.Kind{"codex/vcs-carried": agentimport.Lossy, "codex/vcs-after-cwd": agentimport.Lossy, "codex/git-members": agentimport.Kept}
+	got := map[string]int{}
+	for _, f := range res.Report.Findings {
+		if k, ok := want[f.Code]; ok {
+			got[f.Code]++
+			if f.Kind != k {
+				t.Errorf("%+v; want %s", f, k)
+			}
+		}
+	}
+	for code := range want {
+		if got[code] != 1 {
+			t.Errorf("%s reported %d times, want once", code, got[code])
+		}
+	}
+}
+
+func TestUnder(t *testing.T) {
+	for _, tc := range []struct {
+		base, dir string
+		want      bool
+	}{
+		{"/work/demo", "/work/demo", true},
+		{"/work/demo", "/work/demo/pkg", true},
+		{"/work/demo/", "/work/demo/pkg/x", true},
+		{"/work/demo", "/work/demo-other", false},
+		{"/work/demo", "/work", false},
+		{"", "/work", false},
+		{`C:\work\demo`, `C:\work\demo\pkg`, true},
+		{`C:\work\demo`, `C:\work\demo2`, false},
+	} {
+		if got := under(tc.base, tc.dir); got != tc.want {
+			t.Errorf("under(%q, %q) = %v, want %v", tc.base, tc.dir, got, tc.want)
+		}
+	}
+}
+
+// TestExitCodeShellOnly: the exit code is read from a shell tool's
+// output alone; another tool's output that happens to open the same way
+// is not read, and neither is failed.
+func TestExitCodeShellOnly(t *testing.T) {
+	res := convertFixture(t, fixtures(t)["exitcode"], Options{})
+	got := map[string]string{}
+	for _, e := range res.Sessions[0].Entries() {
+		it, ok := e.(*agentsession.ItemEntry)
+		if !ok {
+			continue
+		}
+		if fo, ok := it.Item.(*openresponses.FunctionCallOutput); ok {
+			got[fo.CallID] = string(it.Unknown[agentimport.ExitCodeMember])
+			if it.Failed {
+				t.Errorf("%s is failed", fo.CallID)
+			}
+		}
+	}
+	if got["call_sh"] != "2" || got["call_rn"] != "" {
+		t.Errorf("exit codes %v; want call_sh 2 and none for call_rn", got)
+	}
+}
+
+// TestPublished: with derivation, a shell call whose output prints the
+// pull request it opened is followed by a derived agentimport:published
+// record carrying its call_id.
+func TestPublished(t *testing.T) {
+	for _, derive := range []bool{false, true} {
+		res := convertFixture(t, fixtures(t)["published"], Options{Derive: derive})
+		n := 0
+		for _, e := range res.Sessions[0].Entries() {
+			if c, ok := e.(*agentsession.CustomEntry); ok && c.NS == agentimport.PublishedNS {
+				n++
+				if c.CallID != "call_pr" || string(c.Data) != `{"refs":[{"kind":"pull_request","url":"https://github.com/acme/demo/pull/7"}]}` {
+					t.Errorf("record %s, call %q", c.Data, c.CallID)
+				}
+			}
+		}
+		if want := map[bool]int{false: 0, true: 1}[derive]; n != want {
+			t.Errorf("derive %v: %d records, want %d", derive, n, want)
+		}
+	}
+	// A session derivation wrote to says so, and with which rules, in
+	// its header, since the entries after a derived one have other ids.
+	for _, derive := range []bool{false, true} {
+		res := convertFixture(t, fixtures(t)["published"], Options{Derive: derive})
+		var src agentimport.Source
+		if err := json.Unmarshal(res.Sessions[0].Header().Extra[agentimport.SourceMember], &src); err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.Join(src.Derived, ","); (derive && got != strings.Join(agentimport.DeriveRules, ",")) || (!derive && got != "") {
+			t.Errorf("derive %v: agentimport:source derived %q", derive, got)
+		}
+	}
+}
+
+// TestSkillRead: a <skill> part Codex's skills extension sends in a user
+// message is recorded as agentskill records a read, after the message:
+// the skill's name, its path, and the digest of the text sent.
+func TestSkillRead(t *testing.T) {
+	res := convertFixture(t, fixtures(t)["skill"], Options{})
+	var recs []*agentsession.CustomEntry
+	for _, e := range res.Sessions[0].Entries() {
+		if c, ok := e.(*agentsession.CustomEntry); ok && c.NS == agentimport.SkillReadNS {
+			recs = append(recs, c)
+		}
+	}
+	if len(recs) != 1 {
+		t.Fatalf("%d agentskill:read records, want 1", len(recs))
+	}
+	var want agentimport.SkillRead
+	want.Served("<skill>\n<name>docs-style</name>\n<path>/work/demo/.codex/skills/docs-style/SKILL.md</path>\nWrite short sentences.\n</skill>")
+	var got agentimport.SkillRead
+	if err := json.Unmarshal(recs[0].Data, &got); err != nil || got.Name != "docs-style" || got.Location != "/work/demo/.codex/skills/docs-style/SKILL.md" || got.SHA256 != want.SHA256 {
+		t.Errorf("record %s", recs[0].Data)
+	}
+}
+
+// TestInstructionLayers: the messages Codex composes from the AGENTS.md
+// instructions and from the skills catalogue name their layer in
+// instructions_part; a person's message names none.
+func TestInstructionLayers(t *testing.T) {
+	res := convertFixture(t, fixtures(t)["layers"], Options{})
+	var got []string
+	for _, e := range res.Sessions[0].Entries() {
+		if it, ok := e.(*agentsession.ItemEntry); ok {
+			if _, ok := it.Item.(*openresponses.Message); !ok {
+				continue
+			}
+			if p := it.InstructionsPart; p != nil {
+				got = append(got, p.Source+" "+p.ID)
+			} else {
+				got = append(got, "-")
+			}
+		}
+	}
+	want := []string{"agentskill ", "agentsmd /work/demo", "-", "-"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("instructions_part %q, want %q", got, want)
 	}
 }

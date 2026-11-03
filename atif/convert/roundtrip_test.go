@@ -140,6 +140,18 @@ func TestExporterRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// An exporter before format 0.17 wrote no entries, and its document
+	// is mapped from its steps, which this test exercises; one with them
+	// is rebuilt to its ids (TestRebuildFamily).
+	strip := func(extra map[string]any) {
+		if as, ok := extra[export.ExtraAgentSession].(map[string]any); ok {
+			delete(as, export.ExtraEntries)
+		}
+	}
+	strip(doc.Extra)
+	for _, sub := range doc.SubagentTrajectories {
+		strip(sub.Extra)
+	}
 	path := filepath.Join(t.TempDir(), "agent", "trajectory.json")
 	if err := export.WriteDocument(path, doc); err != nil {
 		t.Fatal(err)
@@ -203,13 +215,14 @@ func itemsJSON(t *testing.T, items openresponses.Items) []string {
 }
 
 // TestExporterRedacted exports a redacted session and imports the
-// document: the exporter carries each redacted entry's redacted member,
-// in the response body and in the steps' extra.agentsession, and no
-// entry of the imported session, which is not a redaction, may carry
-// it. The marks are kept namespaced and reported. The redacted session
-// is made as a redactor makes one: its response, made from one that
-// recorded a request_hash, is given the hash of the request the
-// redacted session rebuilds for it, so it verifies.
+// document: every entry rebuilds to the id the document names over the
+// whole path, so the imported session is the redacted session the
+// document projects, its entries' redacted members and its header's
+// redacted and redacted_from restored (RFC 0001, Projections/ATIF,
+// 0.17). The redacted session is made as a redactor makes one: its
+// response, made from one that recorded a request_hash, is given the
+// hash of the request the redacted session rebuilds for it, so it
+// verifies.
 func TestExporterRedacted(t *testing.T) {
 	at := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
 	s := agentsession.New(agentsession.Header{ID: "rt-redacted", CreatedAt: at, Redacted: true,
@@ -272,32 +285,23 @@ func TestExporterRedacted(t *testing.T) {
 		}
 		res := convertFixture(t, path, Options{Slim: slim})
 		got := reread(t, res.Sessions[0])
-		if got.Header().Redacted || got.Header().RedactedFrom != nil {
-			t.Errorf("slim %v: the imported session is marked redacted", slim)
+		h := got.Header()
+		if !h.Redacted || h.RedactedFrom == nil || h.RedactedFrom.Session != "rt-original" {
+			t.Errorf("slim %v: the header is %+v; want it redacted from rt-original", slim, h)
 		}
-		kept, marks := false, false
-		for _, e := range got.Entries() {
-			if strings.Contains(string(e.Base().Unknown[Source+":extra"]), `"redacted_entries"`) {
-				marks = true
+		for _, e := range s.Entries() {
+			g, ok := got.Entry(e.Base().ID)
+			if !ok {
+				t.Errorf("slim %v: %s is not rebuilt to its id", slim, e.Base().ID)
+				continue
 			}
-			if _, ok := agentsession.RedactedOf(e); ok {
-				t.Errorf("slim %v: entry %s is redacted", slim, e.Base().ID)
-			}
-			if _, ok := e.Base().Unknown["redacted"]; ok {
-				t.Errorf("slim %v: entry %s carries a redacted member", slim, e.Base().ID)
-			}
-			if r, ok := e.(*agentsession.ResponseEntry); ok && string(r.Unknown[Source+":redacted"]) == "[4]" {
-				kept = true
+			want, _ := agentsession.RedactedOf(e)
+			if spans, ok := agentsession.RedactedOf(g); !ok || !slices.Equal(spans, want) {
+				t.Errorf("slim %v: %s rebuilt with redacted %v, want %v", slim, e.Base().ID, spans, want)
 			}
 		}
-		if kept == slim {
-			t.Errorf("slim %v: the response's %s:redacted kept = %v", slim, Source, kept)
-		}
-		if marks == slim {
-			t.Errorf("slim %v: the steps' redaction marks kept in %s:extra = %v", slim, Source, marks)
-		}
-		if !slices.Contains(res.Report.Codes(), "atif/redacted") {
-			t.Errorf("slim %v: no atif/redacted finding: %v", slim, res.Report.Codes())
+		if slices.Contains(res.Report.Codes(), "atif/redaction-not-restored") {
+			t.Errorf("slim %v: %v", slim, res.Report.Codes())
 		}
 		doccheck.Check(t, Source, res.Report)
 	}

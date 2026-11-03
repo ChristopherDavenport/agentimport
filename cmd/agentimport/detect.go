@@ -49,14 +49,14 @@ var sources = []source{
 		name: ccconvert.Source,
 		find: claudecode.FindSessions,
 		convert: func(path string, r *runner) (*agentimport.Result, error) {
-			return ccconvert.ConvertFile(path, ccconvert.Options{Slim: r.slim})
+			return ccconvert.ConvertFile(path, ccconvert.Options{Slim: r.slim, Derive: r.derive})
 		},
 	},
 	{
 		name: piconvert.Source,
 		find: pi.FindSessions,
 		convert: func(path string, r *runner) (*agentimport.Result, error) {
-			return piconvert.ConvertFile(path, piconvert.Options{Slim: r.slim})
+			return piconvert.ConvertFile(path, piconvert.Options{Slim: r.slim, Derive: r.derive})
 		},
 	},
 	{
@@ -70,42 +70,42 @@ var sources = []source{
 		name: atifconvert.Source,
 		find: atif.FindSessions,
 		convert: func(path string, r *runner) (*agentimport.Result, error) {
-			return atifconvert.ConvertFile(path, atifconvert.Options{Slim: r.slim, Converted: r.atifDone})
+			return atifconvert.ConvertFile(path, atifconvert.Options{Slim: r.slim, Derive: r.derive, Converted: r.atifDone})
 		},
 	},
 	{
 		name: clineconvert.Source,
 		find: cline.FindSessions,
 		convert: func(path string, r *runner) (*agentimport.Result, error) {
-			return clineconvert.ConvertFile(path, clineconvert.Options{Slim: r.slim, Converted: r.clineDone})
+			return clineconvert.ConvertFile(path, clineconvert.Options{Slim: r.slim, Derive: r.derive, Converted: r.clineDone})
 		},
 	},
 	{
 		name: sdkconvert.Source,
 		find: clinesdk.FindSessions,
 		convert: func(path string, r *runner) (*agentimport.Result, error) {
-			return sdkconvert.ConvertFile(path, sdkconvert.Options{Slim: r.slim, OpenIndex: sdksqlite.OpenIndex})
+			return sdkconvert.ConvertFile(path, sdkconvert.Options{Slim: r.slim, Derive: r.derive, OpenIndex: sdksqlite.OpenIndex})
 		},
 	},
 	{
 		name: ohconvert.Source,
 		find: openhands.FindSessions,
 		convert: func(path string, r *runner) (*agentimport.Result, error) {
-			return ohconvert.ConvertFile(path, ohconvert.Options{Slim: r.slim, Converted: r.openhandsDone})
+			return ohconvert.ConvertFile(path, ohconvert.Options{Slim: r.slim, Derive: r.derive, Converted: r.openhandsDone})
 		},
 	},
 	{
 		name: occonvert.Source,
 		find: opencode.FindSessions,
 		convert: func(path string, r *runner) (*agentimport.Result, error) {
-			return occonvert.ConvertFile(path, occonvert.Options{Slim: r.slim, OpenDatabase: sqlite.OpenStore})
+			return occonvert.ConvertFile(path, occonvert.Options{Slim: r.slim, Derive: r.derive, OpenDatabase: sqlite.OpenStore})
 		},
 	},
 	{
 		name: hermesconvert.Source,
 		find: hermes.FindSessions,
 		convert: func(path string, r *runner) (*agentimport.Result, error) {
-			return hermesconvert.ConvertFile(path, hermesconvert.Options{Slim: r.slim, OpenDatabase: hsqlite.OpenStore})
+			return hermesconvert.ConvertFile(path, hermesconvert.Options{Slim: r.slim, Derive: r.derive, OpenDatabase: hsqlite.OpenStore})
 		},
 	},
 }

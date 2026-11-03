@@ -90,18 +90,18 @@ rollouts' session meta lines instead (see Sub-agents and forks).
 
 | Native | Session |
 | --- | --- |
-| `session_meta` | the header: `id` the thread id, `created_at`, `cwd`, `harness` `{codex, cli_version}`, `parent_session` the parent or fork origin; `base_instructions` a first `config`; `git` an `env` with `vcs`; the rest the header member `codex:session_meta` |
+| `session_meta` | the header: `id` the thread id, `created_at`, `cwd`, `harness` `{codex, cli_version}`, `parent_session` the parent or fork origin; `base_instructions` a first `config`; `git` an `env` with `vcs` (`commit_hash` the revision; `branch`, `repository_url` and any member Codex adds as `codex:<name>` vcs members); the rest the header member `codex:session_meta` |
 | `forked_from_id` | a `fork_of` link, the session's first entry |
 | a `spawn_agent` call's output, or the record naming the thread it started | a `peer` link to the thread's session after the output; the thread's rollout converts into that session, after this one (see below) |
 | `response_item` that is model output (assistant message, reasoning, calls, compaction items) | `item` entries tied to a `response` entry written after them |
-| `response_item` that is input (user, developer messages, outputs, harness-written assistant messages) | `item` entries |
+| `response_item` that is input (user, developer messages, outputs, harness-written assistant messages) | `item` entries; a message Codex composed from the AGENTS.md instructions (`# AGENTS.md instructions for <dir>`) names `instructions_part` `{id: <dir>, source: agentsmd}`, the directory Codex names, since it may join several files from the repository root down; the skills catalogue (`<skills_instructions>`) `{source: agentskill}`; after a user message, an `agentskill:read` record per `<skill>` part ([Skill reads](README.md#skill-reads)) |
 | a type openresponses types (`message`, `function_call`, `function_call_output`, `reasoning`, `compaction`) | that item; members it has no place for in `codex:item` |
 | `custom_tool_call` | a `function_call`: `call_id`, `name`, and the free-form input as the arguments `{"input": "<text>"}` (the item's own arguments when it records them); the entry carries `codex:tool_kind: "custom"`, and a `ctc_` item id as `codex:item_id`, since a function call's id is an `fc_` id |
 | `custom_tool_call_output` | a `function_call_output` for that call, `codex:tool_kind: "custom"` |
 | a type it does not | an extension item; see below |
 | `token_count` event | the response's `usage` (its `last_token_usage`) and `status: completed`; the running total in `codex:token_count`, rate limits in `codex:rate_limits` |
 | `token_usage_record` | the response's `response_id`, and its usage when no token count gave one |
-| `turn_context` | a `config` delta of what changed: `model`, `reasoning`; other settings in `codex:turn_context`; an `env` when `cwd` moved |
+| `turn_context` | a `config` delta of what changed: `model`, `reasoning`; other settings in `codex:turn_context`; an `env` when `cwd` moved, repeating the session meta's `vcs` when the new directory is the session's or below it (`codex/vcs-carried`), with none outside it (`codex/vcs-after-cwd`), since an `env` entry is a whole snapshot |
 | `compacted` | a `custom` entry holding the record, then a `compaction` entry (see below) |
 | `thread_rolled_back` | a branch (see below) whose first entry is a `custom` entry holding the event |
 | `inter_agent_communication` | the `codex.agent_message` item Codex sends for it |
@@ -313,6 +313,25 @@ the inputs, at any depth, after the inputs it descends from: when one
 of their results holds its session it is listed as skipped, and when
 none does it converts on its own, so no input is lost.
 
+## Identity
+
+The native members this converter carries into the session that
+identify a person, an account or organization, a machine or the native
+session, and where each lands. A report lists them by path and count
+under `agentimport/identity`, never by value, so a redaction can
+harvest the values from the original and check its output for them
+(RFC 0001, Conformance).
+
+| Member | Lands in | Names |
+| --- | --- | --- |
+| `session_meta.id` | the header's `id` | the native thread |
+| `session_meta.cwd` | the header's `cwd` and the first `env` | the user's home directory, through the project path |
+| `session_meta.git.repository_url` | the vcs member `codex:repository_url` | the repository's owner |
+| `session_meta.originator` | the header's `codex:session_meta` | the client |
+| `AGENTS.md instructions directory` | an AGENTS.md message's `instructions_part` `id` | the home directory, through the project path |
+
+The report lists the session's ID and working directory (`agentimport/identity`); the other members are carried as listed and not yet counted.
+
 ## Extension types
 
 openresponses types the items of the Open Responses specification.
@@ -347,7 +366,7 @@ every converter can report are in [README.md](README.md).
 | Code | Kind | Meaning |
 | --- | --- | --- |
 | `agentimport/reasoning-provider` | gap | Encrypted reasoning is in `encrypted_content`, which says nothing of the provider that can replay it; the entry carries `codex:provider`, the session's model provider. |
-| `agentimport/usage-detail` | gap | A response's usage counts cache writes, which Responses usage has no place for; the native usage is `codex:usage`. |
+| `agentimport/usage-detail` | kept | A response's usage counts cache writes, which Responses usage has no place for; the native usage is `codex:usage`. |
 | `agentimport/vcs-branch` | gap | The git branch is the vcs member `codex:branch`; the format's vcs has no branch. |
 | `codex/assistant-input` | kept | An assistant message the harness wrote (a delivered or inherited message, compaction output, another agent's instruction as JSON) is input, not a response's output; it is marked `codex:input`. |
 | `codex/call-id-renamed` | repaired | A call id another call of the session holds, an empty one, or one with characters providers refuse, was renamed; the native one is `codex:call_id`. |
@@ -368,7 +387,9 @@ every converter can report are in [README.md](README.md).
 | `codex/history-base` | lossy | The thread inherits a prefix of another rollout by reference; it is not in this file or the session's context. |
 | `codex/inter-agent` | kept, or dropped | A message between agents as recorded (recipients, whether it started a turn) is `codex:inter_agent`. |
 | `codex/interleaved-outputs` | lossy | A response written as a batch, each call followed by its output (Codex up to 0.65); the format's request context of the response holds only the items after the last output. |
-| `codex/item-members` | kept, or dropped | Members of an item its Open Responses item has no place for, which Codex sent beside it (`internal_chat_message_metadata_passthrough`, a message's `encrypted_content`, a call's `namespace`), are `codex:item`. |
+| `codex/exit-code` | kept | A command's exit code read from the fixed wrapper Codex puts around a shell tool's output (`shell`, `shell_command`, `local_shell`, `container.exec`, `exec_command`, `write_stdin`; another tool's output is not read) (`Exit code: N` over `Wall time:`, unified exec's `Process exited with code N` before `Output:`, or the older `{"output", "metadata": {"exit_code"}}`) is `agentimport:exit_code`. Codex records no failure of a call, so no output is `failed`; an abort's text is not read as one. |
+| `codex/git-members` | kept | Members of the session meta's `git` this converter does not declare are vcs members `codex:<name>` of its `env` entry. |
+| `codex/item-members` | kept, or dropped | Members of a native item its Open Responses item does not hold as Codex wrote them are `codex:item`: those a custom tool call or its output, written as a function call, does not use, a renamed call's native `call_id`, and a member the item re-encodes differently. An Open Responses item keeps a member it does not define (openresponses v0.0.17 on), so `internal_chat_message_metadata_passthrough`, a message's `encrypted_content` and a call's `namespace` stay in the item, as Codex sent them. |
 | `codex/legacy-instructions` | lossy | The legacy session meta's user instructions are the header member `codex:instructions`; how they reached the model is not recorded. |
 | `codex/legacy-layout` | lossy | The rollout predates the envelope: its items carry no timestamps, so entries take the time of the last line that had one. |
 | `codex/line-members` | kept, or dropped | Envelope members the conversion does not map are `codex:envelope`; those of a dropped repeated turn context are dropped with it. |
@@ -424,5 +445,7 @@ every converter can report are in [README.md](README.md).
 | `codex/unreached` | dropped | A line the converter did not reach. A bug; tests fail on it. |
 | `codex/usage-record` | kept, or dropped | A token usage record's turn and thread totals are `codex:usage_record`. |
 | `codex/usage-snapshots` | lossy | A response's usage record and token count disagree; the record's, which names the response, is used. |
+| `codex/vcs-carried` | lossy | A `turn_context` moved the working directory to the session's or one below it, and the `env` entry repeats the session meta's git state, since an `env` entry is a whole snapshot; Codex records the state once, so a nested repository would make it wrong. |
+| `codex/vcs-after-cwd` | lossy | A `turn_context` moved the working directory outside the session's; Codex records no git state for it, so the `env` entry has no `vcs`. |
 | `codex/window-item-skipped` | lossy | An item of a replacement history Codex does not send, or that does not decode, is left out of the window. |
 | `codex/world-state` | lossy | Codex renders its world state into each request; the rollout records the state, not the text, so it is not in context. |

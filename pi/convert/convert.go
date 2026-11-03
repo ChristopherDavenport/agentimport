@@ -33,6 +33,11 @@ type Options struct {
 	// Each drop is still reported. Custom entries, the format's own
 	// place for extension state, are kept.
 	Slim bool
+	// Derive writes the entries the module's derivation rules infer
+	// from the converted path, each marked agentimport:derived: what a
+	// shell call published and the revision a commit printed
+	// (docs/plans/agentimport.md).
+	Derive bool
 	// ResolveParent reads the session file a forked session's header
 	// names by path. Nil resolves nothing; ConvertFile reads the file.
 	ResolveParent func(path string) (*pi.File, bool)
@@ -42,6 +47,12 @@ type Options struct {
 // session's parent is resolved by reading the file it names, when that
 // exists.
 func ConvertFile(path string, opts Options) (*agentimport.Result, error) {
+	res, err := convertFileReport(path, opts)
+	res.ScrubIdentity()
+	return res, err
+}
+
+func convertFileReport(path string, opts Options) (*agentimport.Result, error) {
 	f, err := pi.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -65,6 +76,12 @@ func ConvertFile(path string, opts Options) (*agentimport.Result, error) {
 // Convert converts a session file into one session. The file is
 // migrated to the current version first, as pi migrates it on load.
 func Convert(f *pi.File, opts Options) (*agentimport.Result, error) {
+	res, err := convertReport(f, opts)
+	res.ScrubIdentity()
+	return res, err
+}
+
+func convertReport(f *pi.File, opts Options) (*agentimport.Result, error) {
 	c := &converter{
 		opts:   opts,
 		report: agentimport.NewReport(Source),
@@ -85,7 +102,14 @@ func Convert(f *pi.File, opts Options) (*agentimport.Result, error) {
 	if err != nil {
 		return nil, err
 	}
+	c.report.HeaderIdentity("", h, "session.id", "session.cwd")
+	if c.opts.Derive {
+		if err := agentimport.MarkDerived(&h); err != nil {
+			return nil, err
+		}
+	}
 	c.b = agentimport.NewBuilder(h, Source, c.report)
+	c.b.Derive, c.b.ShellTools = c.opts.Derive, shellTools
 	if err := c.run(); err != nil {
 		return nil, err
 	}
@@ -193,7 +217,7 @@ func (c *converter) header() (agentsession.Header, error) {
 	if err := agentimport.SetSource(&h, agentimport.Source{Format: Source}); err != nil {
 		return h, err
 	}
-	c.addf(agentimport.Gap, "agentimport/provenance", nil,
+	c.addf(agentimport.Kept, "agentimport/provenance", nil,
 		"the import is recorded in the header member %s", agentimport.SourceMember)
 	if hl == nil {
 		return h, nil
@@ -504,3 +528,6 @@ func usage(u *pi.Usage) *openresponses.Usage {
 	ou.TotalTokens = ou.InputTokens + ou.OutputTokens
 	return ou
 }
+
+// shellTools are the shell tools whose calls the derivation rules read.
+var shellTools = map[string]bool{"bash": true}

@@ -33,6 +33,10 @@ type Options struct {
 	// reported. Custom entries, the format's own place for records it
 	// does not define, are kept.
 	Slim bool
+	// Derive writes the entries the module's derivation rules infer
+	// from the converted path, each marked agentimport:derived: a shell
+	// call's published refs (docs/plans/agentimport.md).
+	Derive bool
 	// Index finds the rollouts of the threads a thread spawned, which
 	// are converted with it, each its own session after its parent's.
 	// ConvertFile indexes the tree the rollout is in when it is nil
@@ -51,6 +55,12 @@ type Options struct {
 // directory (see codex.SessionsRoot). An index that cannot be built, or
 // that left rollouts out, is reported.
 func ConvertFile(path string, opts Options) (*agentimport.Result, error) {
+	res, err := convertFileReport(path, opts)
+	res.ScrubIdentity()
+	return res, err
+}
+
+func convertFileReport(path string, opts Options) (*agentimport.Result, error) {
 	f, err := codex.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -96,6 +106,12 @@ func IndexFindings(x *codex.Index) []agentimport.Finding {
 // cannot be read or converted is a finding, and its own sub-agents are
 // converted still.
 func Convert(f *codex.File, opts Options) (*agentimport.Result, error) {
+	res, err := convertReport(f, opts)
+	res.ScrubIdentity()
+	return res, err
+}
+
+func convertReport(f *codex.File, opts Options) (*agentimport.Result, error) {
 	fam := &family{opts: opts, report: agentimport.NewReport(Source), done: map[string]bool{}}
 	c, s, err := fam.one(f, "", nil, fam.report)
 	if err != nil {
@@ -152,6 +168,7 @@ func (fam *family) one(f *codex.File, file string, parent *parentRef, report *ag
 	if err != nil {
 		return nil, nil, err
 	}
+	c.report.HeaderIdentity("", h, "session_meta.id", "session_meta.cwd")
 	fam.done[h.ID] = true
 	c.b = agentimport.NewBuilder(h, Source, c.report)
 	c.b.File = file
@@ -267,6 +284,17 @@ type converter struct {
 	f      *codex.File
 	b      *agentimport.Builder
 	meta   *codex.Line
+	// metaCWD and metaVCS are the session meta's working directory and
+	// the vcs its git state became, which an env entry for a move
+	// inside that directory repeats: an env entry is a whole snapshot.
+	metaCWD string
+	metaVCS *agentsession.VCS
+	// toolNames maps a recorded call id to its tool's name, so only a
+	// shell tool's output is read for an exit code.
+	toolNames map[string]string
+	// toolArgs maps a recorded call id to its arguments, for the
+	// derivation rules that read a shell call's command.
+	toolArgs map[string]string
 
 	// spawns maps a spawn call to the thread it started, as the call's
 	// output or a record beside it names it; tasks to the agent path a
@@ -327,6 +355,8 @@ type state struct {
 	effort  string
 	summary string
 	cwd     string
+	// env is the env entry in force, which a derived one repeats.
+	env *agentsession.EnvEntry
 	// turnContext is the last turn context's members the conversion
 	// keeps in codex:turn_context, to tell a change from a repeat.
 	turnContext string
@@ -423,13 +453,16 @@ func (c *converter) header() (agentsession.Header, error) {
 	}
 	h.Harness = &agentsession.Harness{Name: Harness}
 	src := agentimport.Source{Format: Source}
+	if c.opts.Derive {
+		src.Derived = agentimport.DeriveRules
+	}
 	if m != nil {
 		h.Harness.Version = m.CLIVersion
 	}
 	if err := agentimport.SetSource(&h, src); err != nil {
 		return h, err
 	}
-	c.addf(agentimport.Gap, "agentimport/provenance", nil, "the import is recorded in the header member %s", agentimport.SourceMember)
+	c.addf(agentimport.Kept, "agentimport/provenance", nil, "the import is recorded in the header member %s", agentimport.SourceMember)
 	if c.f.Legacy {
 		c.addf(agentimport.Lossy, "codex/legacy-layout", nil,
 			"the rollout predates the envelope (before September 2025): its items carry no timestamps, so entries take the time of the last line that had one")
@@ -630,11 +663,20 @@ func (c *converter) start() error {
 				}
 				c.addf(agentimport.Kept, "codex/repository-url", c.meta, "the repository URL is the vcs member %s:repository_url", Source)
 			}
+			if extra := nonNull(g.Extra); len(extra) > 0 {
+				for k, v := range extra {
+					if err := env.VCS.SetMember(Source+":"+k, v); err != nil {
+						return err
+					}
+				}
+				c.addf(agentimport.Kept, "codex/git-members", c.meta, "git members %s are vcs members under %s:", memberNames(extra), Source)
+			}
+			c.metaCWD, c.metaVCS = m.CWD, env.VCS
 		}
 		if err := c.appendNow(env, c.meta); err != nil {
 			return err
 		}
-		c.st.cwd = m.CWD
+		c.st.cwd, c.st.env = m.CWD, env
 	}
 	return nil
 }

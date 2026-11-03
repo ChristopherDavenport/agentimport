@@ -1,0 +1,6 @@
+{"timestamp":"2026-10-01T13:00:01.000Z","type":"session_meta","payload":{"id":"01990000-0000-7000-8000-0000000000c1","timestamp":"2026-10-01T13:00:00.000Z","cwd":"/work/demo","originator":"codex_cli_rs","cli_version":"0.160.0","source":"cli","model_provider":"openai","base_instructions":{"text":"You are Codex, a coding agent."}}}
+{"timestamp":"2026-10-01T13:00:02.000Z","type":"turn_context","payload":{"turn_id":"turn-1","cwd":"/work/demo","approval_policy":"on-request","sandbox_policy":{"type":"workspace-write"},"model":"gpt-5-codex","effort":"medium","summary":"auto"}}
+{"timestamp":"2026-10-01T13:00:03.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Open a PR."}]}}
+{"timestamp":"2026-10-01T13:00:04.000Z","type":"response_item","payload":{"type":"function_call","name":"shell_command","arguments":"{\"command\":\"gh pr create --fill\"}","call_id":"call_pr"}}
+{"timestamp":"2026-10-01T13:00:05.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call_pr","output":"Exit code: 0\nWall time: 2.1 seconds\nOutput:\nhttps://github.com/acme/demo/pull/7\n"}}
+{"timestamp":"2026-10-01T13:00:06.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Opened #7."}]}}

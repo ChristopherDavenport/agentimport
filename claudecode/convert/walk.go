@@ -47,6 +47,14 @@ type converter struct {
 	// copied holds the message IDs of the parent's responses, for a
 	// fork, whose transcript opens with a copy of one.
 	copied map[string]bool
+	// skills maps a Skill call's result line uuid, and its native
+	// tool_use ID, to the call, for the skill's body that follows it.
+	skills map[string]skillCall
+}
+
+// skillCall is a Skill tool call whose output the conversion wrote.
+type skillCall struct {
+	callID, name string
 }
 
 // expected is the envelope a transcript's lines share.
@@ -429,10 +437,62 @@ func (c *converter) customAs(kind agentimport.Kind, l *claudecode.Line, tail, co
 	if err != nil {
 		return "", err
 	}
+	c.identity(l, "a custom entry's data")
 	c.mark(l, agentimport.LineKept)
 	c.bind(l, id)
 	c.addf(kind, code, l, format, args...)
 	return id, nil
+}
+
+// identityPaths are the members of a line, by dotted path, that name the
+// account, its organization, the user, the machine or the native
+// session, which a line carried whole into the session carries.
+var identityPaths = [][]string{
+	{"sessionId"},
+	{"cwd"},
+	{"attachment", "organizationUuid"},
+	{"attachment", "context", "userEmail"},
+}
+
+// identity reports the identity members of a line carried whole into
+// the session where lands says, by path; an api-request record's
+// classifier contexts too.
+func (c *converter) identity(l *claudecode.Line, lands string) {
+	var v any
+	if json.Unmarshal(l.Raw, &v) != nil {
+		return
+	}
+	for _, p := range identityPaths {
+		if has(v, p) {
+			c.report.Identity(c.file, l.No, strings.Join(p, "."), lands)
+		}
+	}
+	params, _ := lookup(v, "params").(map[string]any)
+	safeguards, _ := params["safeguards"].([]any)
+	for _, sg := range safeguards {
+		for _, k := range []string{"user_identity", "home_dir"} {
+			if has(sg, []string{"classifier_context", k}) {
+				c.report.Identity(c.file, l.No, "params.safeguards[].classifier_context."+k, lands)
+			}
+		}
+	}
+}
+
+// lookup is v's member k, when v is an object.
+func lookup(v any, k string) any {
+	m, _ := v.(map[string]any)
+	return m[k]
+}
+
+// has reports whether v holds a non-empty value at path.
+func has(v any, path []string) bool {
+	for _, k := range path {
+		if v = lookup(v, k); v == nil {
+			return false
+		}
+	}
+	s, isString := v.(string)
+	return !isString || s != ""
 }
 
 // clean makes raw native JSON valid Unicode, as the session format

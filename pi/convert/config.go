@@ -127,10 +127,21 @@ func (s sysState) parts() []agentsession.InstructionPart {
 	}
 	for _, x := range jsOrder(s.sections) {
 		if x.Text != "" {
-			out = append(out, agentsession.InstructionPart{ID: "section/" + x.Name, Text: x.Text})
+			out = append(out, agentsession.InstructionPart{ID: "section/" + x.Name, Text: x.Text, Source: sectionLayers[x.Name]})
 		}
 	}
 	return out
+}
+
+// sectionLayers are the layers pi's own sections hold, by RFC 0001's
+// well-known sources: project_context renders the context files
+// (AGENTS.md, CLAUDE.md) and skills the skill catalogue
+// (core/system-prompt.js, buildSystemPromptSections). An extension's
+// section of the same name replaces pi's; the name still says what pi
+// puts there.
+var sectionLayers = map[string]string{
+	"project_context": agentsession.LayerAgentsMD,
+	"skills":          agentsession.LayerAgentSkill,
 }
 
 // functionTool converts a pi tool declaration.
@@ -415,7 +426,7 @@ func (c *converter) summaryMembers(e agentsession.Entry, l *pi.Line) error {
 		if err := c.b.Member(e, "usage", l.Usage); err != nil {
 			return err
 		}
-		c.addf(agentimport.Gap, "agentimport/usage-detail", l,
+		c.addf(agentimport.Kept, "agentimport/usage-detail", l,
 			"cache writes are folded into input_tokens; the native usage and its cost are %s:usage", Source)
 	}
 	if len(l.Details) > 0 && string(l.Details) != "null" {

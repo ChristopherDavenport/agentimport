@@ -15,6 +15,7 @@ import (
 	"github.com/ChristopherDavenport/agentimport"
 	"github.com/ChristopherDavenport/agentimport/cline"
 	"github.com/ChristopherDavenport/agentimport/internal/doccheck"
+	"github.com/ChristopherDavenport/agentimport/internal/testfix"
 	"github.com/ChristopherDavenport/agentsession"
 	"github.com/ChristopherDavenport/openresponses"
 )
@@ -662,4 +663,63 @@ func TestNestedMembers(t *testing.T) {
 		}
 	}
 	t.Fatal("no output for toolu_2")
+}
+
+// TestMissingResultNotFailed: the output classic Cline sends for a call
+// no result answers says nothing of the call's failure, and the log
+// carries no flag, so it is not marked failed.
+func TestMissingResultNotFailed(t *testing.T) {
+	res := convertFixture(t, fixtures(t)["classic-reject"], Options{})
+	n := 0
+	for _, e := range res.Sessions[0].Entries() {
+		it, ok := e.(*agentsession.ItemEntry)
+		if !ok {
+			continue
+		}
+		if _, synth := it.Unknown[Source+":synthesized"]; synth {
+			n++
+			if it.Failed {
+				t.Errorf("the synthesized output %s is failed", it.ID)
+			}
+		}
+	}
+	if n == 0 {
+		t.Fatal("no synthesized output to check")
+	}
+}
+
+// TestDerive: with derivation, a shell call whose output prints the
+// commit it made is followed by a derived env entry carrying the
+// revision, marked agentimport:derived with the call's call_id, and the
+// header names the rules; without it, no derived entry is written.
+func TestDerive(t *testing.T) {
+	for _, derive := range []bool{false, true} {
+		res := func() *agentimport.Result {
+			dir := testfix.Variant(t, "testdata/classic-reject", `rm -rf build`, `git commit -m wip`, `The user denied this operation.`, `[main abc1234] wip`)
+			r, err := ConvertFile(filepath.Join(dir, "saoudrizwan.claude-dev", "tasks", "1760300000000"), Options{Derive: derive, CreatedAt: fixed})
+			if err != nil {
+				t.Fatal(err)
+			}
+			return r
+		}()
+		n := 0
+		for _, s := range res.Sessions {
+			for _, e := range s.Entries() {
+				env, ok := e.(*agentsession.EnvEntry)
+				if !ok || env.Unknown[agentimport.DerivedMember] == nil {
+					continue
+				}
+				n++
+				if env.VCS == nil || env.VCS.Revision != "abc1234" || !strings.Contains(string(env.Unknown[agentimport.DerivedMember]), `"commit-revision"`) {
+					t.Errorf("derived env %+v %s", env.VCS, env.Unknown[agentimport.DerivedMember])
+				}
+			}
+		}
+		if want := map[bool]int{false: 0, true: 1}[derive]; n != want {
+			t.Errorf("derive %v: %d derived env entries, want %d", derive, n, want)
+		}
+		if derive && !strings.Contains(string(res.Sessions[0].Header().Extra[agentimport.SourceMember]), `"derived"`) {
+			t.Errorf("the header does not name the rules: %s", res.Sessions[0].Header().Extra[agentimport.SourceMember])
+		}
+	}
 }

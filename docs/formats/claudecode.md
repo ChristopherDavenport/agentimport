@@ -117,18 +117,19 @@ the parent's response that spawned it.
 | assistant `tool_use` block | `item`, `function_call`, input re-encoded as `arguments` | see arguments below |
 | other assistant blocks | `item`, `anthropic.<type>` carrying `block` | the openresponses Anthropic provider's shape |
 | a response's lines | `response` after its items: `response_id` the message id, `model` the one that answered, `status` from the stop reason, `usage` | native usage in `claudecode:usage`, `requestId` in `claudecode:request_id`, stop reason in `claudecode:stop_reason` |
-| `tool_result` | `item`, `function_call_output`, after the response, in call order | images as `input_image` data URLs; sidecar in `claudecode:tool_use_result` |
+| a hidden user message opening `Base directory for this skill:` | the `message` item, then an `agentskill:read` record (`name` the `Skill` call's `skill`, `location` the directory's `SKILL.md`, `bytes` and `sha256` of the message's text, `call_id` the `Skill` call that preceded it), after the message since the call's output comes first; see [Skill reads](README.md#skill-reads) | |
+| `tool_result` | `item`, `function_call_output`, after the response, in call order; `is_error` the entry's `failed` | images as `input_image` data URLs; sidecar in `claudecode:tool_use_result` |
 | refused call (`toolDenialKind` other than `interrupted`, or `permissionDecision.decision: reject`) | `decision` `reject` before the output: `by` `human` (the user), `agent` (the auto-mode classifier) or `policy` (a rule), `reason` the output's text | |
 | approved call (`permissionDecision.decision: accept`) | kept in `claudecode:line` | a `proceed` the RFC asks a writer not to write without a hold or rewritten arguments |
 | `stop_reason: refusal` | a `refusal` part in the last text message, or a message of its own, with `stop_details.explanation` or "The request was refused (category)." | as `providers/anthropic` does |
 | line between two blocks of a response | its own mapping, after the response's outputs | |
 | synthetic API-error line | `response`, `status: failed`, `error` the code and text | |
-| attachment with rendered text | `item`, `message` in `renderedRole` (user when absent), `visible: false` | payload in `claudecode:attachment`; a queued prompt's second rendering (`renderedInHumanTurn`) in `claudecode:line` |
+| attachment with rendered text | `item`, `message` in `renderedRole` (user when absent), `visible: false`; one composed from one instruction layer names it in `instructions_part`: `nested_memory` and a one-file `instructions` `{id: the file, source: agentsmd}` for a `Project`, `User`, `Local` or `Managed` file, or `agentmemory` for an `AutoMem` file, and none for another type, `skill_listing` `{source: agentskill}`; a message of several files names each in the order it holds them, the list form of format 0.18; one holding a file of an unknown type, or none, names none (`claudecode/instructions-layers`); Claude Code records no layer's trust, so the item carries none | payload in `claudecode:attachment`; a queued prompt's second rendering (`renderedInHumanTurn`) in `claudecode:line` |
 | `prompt_snapshot` attachment, `api-request-shape` record | `config` delta: `instructions`, `tools_added`, `tools_removed` against the tools in force on the path | a server tool (a definition with a `type`) is an `anthropic.<type>` tool carrying it, as `providers/anthropic` sends one |
 | `compact_boundary` and its summary | `compaction` under the logical parent: `summary` the summary message, `first_kept` the first preserved line, `config` the settings in force, `tokens_before` | metadata in `claudecode:compact_metadata` |
 | `ai-title`, `custom-title`, `summary` | `info` with `name` | kind in `claudecode:title_kind` |
 | last `last-prompt` | the leaf: the end of the unit holding `leafUuid` (a response's last output), with a `leaf` label unless it is the file's last entry | |
-| other side records, system lines, attachments with nothing rendered | `custom`, `ns` `claudecode`, `data` the line | |
+| other side records, system lines, attachments with nothing rendered | `custom`, `ns` `claudecode`, `data` the line | under Slim an attachment with nothing rendered is left out (`claudecode/attachment-unrendered`) |
 | every line | its uuid in member `claudecode:uuid` of each entry made from it; members not mapped in `claudecode:line`, a message's in `claudecode:message`, a block's in `claudecode:block` | |
 
 **Arguments.** `content[].input` is the input after the CLI normalised
@@ -162,6 +163,40 @@ provider does, `input_tokens` is input + cache read + cache creation,
 `output_tokens_details.thinking_tokens`. The cache-write split, TTLs,
 server tool counts, service tier and the rest stay in `claudecode:usage`.
 
+## Identity
+
+The native members this converter carries into the session that
+identify a person, an account or organization, a machine or the native
+session, and where each lands. A report lists them by path and count
+under `agentimport/identity`, never by value, so a redaction can
+harvest the values from the original and check its output for them
+(RFC 0001, Conformance).
+
+| Member | Lands in | Names |
+| --- | --- | --- |
+| `sessionId` | the header's `id`; every custom entry's `data`, which holds the line | the native session |
+| `agentId` | a sub-agent session's header, `agentimport:source`'s `native_id` | the native sub-agent |
+| `cwd` | the header's `cwd`; every custom entry's `data` | the user's home directory, through the project path |
+| `attachment.organizationUuid` | a `credential_org` attachment's custom entry (`claudecode/attachment-unrendered`); left out under Slim | the account's organization |
+| `attachment.context.userEmail` | a `session_context` attachment's `claudecode:attachment`, and the text of the message it rendered, under Slim too | the account's email |
+| `params.safeguards[].classifier_context.user_identity` | an `api-request` record's custom entry (`claudecode/request-log`); left out under Slim | the login name |
+| `params.safeguards[].classifier_context.home_dir` | the same | the home directory |
+| `attachment.path` | a `nested_memory` message's `instructions_part` `id` | the home directory, through the file's path |
+| `attachment.files[].path` | a one-file `instructions` message's `instructions_part` `id` | the home directory, through the file's path |
+| `message.content (skill base directory)` | an `agentskill:read` record's `location` | the home directory, through the skill's path |
+
+A sub-agent is named in the report by its place among the session's
+(`subagents/agent-#<n>`), never by its ID. The command's own listing of
+what it read and wrote (`-report json`'s `path`, and `written`'s `id`
+and `file`) names input files and sessions, which carry the native
+session ID and the dash-encoded home directory: it is the command's
+record for its user, not the conversion's report, whose groups are what
+to share.
+
+Paths built from the session ID and the dash-encoded project directory
+(`scratchpadDirectory`, `tool_results_dir`, a task's output file) stand
+in tool inputs and outputs, which the model saw, and are not listed.
+
 ## Extension types
 
 Open Responses carries types outside its spec as slug-prefixed
@@ -189,11 +224,12 @@ the codes marked "kept, or dropped" are dropped instead.
 
 | Code | Kind | Meaning |
 | --- | --- | --- |
-| `agentimport/provenance` | gap | Once per session: the import is recorded in the header member `agentimport:source`. |
+| `agentimport/provenance` | kept | Once per session: the import is recorded in the header member `agentimport:source`. |
 | `agentimport/reasoning-provider` | gap | A thinking signature is in `encrypted_content`, which says nothing of the provider that can replay it; the entry carries `claudecode:provider`. |
-| `agentimport/tool-error` | gap | A tool result had `is_error`; `function_call_output` has no error flag, so it is `claudecode:is_error`. |
-| `agentimport/usage-detail` | gap | A response's usage has members Responses usage lacks; they are in `claudecode:usage`. |
+| `agentimport/tool-error` | lossy | A tool result had `is_error`, which the model was sent; the output's entry is `failed`, and `function_call_output` has no error flag a request carries (Open Responses), so a rebuilt request does not send it. |
+| `agentimport/usage-detail` | kept | A response's usage has members Responses usage lacks; they are in `claudecode:usage`. |
 | `agentimport/vcs-branch` | gap | The git branch is the vcs member `claudecode:branch`; the format's vcs records a revision, not a branch. |
+| `claudecode/instructions-layers` | lossy | An `instructions` attachment holds a file of a type Claude Code is not known to write, a file with no path, or a path twice, so `instructions_part` names no layer of it. |
 | `claudecode/extension-part` | kept | A user or tool-result block with no Open Responses input part (`tool_reference`, a block kept raw) is the extension part `anthropic.<type>` carrying it; see *Extension types*. |
 | `claudecode/agent-meta` | kept, or dropped | A sub-agent's meta file is the header member `claudecode:agent_meta`. |
 | `claudecode/agent-meta-only` | dropped | A sub-agent has a meta file and no transcript: it never wrote a line. |
@@ -203,7 +239,7 @@ the codes marked "kept, or dropped" are dropped instead.
 | `claudecode/alternate-rendering` | lossy | A queued prompt's attachment carries a second rendering, for a new turn; the first, which the requests Claude Code logs hold, is the message, the other is in `claudecode:line`. |
 | `claudecode/attachment` | kept, or dropped | An attachment's payload, beside the message its rendering became, is `claudecode:attachment`. |
 | `claudecode/block-members` | kept, or dropped | Members of a content block or a rendering the item does not carry (a tool_use's `caller`, a text's `citations`) are `claudecode:block`, `claudecode:blocks` or `claudecode:rendered`. |
-| `claudecode/attachment-unrendered` | kept | An attachment that rendered nothing into the request is a custom entry. |
+| `claudecode/attachment-unrendered` | kept, or dropped | An attachment that rendered nothing into the request (`credential_org`, `deferred_tools_record` and the like) is a custom entry; under Slim it is left out, since the model never saw it, and a line naming it as its parent continues from where it stood. |
 | `claudecode/call-id-renamed` | repaired | A tool_use ID another call of the session holds was renamed; the native one is `claudecode:call_id`. |
 | `claudecode/compact-metadata` | kept, or dropped | A compaction's metadata is `claudecode:compact_metadata`. |
 | `claudecode/compaction-kept` | lossy | A compaction preserved no line on the path; `first_kept` is the entry before the compaction, the least the format can keep. |

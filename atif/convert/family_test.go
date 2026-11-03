@@ -232,6 +232,11 @@ func TestContinuationSettings(t *testing.T) {
 	if ctx.Settings.Model != "m-2" || ctx.Settings.Instructions != "Be careful." {
 		t.Errorf("successor's model %q, instructions %q", ctx.Settings.Model, ctx.Settings.Instructions)
 	}
+	// The config that carries them is a structural entry no step of the
+	// continuation maps to, reported under its own code.
+	if !slices.Contains(res.Report.Codes(), "atif/continuation-settings") {
+		t.Errorf("the seeded config is not reported: %v", res.Report.Codes())
+	}
 }
 
 // TestCodexProfile checks the Codex adapter's shapes: no instructions

@@ -113,6 +113,68 @@ a test asserts it for every fixture. The default drops only lines that
 carry no information beyond what the output already says (a line whose
 content is fully re-derived elsewhere); every drop has a finding.
 
+### Entries no line maps to
+
+Converters also write entries no native line maps to, of two kinds:
+
+- **Structural** entries are ones the format needs: a session's first
+  `config`, a `leaf` label, pi's `append`, a `fork_of` link a header
+  implies. They say nothing the native log does not; each is reported
+  under a code of its own so the report says what was added. The
+  structural entries the converters write, and their codes:
+
+  | Entry | Converters | Code |
+  | --- | --- | --- |
+  | a `leaf` label, when the session resumes at an entry that is not its last | all, through the builder | `agentimport/leaf-label` |
+  | a continuation's first `config`, the settings where its predecessor ended | ATIF | `atif/continuation-settings` |
+  | an output for a call no result answers, as the harness sends it | Cline, Cline SDK, OpenCode | `cline/result-missing`, `clinesdk/result-missing`, `opencode/call-unfinished` |
+  | a `fork_of` link, and the copied prefix of a fork | Claude Code, pi, Codex, Cline SDK, Hermes | `claudecode/fork-context`, `pi/fork-prefix`, `codex/fork-prefix`, `clinesdk/fork-copied`, `hermes/branch-copy` |
+  | a decision before an output a refusal or an interruption implies | Claude Code, Cline, Cline SDK, OpenHands, OpenCode | the source's `rejection`, `interrupted` and `permission-*` codes |
+
+  A first `config` made from a header line, a session row or a
+  document's root, and an `env` made from one, are that unit's mapping
+  and counted with it.
+- **Derived** entries are inferred from the content of the converted
+  path: a revision a `git commit` printed, a pull request a command
+  opened (#29). Only an importer infers entries from content, so by
+  RFC 0001's core test the mark is a harness detail in this module's
+  namespace, not a format member.
+
+The rule, for any importer:
+
+> An entry no native line maps to is structural, written because the
+> format requires it, or derived, inferred from the content of the
+> converted path. A derived entry carries `agentimport:derived` naming
+> its rule and its inputs (a `call_id` or entry IDs), is reported under
+> that rule's code, is written only by an opt-in pass, and states only
+> what its input states.
+
+A derived record about a call carries the call's `call_id`, so since
+format 0.15 it goes with the call when a redaction leaves the call out,
+and every rewriter keeps the namespaced mark.
+
+Where the pass runs (decided; noted on #28). A derived entry stands after
+its input, say after a call's output, and an entry's id hashes its
+parent, so appending one after conversion in the middle of a path
+would branch it, and putting it in line would move every id after it.
+The pass therefore runs inside each converter, as a rule set the
+converter consults when it writes an output (`Options.Derive`), before
+`Verify`, with derivation off writing byte-identical output to today's.
+A rule names the source's shell tool and how its output is shaped, so
+each source opts in rule by rule. Two rules run, for every source's
+shell tools (listed in `docs/formats/README.md`; the command takes
+`-derive`): commit revision (`agentimport.CommitRevision`) reads the
+revision a commit prints and writes an `env` entry after the call's
+output repeating the working directory, `vcs.revision` the abbreviation
+git printed; published refs (`agentimport.PublishedRefs`) reads what a
+`git push` reports it updated and the URL `gh pr create` prints, and
+writes an `agentimport:published` custom entry carrying the call's
+`call_id`. Converters that append through the builder's tail call
+`Builder.DeriveAfter`, which reads the call the builder saw appended. A session derivation ran on says so in its
+header's `agentimport:source`, `derived` naming the rules, since the
+entries after a derived one have other ids than a plain conversion
+gives them.
+
 ### Findings
 
 Below line level, a finding records each place the output differs from
@@ -129,7 +191,8 @@ type Finding struct {
 ```
 
 - `lossy`: mapped, with a change of meaning or precision. Anthropic
-  usage summed into Responses usage; a tool result's `is_error`.
+  usage summed into Responses usage; a tool result's `is_error`, which
+  is the output's `failed` and reaches no request.
 - `kept`: carried as a namespaced extension. Opaque to other readers,
   but present.
 - `dropped`: not in the output.
@@ -146,8 +209,9 @@ code its document does not list, so the document cannot fall behind the
 code.
 
 `Report` groups findings by code with counts and the first few line
-numbers, prints as text or JSON, and answers `Has(kinds...)` so a
-caller can refuse a lossy conversion (`agentimport convert -strict`).
+numbers, prints as text or JSON, and answers `Has(kinds...)`.
+`DocumentedGap` says whether a gap code is in the table, which
+`agentimport convert -strict` uses to refuse a lossy conversion.
 
 ### Identity and provenance
 
@@ -157,7 +221,9 @@ caller can refuse a lossy conversion (`agentimport convert -strict`).
 - `harness` names the source agent and the version on its first line.
 - The header carries `agentimport:source`, a namespaced member:
   `{format, native_id, converter}` (the converter's module version).
-  The RFC defines no import provenance; this is a `gap`.
+  The RFC defines no import provenance, and its core test puts a
+  writer's own detail in a member under the writer's namespace, which
+  is where this is; it is reported `kept` (`agentimport/provenance`).
 - Every entry made from a native line carries the native identity in a
   namespaced member beside the body (`claudecode:uuid`, `pi:id`), as
   the RFC suggests for a native call ID. The converter keeps its own
@@ -236,7 +302,10 @@ it, and a session that fails to write does not stop its siblings, so
 converting a tree again adds the sub-agents spawned since.
 `report` converts without writing and adds the findings up per source,
 which is how a corpus is surveyed. `-strict` exits 1 on any `dropped`
-or `gap` finding; a failed conversion exits 1 either way.
+finding and on a `gap` code `docs/incompatibilities.md` does not list;
+a listed gap is a known shape of the format and says nothing of one
+transcript. `-accept code,...` names codes that do not fail it. A
+failed conversion exits 1 either way.
 
 With `-from auto`, a directory is searched with every source's finder
 and each file is detected by name and first lines: a Codex rollout by

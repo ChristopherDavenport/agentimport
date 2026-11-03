@@ -253,8 +253,8 @@ classic's by the API index they carry, Roo's and the edits by time.
 | classic `modelInfo.modelId` | the first `config`'s `model`; a `config` delta where it changes; the response's `model` | `modelInfo` and `metrics` stay in `cline:message` |
 | Roo, which records no model | the first `config` with no model and members `cline:api_config_name` and `cline:mode` | |
 | user message: text, images, documents | `item`, user `message`: `input_text`, `input_image` (data URL), `input_file` (a base64 document); another block an `anthropic.<type>` extension part | the blocks' other members in `cline:blocks` by index; the message's in `cline:message` |
-| user `tool_result` answering a call of the response before | `item`, `function_call_output`, before the message's other content | `is_error` as `cline:is_error` (gap `agentimport/tool-error`); members of the blocks inside its content in `cline:content_blocks` by index; a result answering no call a custom entry `{"orphan_result": …}` |
-| a call the next user message does not answer (classic) | a `function_call_output` `result missing`, marked `cline:synthesized` | what Cline sends |
+| user `tool_result` answering a call of the response before | `item`, `function_call_output`, before the message's other content | `is_error` as the entry's `failed` (`agentimport/tool-error`); members of the blocks inside its content in `cline:content_blocks` by index; a result answering no call a custom entry `{"orphan_result": …}` |
+| a call the next user message does not answer (classic) | a `function_call_output` `result missing`, marked `cline:synthesized`, not `failed`: the log carries no flag | what Cline sends |
 | a refusal (`The user denied this operation.` with optional `<feedback>`, Roo's `{"status":"denied"}`; `.clineignore`, Roo's `access_denied`, a command permission) | a `reject` `decision` before the output, `by` `human` or `policy`, `reason` the feedback or the text | the output follows as written |
 | assistant `text` | `item`, assistant `message`, `output_text` | XML-era tool calls stay text; parsed into `cline:xml_tools` |
 | `thinking` | `reasoning`: `summary_text`, the signature in `encrypted_content`, `cline:provider` `anthropic` | unsigned: an `omit` config entry after the response |
@@ -330,6 +330,30 @@ deleted requests' usage, and are custom entries. Checkpoint
 repositories are not read; the UI records naming their commits are
 kept.
 
+## Instruction layers
+
+Cline builds its system prompt, `.clinerules` and the custom
+instructions in it, for each request and does not store it, so the
+session holds no instructions from it; no layer reaches the log as a
+message of its own. So no item carries `instructions_part`, and there
+is no instruction part to name.
+
+## Identity
+
+The native members this converter carries into the session that
+identify a person, an account or organization, a machine or the native
+session, and where each lands. A report lists them by path and count
+under `agentimport/identity`, never by value, so a redaction can
+harvest the values from the original and check its output for them
+(RFC 0001, Conformance).
+
+| Member | Lands in | Names |
+| --- | --- | --- |
+| `task id` | the header's `id`: the task directory's name | the native task |
+| `history item cwd` | the header's `cwd` (the history item's workspace, its `cwdOnTaskInitialization`, or the shadow git work tree) | the user's home directory, through the project path |
+
+The report lists the session's ID and working directory (`agentimport/identity`); the other members are carried as listed and not yet counted.
+
 ## Extension types
 
 Open Responses carries types outside its spec as slug-prefixed
@@ -353,8 +377,8 @@ every converter can report are in [README.md](README.md).
 | `agentimport/context-replace` | gap | A classic context edit replaces a block's text in later requests, or Cline sends `result missing` for message 1's calls after a range; the session keeps the original and an edit is a custom entry. |
 | `agentimport/fold-head` | gap | A Roo request sent a message ahead of the summary it folded the history into, or the summary as an assistant message; the compaction puts its summary, as a user message, first. |
 | `agentimport/reasoning-provider` | gap | A reasoning signature (Anthropic's, Gemini's, OpenAI's encrypted reasoning) is in `encrypted_content`, tagged `cline:provider`. |
-| `agentimport/tool-error` | gap | A tool result's `is_error` is `cline:is_error`. |
-| `agentimport/usage-detail` | gap | Cache writes are folded into the input tokens; the request record's counts and cost are `cline:usage`. |
+| `agentimport/tool-error` | lossy | A tool result's `is_error`, which the model was sent, makes the output's entry `failed`; `function_call_output` has no error flag a request carries (Open Responses), so a rebuilt request does not send it. |
+| `agentimport/usage-detail` | kept | Cache writes are folded into the input tokens; the request record's counts and cost are `cline:usage`. |
 | `cline/checkpoints` | dropped | The task's checkpoint repository is not read. |
 | `cline/file-unread` | dropped | A file of the task directory the converter does not read: a hook's leftover transcript, a temporary file, a newer release's. |
 | `cline/null-block` | dropped | A content block that is not an object. |

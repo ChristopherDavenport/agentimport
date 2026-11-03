@@ -234,7 +234,7 @@ and nothing before it survives.
 | `system_prompt` | the first `config`'s `instructions` |
 | model (the first assistant message's `modelInfo`, else the manifest's) | the first `config`'s `model`, a later change a config delta; the provider `clinesdk:provider` |
 | user `text`, `image`, `file` blocks | a user `message` of `input_text` and `input_image` (data URL) parts, in order |
-| `tool_result` | `function_call_output`, in the order the blocks stand; `is_error` `clinesdk:is_error` |
+| `tool_result` | `function_call_output`, in the order the blocks stand; `is_error` the entry's `failed`; an output Cline synthesises for a call no result answers is `failed` too |
 | `thinking` | `reasoning`: `summary_text`, the signature in `encrypted_content`; with no signature, sent to Anthropic, omitted after the response, as the AI SDK's Anthropic provider leaves it out |
 | `redacted_thinking` | `anthropic.redacted_thinking` |
 | `text` with a Gemini `signature` | a `reasoning` holding only `encrypted_content`, then the `output_text` |
@@ -301,6 +301,31 @@ child reached twice is converted once.
   session nothing was written in after the copy is the task's alone and
   is not converted.
 
+## Instruction layers
+
+The Cline SDK stores the system prompt it sent as one text, its rules
+and instructions inside it with nothing that marks where one ends;
+the session holds it as the instructions, and no part can be named by
+a well-known `source`. No layer reaches the history as a message of its
+own, so no item carries `instructions_part`.
+
+## Identity
+
+The native members this converter carries into the session that
+identify a person, an account or organization, a machine or the native
+session, and where each lands. A report lists them by path and count
+under `agentimport/identity`, never by value, so a redaction can
+harvest the values from the original and check its output for them
+(RFC 0001, Conformance).
+
+| Member | Lands in | Names |
+| --- | --- | --- |
+| `session_id` | the header's `id` (the manifest's) | the native session |
+| `cwd` | the header's `cwd` (the manifest's) | the user's home directory, through the project path |
+| `workspace_root` | `clinesdk:*` members | the same |
+
+The report lists the session's ID and working directory (`agentimport/identity`); the other members are carried as listed and not yet counted.
+
 ## Extension types
 
 | Type | What it carries |
@@ -315,8 +340,8 @@ child reached twice is converted once.
 | --- | --- | --- |
 | `agentimport/context-replace` | gap | Cline sends an item rewritten from a request on: an outdated read, a cut assistant text. The item stays as first sent; the rewrite is a custom entry. |
 | `agentimport/reasoning-provider` | gap | A thinking or Gemini thought signature is in `encrypted_content`, the message's provider in `clinesdk:provider`. |
-| `agentimport/tool-error` | gap | A failed call's output carries `clinesdk:is_error`. |
-| `agentimport/usage-detail` | gap | Cache writes, in the input already, and the cost are `clinesdk:usage`. |
+| `agentimport/tool-error` | lossy | A tool result's `is_error`, which the model was sent, makes the output's entry `failed`; `function_call_output` has no error flag a request carries (Open Responses), so a rebuilt request does not send it. |
+| `agentimport/usage-detail` | kept | Cache writes, in the input already, and the cost are `clinesdk:usage`. |
 | `clinesdk/child-failed` | dropped | A sub-agent's or team task's history that could not be converted. |
 | `clinesdk/children-alone` | dropped | A child not converted, with `Options.Alone`. |
 | `clinesdk/compaction-copy` | dropped | The sidecar's copy of a history message, which the compaction keeps from `first_kept`. |

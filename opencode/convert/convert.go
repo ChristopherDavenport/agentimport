@@ -39,6 +39,11 @@ type Options struct {
 	// does not map, snapshots and patches, OpenCode 2's queued input.
 	// Each drop is still reported.
 	Slim bool
+	// Derive writes the entries the module's derivation rules infer
+	// from the converted path, each marked agentimport:derived: what a
+	// shell call published and the revision a commit printed
+	// (docs/plans/agentimport.md).
+	Derive bool
 	// Alone converts each session without its sub-agents, which are
 	// otherwise converted with the session that ran them.
 	Alone bool
@@ -55,6 +60,12 @@ type Options struct {
 // database is read once, from one copy, removed when the conversion
 // returns.
 func ConvertFile(path string, opts Options) (*agentimport.Result, error) {
+	res, err := convertFileReport(path, opts)
+	res.ScrubIdentity()
+	return res, err
+}
+
+func convertFileReport(path string, opts Options) (*agentimport.Result, error) {
 	st, err := OpenStores(path, opts)
 	if err != nil {
 		return nil, err
@@ -143,6 +154,12 @@ func (st *Stores) notes(r *agentimport.Report) {
 // failure to read a store fails the conversion: a session that cannot
 // be converted is a finding.
 func Convert(opts Options, stores ...opencode.Store) (*agentimport.Result, error) {
+	res, err := convertReport(opts, stores...)
+	res.ScrubIdentity()
+	return res, err
+}
+
+func convertReport(opts Options, stores ...opencode.Store) (*agentimport.Result, error) {
 	if len(stores) == 0 {
 		return nil, errors.New("opencode: no store")
 	}

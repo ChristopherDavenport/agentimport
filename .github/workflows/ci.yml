@@ -53,6 +53,8 @@ jobs:
         run: make lint
       - name: govulncheck
         run: make vuln
+      - name: Release guard tests
+        run: make guard-test
 
   # Single required status check for branch protection; it fails if any job
   # above failed, was cancelled or was skipped.

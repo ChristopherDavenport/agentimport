@@ -3,6 +3,7 @@ package agentimport
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/ChristopherDavenport/agentsession"
 	"io"
 	"slices"
 	"strings"
@@ -63,6 +64,26 @@ type Finding struct {
 	// Line is 1-based, or 0 when the finding is not tied to a line.
 	Line   int    `json:"line,omitempty"`
 	Detail string `json:"detail,omitempty"`
+	// Path is, for an [IdentityCode] finding, the native member that
+	// identifies a person, an account or organization, a machine or the
+	// native session, as a dotted path: never its value.
+	Path string `json:"path,omitempty"`
+}
+
+// IdentityCode is the code of a finding that a native member naming a
+// person, an account or organization, a machine or the native session
+// was carried into the session. A conforming converter documents those
+// members (RFC 0001, Conformance) and reports them by path and count,
+// never by value, so a redaction can harvest the values from the
+// original and check its output for them.
+const IdentityCode = "agentimport/identity"
+
+// Identity records that the native member at path, read at file and
+// line, was carried into the session where lands says. The value is
+// not recorded.
+func (r *Report) Identity(file string, line int, path, lands string) {
+	r.Add(Finding{Code: IdentityCode, Kind: Kept, File: file, Line: line, Path: path,
+		Detail: "identity member " + path + " is carried into " + lands})
 }
 
 // Report is what one conversion did to its input.
@@ -147,6 +168,15 @@ type Group struct {
 	Example string `json:"example,omitempty"`
 	// At lists where the first few findings were, as file:line or line.
 	At []string `json:"at,omitempty"`
+	// Paths counts the findings of each native member path, for the
+	// findings that name one ([IdentityCode]'s): every path, sorted.
+	Paths []PathCount `json:"paths,omitempty"`
+}
+
+// PathCount is how many findings named one native member path.
+type PathCount struct {
+	Path  string `json:"path"`
+	Count int    `json:"count"`
 }
 
 // maxAt bounds Group.At.
@@ -166,6 +196,14 @@ func (r *Report) Groups() []Group {
 		}
 		g := &gs[i]
 		g.Count++
+		if f.Path != "" {
+			k := slices.IndexFunc(g.Paths, func(p PathCount) bool { return p.Path == f.Path })
+			if k < 0 {
+				g.Paths = append(g.Paths, PathCount{Path: f.Path})
+				k = len(g.Paths) - 1
+			}
+			g.Paths[k].Count++
+		}
 		if f.Line > 0 && len(g.At) < maxAt {
 			at := fmt.Sprint(f.Line)
 			if f.File != "" {
@@ -173,6 +211,9 @@ func (r *Report) Groups() []Group {
 			}
 			g.At = append(g.At, at)
 		}
+	}
+	for i := range gs {
+		slices.SortFunc(gs[i].Paths, func(a, b PathCount) int { return strings.Compare(a.Path, b.Path) })
 	}
 	slices.SortFunc(gs, func(a, b Group) int {
 		if c := slices.Index(Kinds, a.Kind) - slices.Index(Kinds, b.Kind); c != 0 {
@@ -204,6 +245,9 @@ func (r *Report) WriteText(w io.Writer) error {
 			fmt.Fprintf(&b, " (at %s)", strings.Join(g.At, ", "))
 		}
 		b.WriteString("\n")
+		for _, p := range g.Paths {
+			fmt.Fprintf(&b, "  %-8s   %-42s %6d\n", "", p.Path, p.Count)
+		}
 	}
 	_, err := io.WriteString(w, b.String())
 	return err
@@ -217,4 +261,14 @@ func (r *Report) MarshalJSON() ([]byte, error) {
 		Lines  int     `json:"lines"`
 		Groups []Group `json:"groups,omitempty"`
 	}{(*report)(r), r.Lines(), r.Groups()})
+}
+
+// HeaderIdentity reports the identity members a converter carried into a
+// session's header: the native session's ID, from idPath, and its
+// working directory, from cwdPath, when the header has one.
+func (r *Report) HeaderIdentity(file string, h agentsession.Header, idPath, cwdPath string) {
+	r.Identity(file, 0, idPath, "the header's id, or "+SourceMember+"'s native_id")
+	if h.CWD != "" && cwdPath != "" {
+		r.Identity(file, 0, cwdPath, "the header's cwd")
+	}
 }

@@ -147,14 +147,23 @@ func (w *v2walk) row(r *opencode.Row2) error {
 		}
 		return w.item(r, e, ts, "text")
 	case opencode.TypeSystem:
-		return w.item(r, agentsession.NewItemEntry(openresponses.SystemText(d.Text)), ts, "text")
+		e := agentsession.NewItemEntry(openresponses.SystemText(d.Text))
+		if e.InstructionsPart, e.InstructionsLayers = instructionLayers(d.Text); e.InstructionsPart != nil || e.InstructionsLayers != nil {
+			sc.report.Identity(r.Unit, 0, "system row instruction file path", "the item's instructions_part id")
+		}
+		return w.item(r, e, ts, "text")
 	case opencode.TypeShell:
 		if opencode.MetadataBool(d.Metadata, "background") {
 			sc.addf(sc.keepKind(), "opencode/shell-background", r.Unit, "a shell command run in the background enters context through its result, not here")
 			return sc.custom(ts, r.Unit, "a background shell command", map[string]any{"id": r.ID, "type": r.Type, "data": json.RawMessage(r.Raw)})
 		}
 		text := "The following shell command was executed by the user:\n\nCommand:\n" + d.Command + "\n\nOutput:\n" + opencode.ShellOutput(d.Output)
-		return w.item(r, agentsession.NewItemEntry(userText(text)), ts, "command", "output")
+		e := agentsession.NewItemEntry(userText(text))
+		if n, ok := exitCode(d.Exit); ok {
+			agentimport.SetExitCode(e, n)
+			sc.addf(agentimport.Kept, "agentimport/exit-code", r.Unit, "the command's exit code is %s", agentimport.ExitCodeMember)
+		}
+		return w.item(r, e, ts, "command", "output")
 	case opencode.TypeAssistant:
 		return w.assistant(r, ts)
 	case opencode.TypeCompaction:
@@ -227,10 +236,37 @@ func (w *v2walk) user(r *opencode.Row2, ts time.Time) error {
 	sc := w.sc
 	d := r.Data
 	var content openresponses.Contents
+	// Each skill's text is sent; the rest of each element, its name
+	// among it, is kept in opencode:skills, an element per skill.
+	var skills []json.RawMessage
+	var reads []agentimport.SkillRead
+	keepSkills := false
 	for _, raw := range d.Skills {
-		if t, ok := opencode.SkillText(raw); ok {
+		t, ok := opencode.SkillText(raw)
+		if ok {
 			content = append(content, &openresponses.InputText{Text: t})
+			var el struct {
+				Name     string `json:"name"`
+				Location string `json:"location"`
+			}
+			_ = json.Unmarshal(raw, &el)
+			r := agentimport.SkillRead{Name: el.Name, Location: el.Location}
+			r.Served(t)
+			reads = append(reads, r)
+		} else {
+			kind := sc.keepKind()
+			sc.addf(kind, "opencode/skill-untexted", r.Unit, "a skill with no text is not sent, as OpenCode sends none; the element is %s", keptOr(kind, "kept in "+Source+":skills"))
 		}
+		el := json.RawMessage(raw)
+		if m := rest(raw, "text"); ok && m != nil {
+			el, _ = json.Marshal(m)
+		} else if ok {
+			el = json.RawMessage("{}")
+		}
+		if !isEmpty(el) {
+			keepSkills = true
+		}
+		skills = append(skills, el)
 	}
 	if d.Text != "" {
 		content = append(content, &openresponses.InputText{Text: d.Text})
@@ -240,7 +276,37 @@ func (w *v2walk) user(r *opencode.Row2, ts time.Time) error {
 		sc.addf(sc.keepKind(), "opencode/message-empty", r.Unit, "a user row with nothing OpenCode sends is not in context")
 		return sc.custom(ts, r.Unit, "a user row with nothing sent", map[string]any{"id": r.ID, "type": r.Type, "data": json.RawMessage(r.Raw)})
 	}
-	return w.item(r, agentsession.NewItemEntry(openresponses.UserMessage(content...)), ts, "text", "skills", "files")
+	e := agentsession.NewItemEntry(openresponses.UserMessage(content...))
+	if keepSkills {
+		if err := sc.member(e, "skills", skills, r.Unit); err != nil {
+			return err
+		}
+	}
+	if err := w.item(r, e, ts, "text", "skills", "files"); err != nil {
+		return err
+	}
+	// Each skill whose text the message carried is a read, recorded as
+	// agentskill records one, after the message; no call served it.
+	for _, read := range reads {
+		rec, err := read.Entry("")
+		if err != nil {
+			return err
+		}
+		rec.Timestamp = ts
+		if _, err := sc.append(rec); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// keptOr is what a finding of kind says of a value: kept as where says,
+// or left out.
+func keptOr(kind agentimport.Kind, where string) string {
+	if kind == agentimport.Dropped {
+		return "left out"
+	}
+	return where
 }
 
 // attachments renders a user row's files: text and directories inline
@@ -629,12 +695,8 @@ func (w *v2walk) output(r *opencode.Row2, c *opencode.Content2, st *opencode.Too
 	out := agentsession.NewItemEntry(&openresponses.FunctionCallOutput{CallID: callID, Output: data})
 	out.Timestamp = ts
 	out.Parents = refs
-	if isError {
-		if err := sc.b.Member(out, "is_error", true); err != nil {
-			return err
-		}
-		sc.addf(agentimport.Gap, "agentimport/tool-error", r.Unit, "a function_call_output has no error flag; OpenCode 2 sends the error as JSON text, and the item entry carries %s:is_error", Source)
-	}
+	// OpenCode 2 sends the error as JSON text, which the output holds.
+	out.Failed = isError
 	if _, err := sc.append(out); err != nil {
 		return err
 	}
@@ -802,4 +864,46 @@ func (sc *sconv) queued() error {
 		}
 	}
 	return nil
+}
+
+// exitCode reads an exit code: an integer, which null or any other
+// value is not.
+func exitCode(raw json.RawMessage) (int64, bool) {
+	var n json.Number
+	d := json.NewDecoder(bytes.NewReader(raw))
+	d.UseNumber()
+	if len(raw) == 0 || d.Decode(&n) != nil {
+		return 0, false
+	}
+	v, err := n.Int64()
+	return v, err == nil
+}
+
+// instructionFile matches the lines OpenCode 2 renders an instruction
+// file's change with (core/src/instruction-discovery.ts): the file whose
+// instructions it carries, those that no longer apply, and those whose
+// diff it carries.
+var instructionFile = regexp.MustCompile(`(?m)^(?:Instructions from: (.+)|The instructions from (.+) no longer apply\.|The instructions from (.+) changed\. Here's the diff:)$`)
+
+// instructionLayers names the instruction files a system row OpenCode 2
+// composed from them carries, in the order it holds them: one in the
+// single form of instructions_part, several in format 0.18's list.
+func instructionLayers(text string) (*agentsession.LayerRef, []agentsession.LayerRef) {
+	var layers []agentsession.LayerRef
+	seen := map[string]bool{}
+	for _, m := range instructionFile.FindAllStringSubmatch(text, -1) {
+		path := m[1] + m[2] + m[3]
+		if path == "" || seen[path] {
+			continue
+		}
+		seen[path] = true
+		layers = append(layers, agentsession.LayerRef{ID: path, Source: agentsession.LayerAgentsMD})
+	}
+	switch len(layers) {
+	case 0:
+		return nil, nil
+	case 1:
+		return &layers[0], nil
+	}
+	return nil, layers
 }

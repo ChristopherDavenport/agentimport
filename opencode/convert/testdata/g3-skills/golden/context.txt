@@ -1,0 +1,4 @@
+session 0 ses_skills
+  model: claude-x
+  user: Write short sentences. | tidy the docs
+  assistant: Done.

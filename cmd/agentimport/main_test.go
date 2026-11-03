@@ -281,21 +281,89 @@ func TestConvertOverwrite(t *testing.T) {
 	}
 }
 
+// cleanSession is a two-line Claude Code session that converts with
+// nothing dropped and no gap.
+const cleanSession = `{"type":"user","uuid":"u1","parentUuid":null,"timestamp":"2026-09-01T10:00:00.000Z","message":{"role":"user","content":"Hi."},"isSidechain":false,"cwd":"/work/demo","version":"2.1.290","sessionId":"11111111-1111-4111-8111-0000000000c1"}
+{"type":"assistant","uuid":"a1","parentUuid":"u1","timestamp":"2026-09-01T10:00:01.000Z","message":{"id":"msg_01","type":"message","role":"assistant","model":"claude-opus-5-5","content":[{"type":"text","text":"Hello."}],"stop_reason":"end_turn","usage":{"input_tokens":3,"output_tokens":2}},"requestId":"req_01","isSidechain":false,"cwd":"/work/demo","version":"2.1.290","sessionId":"11111111-1111-4111-8111-0000000000c1"}
+`
+
 func TestStrict(t *testing.T) {
-	// Every conversion reports the provenance gap, so -strict refuses
-	// any; without it the same run passes.
-	in := "../../pi/convert/testdata/anthropic"
+	// A documented gap is a known shape of the format and says nothing
+	// of one transcript, so -strict passes a clean session; a dropped
+	// finding fails it unless -accept names its code.
+	clean := filepath.Join(t.TempDir(), "11111111-1111-4111-8111-0000000000c1.jsonl")
+	if err := os.WriteFile(clean, []byte(cleanSession), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	slim := "../../pi/convert/testdata/anthropic"
 	for _, tc := range []struct {
 		args []string
 		code int
 	}{
-		{[]string{"report", in}, 0},
-		{[]string{"report", "-strict", in}, 1},
-		{[]string{"convert", "-o", t.TempDir(), in}, 0},
-		{[]string{"convert", "-strict", "-o", t.TempDir(), in}, 1},
+		{[]string{"report", "-strict", clean}, 0},
+		{[]string{"convert", "-strict", "-o", t.TempDir(), clean}, 0},
+		{[]string{"report", "-slim", slim}, 0},
+		{[]string{"report", "-strict", "-slim", slim}, 1},
+		{[]string{"convert", "-strict", "-slim", "-o", t.TempDir(), slim}, 1},
+		{[]string{"report", "-strict", "-slim", "-accept", "pi/usage,pi/meta", slim}, 1},
+		{[]string{"report", "-accept", "", clean}, 2},
 	} {
 		if code, out, errOut := runCmd(t, tc.args...); code != tc.code {
 			t.Errorf("%v: exit %d, want %d\n%s%s", tc.args, code, tc.code, out, errOut)
+		}
+	}
+	// -accept names every code the slim conversion drops, and then it
+	// passes.
+	code, out, _ := runCmd(t, "report", "-json", "-slim", slim)
+	if code != 0 {
+		t.Fatalf("report -json: exit %d", code)
+	}
+	var res struct{ Aggregate map[string]summary }
+	if err := json.Unmarshal([]byte(out), &res); err != nil {
+		t.Fatal(err)
+	}
+	var dropped []string
+	for _, g := range res.Aggregate["pi"].Groups {
+		if g.Kind == agentimport.Dropped {
+			dropped = append(dropped, g.Code)
+		}
+	}
+	if len(dropped) == 0 {
+		t.Fatal("the slim conversion dropped nothing")
+	}
+	if code, out, _ := runCmd(t, "report", "-strict", "-slim", "-accept", strings.Join(dropped, ","), slim); code != 0 {
+		t.Errorf("-accept %v: exit %d\n%s", dropped, code, out)
+	}
+}
+
+func TestStrictFails(t *testing.T) {
+	report := func(fs ...agentimport.Finding) outcome {
+		r := agentimport.NewReport("claudecode")
+		for _, f := range fs {
+			r.Add(f)
+		}
+		return outcome{res: &agentimport.Result{Report: r}}
+	}
+	unreached := agentimport.Finding{Code: "claudecode/unreached", Kind: agentimport.Dropped, Line: 3}
+	documented := agentimport.Finding{Code: "agentimport/vcs-branch", Kind: agentimport.Gap}
+	undocumented := agentimport.Finding{Code: "claudecode/nowhere", Kind: agentimport.Gap}
+	kept := agentimport.Finding{Code: "agentimport/provenance", Kind: agentimport.Kept}
+	for _, tc := range []struct {
+		name   string
+		o      outcome
+		accept []string
+		fails  bool
+	}{
+		{"clean", report(kept), nil, false},
+		{"documented gap", report(kept, documented), nil, false},
+		{"unreached", report(kept, unreached), nil, true},
+		{"unreached accepted", report(unreached), []string{"claudecode/unreached"}, false},
+		{"undocumented gap", report(undocumented), nil, true},
+		{"undocumented gap accepted", report(undocumented), []string{"claudecode/nowhere"}, false},
+		{"failed", outcome{err: os.ErrNotExist}, nil, false},
+	} {
+		if got := tc.o.strictFails(acceptSet(tc.accept)); got != tc.fails {
+			t.Errorf("%s: strictFails = %v, want %v", tc.name, got, tc.fails)
 		}
 	}
 }
@@ -305,7 +373,7 @@ func TestReport(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d\n%s%s", code, out, errOut)
 	}
-	for _, want := range []string{"converted: claudecode ", "claudecode: ", "pi: ", "codex: ", "atif: ", "roots and steps:", "gap      agentimport/provenance"} {
+	for _, want := range []string{"converted: claudecode ", "claudecode: ", "pi: ", "codex: ", "atif: ", "roots and steps:", "kept     agentimport/provenance"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("report lacks %q:\n%s", want, out)
 		}
@@ -836,4 +904,130 @@ func TestClineSDKSession(t *testing.T) {
 	if after := names(); !slices.Equal(before, after) {
 		t.Errorf("the index's directory held %v and holds %v; something was written beside the database", before, after)
 	}
+}
+
+// TestFailed converts a fixture of each source whose log flags a call
+// as failed: the output carries failed, no converter keeps the flag in
+// a member of its own, and an exit code is kept beside it without
+// making a call failed.
+func TestFailed(t *testing.T) {
+	for _, tc := range []struct {
+		source, path string
+		// exits is how many outputs carry a nonzero exit code and no
+		// failed.
+		exits int
+	}{
+		{"claudecode", "../../claudecode/convert/testdata/parallel/11111111-1111-4111-8111-000000000002.jsonl", 0},
+		{"pi", "../../pi/convert/testdata/anthropic/2026-09-01T10-00-00-000Z_01a00001-0000-7000-8000-000000000001.jsonl", 0},
+		{"cline", "../../cline/convert/testdata/classic-malformed/saoudrizwan.claude-dev/tasks/1760400000000", 0},
+		{"clinesdk", "../../clinesdk/convert/testdata/s1-basic/sessions/1759312800000_ab12c", 0},
+		{"openhands", "../../openhands/convert/testdata/parallel-calls/conversations/00000003000040009000000000000001", 1},
+	} {
+		s, _ := sourceNamed(tc.source)
+		var ignored []skipped
+		res, err := s.convert(tc.path, newRunner(false, &ignored))
+		if err != nil {
+			t.Fatalf("%s: %v", tc.source, err)
+		}
+		failed, exits := 0, 0
+		for _, sess := range res.Sessions {
+			for _, e := range sess.Entries() {
+				for k := range e.Base().Unknown {
+					if strings.HasSuffix(k, ":is_error") {
+						t.Errorf("%s: an entry keeps %s", tc.source, k)
+					}
+				}
+				ie, ok := e.(*agentsession.ItemEntry)
+				if !ok {
+					continue
+				}
+				if ie.Failed {
+					failed++
+				} else if code, ok := ie.Unknown[agentimport.ExitCodeMember]; ok && string(code) != "0" && ie.Item.ItemType() == "function_call_output" {
+					exits++
+				}
+			}
+		}
+		if failed == 0 {
+			t.Errorf("%s: no output is marked failed", tc.source)
+		}
+		if exits != tc.exits {
+			t.Errorf("%s: %d outputs carry a nonzero exit code and no failed, want %d", tc.source, exits, tc.exits)
+		}
+		for _, f := range res.Report.Findings {
+			if f.Code == "agentimport/tool-error" && f.Kind == agentimport.Gap {
+				t.Errorf("%s: %+v", tc.source, f)
+			}
+		}
+	}
+}
+
+// TestIdentityEverySource: every source's report counts the identity
+// members its converter carries into the header, by path.
+func TestIdentityEverySource(t *testing.T) {
+	code, out, _ := runCmd(t, append([]string{"report", "-json"}, fixtureRoots...)...)
+	if code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	var res struct{ Aggregate map[string]summary }
+	if err := json.Unmarshal([]byte(out), &res); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"claudecode", "pi", "codex", "atif", "cline", "openhands", "opencode", "clinesdk"} {
+		found := false
+		for _, g := range res.Aggregate[name].Groups {
+			if g.Code == agentimport.IdentityCode && len(g.Paths) > 0 {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("%s reports no identity member", name)
+		}
+	}
+}
+
+// TestIdentityValuesEverySource converts every fixture of every source
+// and holds each report to naming no session by its ID: no header ID,
+// native ID or parent session of any session the conversion made
+// appears in a finding's file or detail, which name files and sessions
+// by place.
+func TestIdentityValuesEverySource(t *testing.T) {
+	ins, _, err := collect(fixtureRoots, "auto")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var skip []skipped
+	newRunner(false, &skip).each(ins, func(o outcome) {
+		if o.err != nil || o.res == nil {
+			return
+		}
+		values := map[string]bool{}
+		for _, s := range o.res.Sessions {
+			h := s.Header()
+			values[h.ID], values[h.ParentSession] = true, true
+			var src agentimport.Source
+			if json.Unmarshal(h.Extra[agentimport.SourceMember], &src) == nil {
+				values[src.NativeID] = true
+			}
+			// OpenHands names a conversation's directory by its ID
+			// without dashes.
+			values[strings.ReplaceAll(h.ID, "-", "")] = true
+		}
+		raw, err := json.Marshal(o.res.Report)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var text bytes.Buffer
+		if err := o.res.Report.WriteText(&text); err != nil {
+			t.Fatal(err)
+		}
+		for v := range values {
+			if len(v) < 6 {
+				continue
+			}
+			if strings.Contains(string(raw), v) || strings.Contains(text.String(), v) {
+				t.Errorf("%s (%s): the report names session %s", o.in.path, o.in.source.name, v)
+			}
+		}
+	})
 }

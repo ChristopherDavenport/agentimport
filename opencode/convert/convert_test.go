@@ -3,6 +3,7 @@ package convert
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/ChristopherDavenport/agentimport"
 	"github.com/ChristopherDavenport/agentimport/internal/doccheck"
+	"github.com/ChristopherDavenport/agentimport/internal/testfix"
 	"github.com/ChristopherDavenport/agentimport/opencode"
 	"github.com/ChristopherDavenport/agentimport/opencode/sqlite"
 	"github.com/ChristopherDavenport/agentsession"
@@ -347,4 +349,119 @@ func short(s string) string {
 		s = s[:50]
 	}
 	return s
+}
+
+// TestSkills converts a V2 user row with two skills, one without text:
+// each element but its text is kept in opencode:skills and reported,
+// the one without text is reported as not sent, and Slim drops both.
+func TestSkills(t *testing.T) {
+	for _, slim := range []bool{false, true} {
+		res := convertFixture(t, "g3-skills", Options{Slim: slim})
+		var b bytes.Buffer
+		if err := agentsession.Write(&b, res.Sessions[0]); err != nil {
+			t.Fatal(err)
+		}
+		out := b.String()
+		// The skill whose text was sent is named by its agentskill:read
+		// record under Slim too; the rest of the elements go.
+		for _, want := range []string{`"opencode:skills"`, `"x_origin":"global"`, `"name":"no-body"`} {
+			if got := strings.Contains(out, want); got == slim {
+				t.Errorf("slim %v: output holds %s: %v", slim, want, got)
+			}
+		}
+		if !strings.Contains(out, `"text":"Write short sentences."`) {
+			t.Errorf("slim %v: the skill's text is not sent", slim)
+		}
+		if strings.Contains(out, `"opencode:skills":[{"id":"sk_1","location":"/work/s/.opencode/skills/docs-style/SKILL.md","name":"docs-style","text"`) {
+			t.Errorf("slim %v: the kept skill holds its text", slim)
+		}
+		untexted := 0
+		for _, fd := range res.Report.Findings {
+			if fd.Code == "opencode/skill-untexted" {
+				untexted++
+			}
+			if fd.Code == "opencode/members" && strings.Contains(fd.Detail, "skills") {
+				want := agentimport.Kept
+				if slim {
+					want = agentimport.Dropped
+				}
+				if fd.Kind != want {
+					t.Errorf("slim %v: %+v; want %s", slim, fd, want)
+				}
+			}
+		}
+		if untexted != 1 {
+			t.Errorf("slim %v: %d opencode/skill-untexted findings, want 1", slim, untexted)
+		}
+		if !strings.Contains(fmt.Sprint(res.Report.Findings), "opencode:skills") && !slim {
+			t.Errorf("the skills member is not reported: %v", res.Report.Findings)
+		}
+	}
+}
+
+// TestSkillReads: each skill whose text a V2 user row sent is recorded
+// as agentskill records a read, after the message, with no call, its
+// name, location and the digest of the text; Slim keeps the records.
+func TestSkillReads(t *testing.T) {
+	for _, slim := range []bool{false, true} {
+		res := convertFixture(t, "g3-skills", Options{Slim: slim})
+		var recs []*agentsession.CustomEntry
+		for _, e := range res.Sessions[0].Entries() {
+			if c, ok := e.(*agentsession.CustomEntry); ok && c.NS == agentimport.SkillReadNS {
+				recs = append(recs, c)
+			}
+		}
+		if len(recs) != 1 {
+			t.Fatalf("slim %v: %d agentskill:read records, want 1", slim, len(recs))
+		}
+		var got agentimport.SkillRead
+		if err := json.Unmarshal(recs[0].Data, &got); err != nil {
+			t.Fatal(err)
+		}
+		var want agentimport.SkillRead
+		want.Served("Write short sentences.")
+		if got.Name != "docs-style" || got.Location != "/work/s/.opencode/skills/docs-style/SKILL.md" || got.SHA256 != want.SHA256 || recs[0].CallID != "" {
+			t.Errorf("slim %v: record %s", slim, recs[0].Data)
+		}
+	}
+}
+
+// TestDerive: with derivation, a shell call whose output prints the
+// commit it made is followed by a derived env entry carrying the
+// revision, marked agentimport:derived with the call's call_id, and the
+// header names the rules; without it, no derived entry is written.
+func TestDerive(t *testing.T) {
+	for _, derive := range []bool{false, true} {
+		res := func() *agentimport.Result {
+			dir := testfix.Variant(t, "testdata/upgraded", `"input":{"command":"ls"},"output":"a.go","title":"ls","metadata":{},"time":{"start":1760001002010`, `"input":{"command":"git commit -m wip"},"output":"[main abc1234] wip","title":"ls","metadata":{},"time":{"start":1760001002010`)
+			base, err := filepath.Abs("testdata")
+			if err != nil {
+				t.Fatal(err)
+			}
+			rel, err := filepath.Rel(base, dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return convertFixture(t, rel, Options{Derive: derive})
+		}()
+		n := 0
+		for _, s := range res.Sessions {
+			for _, e := range s.Entries() {
+				env, ok := e.(*agentsession.EnvEntry)
+				if !ok || env.Unknown[agentimport.DerivedMember] == nil {
+					continue
+				}
+				n++
+				if env.VCS == nil || env.VCS.Revision != "abc1234" || !strings.Contains(string(env.Unknown[agentimport.DerivedMember]), `"commit-revision"`) {
+					t.Errorf("derived env %+v %s", env.VCS, env.Unknown[agentimport.DerivedMember])
+				}
+			}
+		}
+		if want := map[bool]int{false: 0, true: 1}[derive]; n != want {
+			t.Errorf("derive %v: %d derived env entries, want %d", derive, n, want)
+		}
+		if derive && !strings.Contains(string(res.Sessions[0].Header().Extra[agentimport.SourceMember]), `"derived"`) {
+			t.Errorf("the header does not name the rules: %s", res.Sessions[0].Header().Extra[agentimport.SourceMember])
+		}
+	}
 }

@@ -312,3 +312,62 @@ func short(s string) string {
 	}
 	return s
 }
+
+// TestNoSessionIDsInReports: no report names a session by its ID, its
+// own or a parent's: findings name sessions by place.
+func TestNoSessionIDsInReports(t *testing.T) {
+	for _, name := range fixtures(t) {
+		res := convertFixture(t, name, Options{})
+		var text bytes.Buffer
+		if err := res.Report.WriteText(&text); err != nil {
+			t.Fatal(err)
+		}
+		for _, s := range res.Sessions {
+			for _, v := range []string{s.ID(), s.Header().ParentSession} {
+				if len(v) >= 6 && strings.Contains(text.String(), v) {
+					t.Errorf("%s: the report names session %s", name, v)
+				}
+			}
+		}
+	}
+}
+
+// TestDerive: with derivation, a shell call whose output prints the
+// commit it made is followed by a derived env entry carrying the
+// revision, marked agentimport:derived with the call's call_id, and the
+// header names the rules; without it, no derived entry is written.
+func TestDerive(t *testing.T) {
+	for _, derive := range []bool{false, true} {
+		res := func() *agentimport.Result {
+			script, err := os.ReadFile(filepath.Join("testdata", "reasoning", "db.sql"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			s := strings.Replace(string(script), `{\"command\":\"ls\"}`, `{\"command\":\"git commit -m wip\"}`, 1)
+			s = strings.Replace(s, `'tool', 'a.txt', 'call_7'`, `'tool', '[main abc1234] wip', 'call_7'`, 1)
+			if s == string(script) {
+				t.Fatal("the fixture changed")
+			}
+			return convertHome(t, buildScript(t, s), Options{Derive: derive})
+		}()
+		n := 0
+		for _, s := range res.Sessions {
+			for _, e := range s.Entries() {
+				env, ok := e.(*agentsession.EnvEntry)
+				if !ok || env.Unknown[agentimport.DerivedMember] == nil {
+					continue
+				}
+				n++
+				if env.VCS == nil || env.VCS.Revision != "abc1234" || !strings.Contains(string(env.Unknown[agentimport.DerivedMember]), `"commit-revision"`) {
+					t.Errorf("derived env %+v %s", env.VCS, env.Unknown[agentimport.DerivedMember])
+				}
+			}
+		}
+		if want := map[bool]int{false: 0, true: 1}[derive]; n != want {
+			t.Errorf("derive %v: %d derived env entries, want %d", derive, n, want)
+		}
+		if derive && !strings.Contains(string(res.Sessions[0].Header().Extra[agentimport.SourceMember]), `"derived"`) {
+			t.Errorf("the header does not name the rules: %s", res.Sessions[0].Header().Extra[agentimport.SourceMember])
+		}
+	}
+}

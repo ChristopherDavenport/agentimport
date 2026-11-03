@@ -2,6 +2,7 @@ package convert
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/ChristopherDavenport/agentimport/opencode"
@@ -118,5 +119,37 @@ func TestReasoningMetadata(t *testing.T) {
 	r := reasoningItems("t", provided{redacted: "d"})
 	if r.ItemType() != "anthropic.redacted_thinking" {
 		t.Errorf("%s", r.ItemType())
+	}
+}
+
+// TestInstructionLayers: the system row OpenCode 2 writes when the
+// instruction files change (core/src/instruction-discovery.ts) names
+// each file it carries, in order, under agentsmd; one naming none names
+// no layer.
+func TestInstructionLayers(t *testing.T) {
+	for text, want := range map[string]string{
+		"The instructions changed:\nInstructions from: /repo/AGENTS.md\nnew":                                                                       "/repo/AGENTS.md",
+		"The instructions from /repo/AGENTS.md no longer apply.\n\nNew instructions apply from:\nInstructions from: /repo/pkg/AGENTS.md\nuse tabs": "/repo/AGENTS.md,/repo/pkg/AGENTS.md",
+		"The instructions from /repo/AGENTS.md changed. Here's the diff:\n```diff\n@@ -1 +1 @@\n-a\n+b\n```":                                       "/repo/AGENTS.md",
+		"Previously loaded instructions no longer apply.":                                                                                          "",
+		"Instructions changed: use tabs.":                                                                                                          "",
+	} {
+		single, list := instructionLayers(text)
+		var got []string
+		if single != nil {
+			got = append(got, single.Source+":"+single.ID)
+		}
+		for _, l := range list {
+			got = append(got, l.Source+":"+l.ID)
+		}
+		var exp []string
+		for _, p := range strings.Split(want, ",") {
+			if p != "" {
+				exp = append(exp, "agentsmd:"+p)
+			}
+		}
+		if strings.Join(got, ",") != strings.Join(exp, ",") || (len(exp) > 1) != (list != nil) {
+			t.Errorf("%q: %v (list %v), want %v", text, got, list != nil, exp)
+		}
 	}
 }

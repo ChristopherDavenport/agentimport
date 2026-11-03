@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -370,6 +371,112 @@ func TestLeaf(t *testing.T) {
 	}
 }
 
+// TestSlimUnrendered checks that a slim conversion drops an attachment
+// that rendered nothing into the request, which the model never saw,
+// and reports the drop; without Slim it is a custom entry.
+func TestSlimUnrendered(t *testing.T) {
+	for _, slim := range []bool{false, true} {
+		_, res := convertFixture(t, fixtures(t)["identity"], Options{Slim: slim})
+		var b bytes.Buffer
+		if err := agentsession.Write(&b, res.Sessions[0]); err != nil {
+			t.Fatal(err)
+		}
+		if got := bytes.Contains(b.Bytes(), []byte(`"credential_org"`)); got == slim {
+			t.Errorf("slim %v: output holds the credential_org attachment: %v", slim, got)
+		}
+		want := agentimport.Kept
+		if slim {
+			want = agentimport.Dropped
+		}
+		n := 0
+		for _, f := range res.Report.Findings {
+			if f.Code == "claudecode/attachment-unrendered" {
+				n++
+				if f.Kind != want || f.Line != 2 {
+					t.Errorf("slim %v: %+v; want %s at line 2", slim, f, want)
+				}
+			}
+		}
+		if n != 1 {
+			t.Errorf("slim %v: %d attachment-unrendered findings, want 1", slim, n)
+		}
+		// The attachment's line, and the request log's, which Slim
+		// drops too.
+		if slim && res.Report.Tally[agentimport.LineDropped] != 2 {
+			t.Errorf("slim: tally %v; want the attachment's and the request log's lines dropped", res.Report.Tally)
+		}
+	}
+}
+
+// TestIdentity converts a session whose lines name the account's email,
+// its organization, the login name and home directory, and the native
+// session: the report lists each member carried into the session by
+// path and count, and holds none of their values.
+func TestIdentity(t *testing.T) {
+	values := []string{"sam@example.test", "0a000000-0000-4000-8000-00000000a001", "sam-login", "/home/sam", "11111111-1111-4111-8111-0000000000d1"}
+	for _, tc := range []struct {
+		slim bool
+		want map[string]int
+	}{
+		{false, map[string]int{
+			"sessionId": 3, "cwd": 2, "attachment.organizationUuid": 1, "attachment.context.userEmail": 2,
+			"params.safeguards[].classifier_context.user_identity": 1, "params.safeguards[].classifier_context.home_dir": 1,
+		}},
+		// Slim drops the unrendered attachment, the request log and the
+		// attachment's payload; the email stays in the rendered text.
+		{true, map[string]int{"sessionId": 1, "cwd": 1, "attachment.context.userEmail": 1}},
+	} {
+		_, res := convertFixture(t, fixtures(t)["identity"], Options{Slim: tc.slim})
+		got := map[string]int{}
+		for _, g := range res.Report.Groups() {
+			if g.Code == agentimport.IdentityCode {
+				for _, p := range g.Paths {
+					got[p.Path] = p.Count
+				}
+			}
+		}
+		if fmt.Sprint(got) != fmt.Sprint(tc.want) {
+			t.Errorf("slim %v: identity paths %v, want %v", tc.slim, got, tc.want)
+		}
+		raw, err := json.Marshal(res.Report)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var text bytes.Buffer
+		if err := res.Report.WriteText(&text); err != nil {
+			t.Fatal(err)
+		}
+		for _, v := range values {
+			if strings.Contains(string(raw), v) || strings.Contains(text.String(), v) {
+				t.Errorf("slim %v: the report holds the value %q", tc.slim, v)
+			}
+		}
+	}
+}
+
+// TestIdentityAgents: the report of a session with sub-agents names
+// no agent by its ID, in a finding's file or its detail; it counts the
+// agentId members carried.
+func TestIdentityAgents(t *testing.T) {
+	_, res := convertFixture(t, fixtures(t)["subagents"], Options{})
+	raw, err := json.Marshal(res.Report)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var text bytes.Buffer
+	if err := res.Report.WriteText(&text); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"a0001", "a0002", "a0004", "a0005", "ateam-0003", "ateam-0006"} {
+		if strings.Contains(string(raw), id) || strings.Contains(text.String(), id) {
+			t.Errorf("the report names agent %s", id)
+		}
+	}
+	if !strings.Contains(text.String(), "agentId") {
+		t.Error("the report does not count the agentId members")
+	}
+}
+
 // TestSlim checks that a slim conversion leaves the sidecars out and
 // still accounts for them.
 func TestSlim(t *testing.T) {
@@ -391,5 +498,131 @@ func TestSlim(t *testing.T) {
 	}
 	if !dropped {
 		t.Error("the sidecar drop is not reported")
+	}
+}
+
+// TestSkillRead converts a Skill call whose instructions Claude Code
+// sends as a hidden message after the call's output: the session holds
+// agentskill's read record after that message, naming the call, the
+// skill, its SKILL.md and the digest of the text served.
+func TestSkillRead(t *testing.T) {
+	_, res := convertFixture(t, fixtures(t)["skill"], Options{})
+	s := res.Sessions[0]
+	var rec *agentsession.CustomEntry
+	var callID string
+	for _, e := range s.Entries() {
+		if it, ok := e.(*agentsession.ItemEntry); ok {
+			if fc, ok := it.Item.(*openresponses.FunctionCall); ok && fc.Name == "Skill" {
+				callID = fc.CallID
+			}
+		}
+		if c, ok := e.(*agentsession.CustomEntry); ok && c.NS == agentimport.SkillReadNS {
+			rec = c
+		}
+	}
+	if rec == nil {
+		t.Fatal("no agentskill:read record")
+	}
+	if rec.CallID == "" || rec.CallID != callID {
+		t.Errorf("the record names call %q, want %q", rec.CallID, callID)
+	}
+	text := "Base directory for this skill: /work/demo/.claude/skills/docs-style\n\n# docs-style\n\nWrite short sentences."
+	var want agentimport.SkillRead
+	want.Name, want.Location = "docs-style", "/work/demo/.claude/skills/docs-style/SKILL.md"
+	want.Served(text)
+	var got agentimport.SkillRead
+	if err := json.Unmarshal(rec.Data, &got); err != nil || got.Name != want.Name || got.Location != want.Location ||
+		got.Path != "" || got.Bytes == nil || *got.Bytes != *want.Bytes || got.SHA256 != want.SHA256 {
+		t.Errorf("record %s, want %+v", rec.Data, want)
+	}
+	parent, _ := s.Entry(rec.Parent)
+	if it, ok := parent.(*agentsession.ItemEntry); !ok || it.Visible == nil || *it.Visible {
+		t.Errorf("the record follows %T, want the hidden message that carried the skill", parent)
+	}
+}
+
+// TestInstructionLayers converts instruction layers Claude Code sends as
+// messages: each message composed from one layer names it in
+// instructions_part, with the well-known source (an instruction file,
+// memory, the skill catalogue) and the file; one composed from several
+// names none, which is reported.
+func TestInstructionLayers(t *testing.T) {
+	_, res := convertFixture(t, fixtures(t)["layers"], Options{})
+	var got []string
+	for _, e := range res.Sessions[0].Entries() {
+		if it, ok := e.(*agentsession.ItemEntry); ok {
+			if ls := it.Layers(); ls != nil {
+				var names []string
+				for _, p := range ls {
+					names = append(names, p.Source+" "+p.ID)
+				}
+				if it.InstructionsLayers != nil {
+					got = append(got, "["+strings.Join(names, ", ")+"]")
+				} else {
+					got = append(got, names[0])
+				}
+			} else {
+				got = append(got, "-")
+			}
+		}
+	}
+	// A memory file of a type Claude Code has not been seen to write
+	// names no layer.
+	// A message of several files names each, in message order (format
+	// 0.18); one of a single file keeps the single form.
+	want := []string{"[agentsmd /work/demo/CLAUDE.md, agentmemory /home/u/.claude/projects/demo/memory/MEMORY.md]", "agentmemory /home/u/.claude/projects/demo/memory/MEMORY.md", "agentskill ", "-", "agentsmd /work/demo/pkg/CLAUDE.md", "-", "-"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("instructions_part:\n%q\nwant\n%q", got, want)
+	}
+	if slices.Contains(res.Report.Codes(), "claudecode/instructions-layers") {
+		t.Errorf("a message of known files is reported as naming none: %v", res.Report.Codes())
+	}
+}
+
+// TestPublished: with derivation, each Bash call whose output says what
+// it published is followed by a derived agentimport:published record
+// carrying its call_id; a quiet command yields none. Without it the
+// conversion writes no derived entry.
+func TestPublished(t *testing.T) {
+	for _, derive := range []bool{false, true} {
+		_, res := convertFixture(t, fixtures(t)["published"], Options{Derive: derive})
+		var recs []*agentsession.CustomEntry
+		for _, e := range res.Sessions[0].Entries() {
+			if c, ok := e.(*agentsession.CustomEntry); ok && c.NS == agentimport.PublishedNS {
+				recs = append(recs, c)
+			}
+		}
+		if !derive {
+			if len(recs) != 0 {
+				t.Errorf("without derivation: %d records", len(recs))
+			}
+			continue
+		}
+		if len(recs) != 2 {
+			t.Fatalf("%d published records, want 2", len(recs))
+		}
+		want := []string{`{"refs":[{"kind":"branch","ref":"feat","remote":"github.com:acme/demo.git"}]}`, `{"refs":[{"kind":"pull_request","url":"https://github.com/acme/demo/pull/42"}]}`}
+		for i, r := range recs {
+			if string(r.Data) != want[i] || r.CallID == "" || !strings.Contains(string(r.Unknown[agentimport.DerivedMember]), r.CallID) {
+				t.Errorf("record %d: %s call %q derived %s", i, r.Data, r.CallID, r.Unknown[agentimport.DerivedMember])
+			}
+			parent, _ := res.Sessions[0].Entry(r.Parent)
+			if it, ok := parent.(*agentsession.ItemEntry); !ok || openresponses.CallID(it.Item) != r.CallID {
+				t.Errorf("record %d follows %T, not its call's output", i, parent)
+			}
+		}
+	}
+	// A session derivation wrote to says so, and with which rules, in
+	// its header, since the entries after a derived one have other ids.
+	for _, derive := range []bool{false, true} {
+		var res *agentimport.Result
+		_, res = convertFixture(t, fixtures(t)["published"], Options{Derive: derive})
+		var src agentimport.Source
+		if err := json.Unmarshal(res.Sessions[0].Header().Extra[agentimport.SourceMember], &src); err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.Join(src.Derived, ","); (derive && got != strings.Join(agentimport.DeriveRules, ",")) || (!derive && got != "") {
+			t.Errorf("derive %v: agentimport:source derived %q", derive, got)
+		}
 	}
 }

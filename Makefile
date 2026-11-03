@@ -3,7 +3,7 @@ STATICCHECK ?= $(GO) run honnef.co/go/tools/cmd/staticcheck@latest
 GOVULNCHECK ?= $(GO) run golang.org/x/vuln/cmd/govulncheck@latest
 
 .PHONY: build deps test vet fmt tidy tidy-check lint vuln check corpus \
-	release-guard release clean
+	guard-test release-guard release clean
 
 build:
 	$(GO) build ./...
@@ -40,7 +40,7 @@ vuln:
 	$(GOVULNCHECK) ./...
 
 # Everything CI runs.
-check: fmt tidy-check vet deps lint vuln test
+check: fmt tidy-check vet deps lint vuln test guard-test
 
 # Converts every session in a local corpus and checks each verifies and
 # accounts for every line. Real sessions are private, so this reads them
@@ -57,6 +57,10 @@ corpus:
 	  $(GO) test -count=1 -run TestCorpus ./...
 
 MODULE := $(shell $(GO) list -m)
+
+# The release guard's own tests, against throwaway repositories.
+guard-test:
+	@scripts/release-guard-test.sh
 
 # Checks one tag is safe to push, before it is pushed. A pushed tag is
 # permanent — the proxy and the checksum database keep the version

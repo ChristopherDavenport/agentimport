@@ -86,6 +86,11 @@ func (c *converter) contextItems(l *pi.Line, tail string, es ...*agentsession.It
 			return "", err
 		}
 		c.items[nodeKeyLine(l)] = append(c.items[nodeKeyLine(l)], tail)
+		// Derivation writes after a bash call's output what its output
+		// says the call did, when asked for.
+		if tail, err = c.b.DeriveAfter(tail, e); err != nil {
+			return "", err
+		}
 	}
 	c.mark(l, agentimport.LineMapped)
 	return tail, nil
@@ -208,6 +213,10 @@ func (c *converter) bashExecution(l *pi.Line, tail string) (string, error) {
 		return c.custom(l, tail, "pi/bash-excluded", "a command the user ran and kept out of context is a custom entry")
 	}
 	e := itemEntry(openresponses.UserText(bashText(m)))
+	if m.ExitCode != nil {
+		agentimport.SetExitCode(e, int64(*m.ExitCode))
+		c.addf(agentimport.Kept, "agentimport/exit-code", l, "the command's exit code is %s", agentimport.ExitCodeMember)
+	}
 	if c.opts.Slim {
 		c.addf(agentimport.Dropped, "pi/bash-execution", l, "the record of a command the user ran is left out; its rendering is the message")
 	} else {
@@ -675,7 +684,7 @@ func (c *converter) responseEntry(l *pi.Line, respID string) (*agentsession.Resp
 		if err := c.b.Member(e, "usage", m.Usage); err != nil {
 			return nil, err
 		}
-		c.addf(agentimport.Gap, "agentimport/usage-detail", l,
+		c.addf(agentimport.Kept, "agentimport/usage-detail", l,
 			"cache writes are folded into input_tokens; the native usage and its cost are %s:usage", Source)
 	}
 	if err := c.messageMembers(e, l, nil); err != nil {
@@ -720,10 +729,8 @@ func (c *converter) toolResult(l *pi.Line, tail string, st *pathState) (string, 
 		c.addf(agentimport.Kept, "pi/tool-name", l, "the result names tool %q and its call %q; the result's name is %s:tool_name", m.ToolName, cl.name, Source)
 	}
 	if m.IsError {
-		if err := c.b.Member(e, "is_error", true); err != nil {
-			return "", err
-		}
-		c.addf(agentimport.Gap, "agentimport/tool-error", l, "isError is the member %s:is_error; function_call_output has no error flag", Source)
+		e.Failed = true
+		c.addf(agentimport.Lossy, "agentimport/tool-error", l, "isError, which pi sends a provider that takes one, is the output's failed; function_call_output has no error flag a request carries")
 	}
 	if len(m.Details) > 0 && string(m.Details) != "null" {
 		if c.opts.Slim {

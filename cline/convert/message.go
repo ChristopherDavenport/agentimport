@@ -354,10 +354,8 @@ func (c *conv) result(k int, m *cline.Message, b *cline.Block, p *call, ts time.
 	e := itemEntry(out, ts)
 	e.Parents = parents
 	if b.IsError {
-		if err := c.b.Member(e, "is_error", true); err != nil {
-			return err
-		}
-		c.apiAt(agentimport.Gap, "agentimport/tool-error", k, "is_error is the member %s:is_error; function_call_output has no error flag", Source)
+		e.Failed = true
+		c.apiAt(agentimport.Lossy, "agentimport/tool-error", k, "is_error, which the model was sent, is the output's failed; function_call_output has no error flag a request carries")
 	}
 	mapped := []string{"tool_use_id", "content", "is_error"}
 	if b.Content != nil && b.Content.Err != nil {

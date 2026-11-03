@@ -128,3 +128,39 @@ func TestExporterMembers(t *testing.T) {
 		})
 	}
 }
+
+// TestExporterMeaning: a document mapped from its steps restores the
+// meaning members the exporter carried for an output as core members,
+// and keeps a history member of its response body under atif:.
+func TestExporterMeaning(t *testing.T) {
+	steps := `{"step_id":1,"timestamp":"2026-10-01T00:00:00Z","source":"agent","model_name":"m-1","message":"",` +
+		`"tool_calls":[{"tool_call_id":"c1","function_name":"f","arguments":{}}],` +
+		`"observation":{"results":[{"source_call_id":"c1","content":"boom","extra":{"openresponses":{"item":{"type":"function_call_output","call_id":"c1","output":"boom"}},` +
+		`"agentsession":{"entry_id":"sha256:out","failed":true,"trust":{"reads":["untrusted"]}}}}]},` +
+		`"extra":{"openresponses":{"items":[{"type":"function_call","call_id":"c1","name":"f","arguments":"{}"}],` +
+		`"response":{"entry_id":"sha256:resp","response_id":"r1","model":"m-1","legacy_id":"native-r1"}}}}`
+	f, err := atif.Parse(exporterDoc(steps))
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := Convert(f, Options{CreatedAt: fixed})
+	if err != nil {
+		t.Fatal(err)
+	}
+	doccheck.Check(t, Source, res.Report)
+	failed, legacy := false, false
+	for _, e := range reread(t, res.Sessions[0]).Entries() {
+		if e.Base().LegacyID != "" {
+			t.Errorf("%T carries legacy_id as its own", e)
+		}
+		if _, ok := e.Base().Unknown[Source+":legacy_id"]; ok {
+			legacy = true
+		}
+		if it, ok := e.(*agentsession.ItemEntry); ok && it.Failed && it.Trust != nil {
+			failed = true
+		}
+	}
+	if !failed || !legacy {
+		t.Errorf("failed and trust restored %v, legacy_id kept %v", failed, legacy)
+	}
+}

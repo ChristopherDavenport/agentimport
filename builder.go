@@ -5,9 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"runtime/debug"
+	"slices"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ChristopherDavenport/agentsession"
+	"github.com/ChristopherDavenport/openresponses"
 )
 
 // Module is this module's path, as the provenance member names it.
@@ -18,6 +22,23 @@ const Module = "github.com/ChristopherDavenport/agentimport"
 // namespaced member.
 const SourceMember = "agentimport:source"
 
+// ExitCodeMember is the member an item entry carries for the exit status
+// a source records of a command, structured or in a fixed wrapper of
+// the harness's: the tool's own detail, which RFC 0001 does not define.
+// A converter never infers failed from it; a command may exit nonzero
+// without failing. It is kept under Slim, as it says how the command
+// ended, not what the model was sent.
+const ExitCodeMember = "agentimport:exit_code"
+
+// SetExitCode sets [ExitCodeMember] on e.
+func SetExitCode(e agentsession.Entry, code int64) {
+	base := e.Base()
+	if base.Unknown == nil {
+		base.Unknown = map[string]json.RawMessage{}
+	}
+	base.Unknown[ExitCodeMember] = json.RawMessage(strconv.FormatInt(code, 10))
+}
+
 // Source is the value of [SourceMember].
 type Source struct {
 	// Format names the native format, such as "claudecode".
@@ -27,6 +48,10 @@ type Source struct {
 	NativeID string `json:"native_id,omitempty"`
 	// Converter is this module and its version.
 	Converter string `json:"converter"`
+	// Derived names the derivation rules the conversion ran, when it
+	// ran any: entries after a derived one have other ids than a
+	// conversion without derivation gives them.
+	Derived []string `json:"derived,omitempty"`
 }
 
 // Converter names this module at the version the running binary was
@@ -92,6 +117,14 @@ type Builder struct {
 	tail string
 	// leaf is the entry Leaf named.
 	leaf string
+
+	// Derive asks DeriveAfter to write the entries the derivation rules
+	// infer; ShellTools names the source's shell tools, whose calls the
+	// rules read.
+	Derive     bool
+	ShellTools map[string]bool
+	// calls holds each function call appended, by call_id.
+	calls map[string]*openresponses.FunctionCall
 }
 
 // NewBuilder starts a session with header h.
@@ -151,6 +184,14 @@ func (b *Builder) Member(e agentsession.Entry, name string, v any) error {
 // format would fold into it, is moved a nanosecond later and the move
 // reported.
 func (b *Builder) Append(parent string, e agentsession.Entry) (string, error) {
+	if v, ok := e.(*agentsession.ItemEntry); ok {
+		if fc, ok := v.Item.(*openresponses.FunctionCall); ok {
+			if b.calls == nil {
+				b.calls = map[string]*openresponses.FunctionCall{}
+			}
+			b.calls[fc.CallID] = fc
+		}
+	}
 	base := e.Base()
 	if parent == "" {
 		b.S.ResetLeaf()
@@ -208,8 +249,14 @@ func (b *Builder) Leaf(id string) error {
 	}
 	l := agentsession.NewLabelEntry(id, agentsession.LeafLabel)
 	l.Timestamp = b.last
-	_, err := b.Append(b.tail, l)
-	return err
+	if _, err := b.Append(b.tail, l); err != nil {
+		return err
+	}
+	// A structural entry: the format needs it, and no native line maps
+	// to it.
+	b.Report.Addf(Lossy, "agentimport/leaf-label", b.File, 0,
+		"the session resumes at an entry that is not its last; a leaf label, which no native line maps to, names it")
+	return nil
 }
 
 // Resume returns the entry a reader of the session resumes from: the
@@ -248,4 +295,117 @@ func Finish(s *agentsession.Session) (*agentsession.Session, error) {
 func Verify(s *agentsession.Session) error {
 	_, err := Finish(s)
 	return err
+}
+
+// ScrubIdentity takes out of the result's report every ID of a session
+// the conversion made, and every native ID and parent session its
+// headers name, from each finding's file and detail, naming each session
+// by its place among the result's (session #1 for the first) and a
+// parent the result does not hold as "the parent session". A report
+// counts identity members by path and never holds their values (RFC
+// 0001, Conformance): a native session ID reaches a finding through a
+// file named for it, or a detail naming a child or a parent.
+func (res *Result) ScrubIdentity() {
+	if res == nil || res.Report == nil {
+		return
+	}
+	names := map[string]string{}
+	for i, s := range res.Sessions {
+		h := s.Header()
+		place := fmt.Sprintf("session #%d", i+1)
+		names[h.ID] = place
+		var src Source
+		if json.Unmarshal(h.Extra[SourceMember], &src) == nil && src.NativeID != "" {
+			if _, ok := names[src.NativeID]; !ok {
+				names[src.NativeID] = place
+			}
+		}
+	}
+	for _, s := range res.Sessions {
+		if p := s.Header().ParentSession; p != "" {
+			if _, ok := names[p]; !ok {
+				names[p] = "the parent session"
+			}
+		}
+	}
+	// A source may name a session by its ID without the dashes the
+	// header's has (OpenHands' directories): that form too.
+	for v, name := range names {
+		if bare := strings.ReplaceAll(v, "-", ""); bare != v {
+			if _, ok := names[bare]; !ok {
+				names[bare] = name
+			}
+		}
+	}
+	values := make([]string, 0, len(names))
+	for v := range names {
+		// A value this short could stand in other words; no source
+		// writes a session ID so short.
+		if len(v) >= 6 {
+			values = append(values, v)
+		}
+	}
+	// The longest first, so an ID that holds another is replaced whole.
+	slices.SortFunc(values, func(a, b string) int { return len(b) - len(a) })
+	scrub := func(s string) string {
+		for _, v := range values {
+			if strings.Contains(s, v) {
+				s = strings.ReplaceAll(s, v, names[v])
+			}
+		}
+		return s
+	}
+	for i := range res.Report.Findings {
+		f := &res.Report.Findings[i]
+		f.File, f.Detail = scrub(f.File), scrub(f.Detail)
+	}
+}
+
+// DeriveAfter writes, after the entry id holding e, the entries the
+// derivation rules infer when e is the output of one of the source's
+// shell calls and the conversion asked for derivation, and returns the
+// entry the session continues from: the last derived one, or id. The
+// call is the one appended with e's call_id; the working directory the
+// one the last env entry, or the header, names.
+func (b *Builder) DeriveAfter(id string, e agentsession.Entry) (string, error) {
+	it, ok := e.(*agentsession.ItemEntry)
+	if !ok || !b.Derive {
+		return id, nil
+	}
+	out, ok := it.Item.(*openresponses.FunctionCallOutput)
+	if !ok {
+		return id, nil
+	}
+	fc := b.calls[out.CallID]
+	if fc == nil || !b.ShellTools[fc.Name] {
+		return id, nil
+	}
+	ds, err := DerivedEntries(out.CallID, ShellCommand(fc.Arguments), out.Output.String(), b.EnvAt(id), b.S.Header().CWD)
+	if err != nil {
+		return "", err
+	}
+	for _, d := range ds {
+		d.Entry.Base().Timestamp = it.Timestamp
+		if id, err = b.Append(id, d.Entry); err != nil {
+			return "", err
+		}
+		b.Report.Addf(Kept, d.Code, b.File, 0, "what the shell call %s did, as its output says, is a derived entry carrying agentimport:derived", d.Code[len("agentimport/"):])
+	}
+	return id, nil
+}
+
+// EnvAt is the env entry in force at the entry id: the last on the path
+// to it, or nil when none is.
+func (b *Builder) EnvAt(id string) *agentsession.EnvEntry {
+	for n := 0; id != "" && n < 1<<20; n++ {
+		e, ok := b.S.Entry(id)
+		if !ok {
+			return nil
+		}
+		if env, ok := e.(*agentsession.EnvEntry); ok {
+			return env
+		}
+		id = e.Base().Parent
+	}
+	return nil
 }

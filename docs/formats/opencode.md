@@ -201,10 +201,13 @@ messages. The converter follows each rule:
   reasoning. Its items are written and left out from then on by an
   `omit` of their entries (`opencode/error-turn`).
 - **Calls.** A completed call's output, with data-URL attachments as
-  media; an error's text, flagged (`opencode:is_error`); a call cleaned
+  media; an error's text, the entry `failed`; a call cleaned
   up after an abort (`metadata.interrupted`) sends the output it had
-  from 1.4.2, its error before (`opencode/call-interrupted`). A call still `pending` or `running`
-  sends `[Tool execution was interrupted]`: written after a `reject`
+  from 1.4.2, its error before (`opencode/call-interrupted`), `failed`
+  either way. A `bash` call's `metadata.exit` is
+  `agentimport:exit_code` (`agentimport/exit-code`), which says nothing
+  of `failed`. A call still `pending` or `running`
+  sends `[Tool execution was interrupted]`, `failed`: written after a `reject`
   decision by `policy` for one that never started, an `answer` for one
   that may have run (`opencode/call-unfinished`). For a provider whose
   AI SDK package takes no media in a tool result, OpenCode moves the
@@ -265,7 +268,13 @@ by `seq`, and `toLLMMessages` renders each:
   and directories inline as text under an `Attached file:` or
   `Attached directory:` header, images and PDFs as media (an image
   attached twice under one mention once), other types not sent
-  (`opencode/attachment-mime`).
+  (`opencode/attachment-mime`). A skill with no text sends nothing
+  (`opencode/skill-untexted`); every skill element but its text, its
+  name among it, is kept in `opencode:skills`, one element per skill,
+  and each skill whose text was sent is an `agentskill:read` record
+  after the message (`name`, `location`, `bytes` and `sha256` of the
+  text; no `call_id`), under Slim too; see
+  [Skill reads](README.md#skill-reads).
 - `synthetic` and `skill`: user text; `system`: a system message;
   `shell`: user text giving the command and its output, but for a
   background command, whose result comes back later
@@ -307,7 +316,7 @@ by `seq`, and `toLLMMessages` renders each:
 | V1 assistant step | items, then a `response` (`response_id` `<message id>:<step>`), then outputs | items carry `opencode:id` (the part) and `opencode:part`; the response `opencode:finish`, `opencode:step_start`, `opencode:step_finish` (snapshots), `opencode:parts` (parts not sent: patches, retries), and on the last step `opencode:message_id`, `opencode:message`, `opencode:error` |
 | V1 `tool` part | `function_call` (`call_id` the part's `callID` through `agentimport.CallIDs`, `name` the tool, `arguments` the input), its output after the response | `opencode:state` (title, metadata, times); a renamed call `opencode:call_id` |
 | V1 task call run by OpenCode for a subtask | its items with no `response` (`opencode/subtask`) | |
-| V2 row | as above; `assistant`: items, a `response` (`response_id` the row's ID), outputs | `opencode:id`, `opencode:type`, `opencode:row` (the data but what is mapped), `opencode:content` (content not sent) |
+| V2 row | as above; `assistant`: items, a `response` (`response_id` the row's ID), outputs | `opencode:id`, `opencode:type`, `opencode:row` (the data but what is mapped), `opencode:content` (content not sent), `opencode:skills` (a user row's skills, each element but its `text`, which is sent; its name among it) |
 | a refused call: V1 error text of PermissionV1 (`opencode/permission-text`, told by the text), V2 `permission.rejected` or `aborted` "The user declined this tool call" (`opencode/permission-rejected`) | a `reject` `decision` (`by` `human`, or `policy` for a rule), then the output | approvals are not recorded |
 | `snapshot`, `patch`, `retry` parts, V2 `snapshot`, `retry` | members, as above | dropped with Slim |
 
@@ -386,6 +395,36 @@ its creation time with it, so in such a session the messages created
 before the session are the copies: their usage is in
 `opencode:copied_usage` (`opencode/fork-usage`).
 
+## Instruction layers
+
+OpenCode builds the system prompt for each request and does not store
+it (`opencode/system-prompt`). When the instruction files change in a
+session, OpenCode 2 writes a `system` row with the change
+(`core/src/instruction-discovery.ts`): `Instructions from: <path>` for a
+file it carries, `The instructions from <path> no longer apply.`, and
+`The instructions from <path> changed.` over a diff. Such a row's item
+names each file in `instructions_part` under `agentsmd`, in the order
+the row holds them, the list form of format 0.18 when there are
+several. A user row's skills are recorded as skill reads
+(`agentskill:read`).
+
+## Identity
+
+The native members this converter carries into the session that
+identify a person, an account or organization, a machine or the native
+session, and where each lands. A report lists them by path and count
+under `agentimport/identity`, never by value, so a redaction can
+harvest the values from the original and check its output for them
+(RFC 0001, Conformance).
+
+| Member | Lands in | Names |
+| --- | --- | --- |
+| `session.id` | the header's `id` | the native session |
+| `session.directory` | the header's `cwd`, and `opencode:session` | the user's home directory, through the project path |
+| `system row instruction file path` | an instructions-change `system` row's `instructions_part` `id` | the home directory, through the file's path |
+
+The report lists the session's ID and working directory (`agentimport/identity`); the other members are carried as listed and not yet counted.
+
 ## Extension types
 
 | Extension | Kind | Written for |
@@ -407,8 +446,8 @@ every converter can report are in [README.md](README.md).
 | `agentimport/context-replace` | gap | OpenCode replaced an item in later requests: a pruned output, another model's reasoning, a failed V2 step's reasoning sent as text. The item stays as first sent. |
 | `agentimport/fold-head` | gap | OpenCode's compacted context starts with a message it sent verbatim; the compaction's summary is that message and the rest follows it. |
 | `agentimport/reasoning-provider` | gap | A reasoning signature or encrypted content is in `encrypted_content`, its provider in `opencode:provider`. |
-| `agentimport/tool-error` | gap | A failed call's output carries `opencode:is_error`. |
-| `agentimport/usage-detail` | gap | Cache writes, folded into input, and the cost are `opencode:usage`. |
+| `agentimport/tool-error` | lossy | A V1 call's error, which OpenCode sends as an error result, makes the output's entry `failed`; `function_call_output` has no error flag a request carries (Open Responses), so a rebuilt request does not send it. OpenCode 2 sends the error as JSON text, so its failed outputs report nothing. |
+| `agentimport/usage-detail` | kept | Cache writes, folded into input, and the cost are `opencode:usage`. |
 | `opencode/attachment-mime` | dropped | An OpenCode 2 attachment of a type it does not send. |
 | `opencode/attachment-repeated` | lossy | An image attached twice under one mention, sent once. |
 | `opencode/call-id` | repaired | A call ID that is empty, malformed or repeated is renamed; the native one is `opencode:call_id`. |
@@ -458,6 +497,7 @@ every converter can report are in [README.md](README.md).
 | `opencode/session-id` | lossy | A session ID derived from the native one. |
 | `opencode/session-record` | kept, or dropped | The session record's members, in the header's `opencode:session`. |
 | `opencode/shell-background` | kept, or dropped | A background shell command, which enters context through its result. |
+| `opencode/skill-untexted` | kept, or dropped | A V2 user row's skill with no `text`: OpenCode renders none, so nothing is sent; the element is in `opencode:skills`. |
 | `opencode/state-namespaced` | lossy | Provider state under its namespace in a row OpenCode 2's migration copied. |
 | `opencode/step-part` | kept, or dropped | A part of a step that is not sent: a patch, a retry, a snapshot. |
 | `opencode/step-unfinished` | lossy | A step that did not finish, its usage unrecorded. |

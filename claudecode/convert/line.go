@@ -2,6 +2,7 @@ package convert
 
 import (
 	"encoding/json"
+	"path"
 	"sort"
 	"strings"
 
@@ -77,6 +78,57 @@ func (c *converter) userLine(l *claudecode.Line, tail string) (string, error) {
 	}
 	c.mark(l, agentimport.LineMapped)
 	c.bind(l, id)
+	if l.IsMeta {
+		if id, err = c.skillRead(l, id); err != nil {
+			return "", err
+		}
+	}
+	return id, nil
+}
+
+// skillBase opens the message Claude Code sends a skill's instructions
+// in, after the Skill call's output.
+const skillBase = "Base directory for this skill: "
+
+// skillRead writes the agentskill:read record of a skill's instructions,
+// which Claude Code sends as a hidden user message after the Skill
+// call's output: after that message, since the call's output is
+// written already, naming the call when the message follows one.
+func (c *converter) skillRead(l *claudecode.Line, tail string) (string, error) {
+	text := l.Message.Content.Text
+	if !l.Message.Content.IsText {
+		for _, b := range l.Message.Content.Blocks {
+			if b.Type == claudecode.BlockText && !b.IsRaw() {
+				text = b.Text
+				break
+			}
+		}
+	}
+	rest, ok := strings.CutPrefix(text, skillBase)
+	if !ok {
+		return tail, nil
+	}
+	dir, _, _ := strings.Cut(rest, "\n")
+	sc, ok := c.skills[l.ParentUUID]
+	var src string
+	if _ = json.Unmarshal(l.Extra["sourceToolUseID"], &src); !ok && src != "" {
+		sc = c.skills[src]
+	}
+	r := agentimport.SkillRead{Name: sc.name, Location: strings.TrimRight(dir, "/") + "/SKILL.md"}
+	if r.Name == "" {
+		r.Name = path.Base(strings.TrimRight(dir, "/"))
+	}
+	r.Served(text)
+	c.report.Identity(c.file, l.No, "message.content (skill base directory)", "the agentskill:read record's location")
+	e, err := r.Entry(sc.callID)
+	if err != nil {
+		return "", err
+	}
+	e.Timestamp = l.Time()
+	id, err := c.b.Append(tail, e)
+	if err != nil {
+		return "", err
+	}
 	return id, nil
 }
 
@@ -178,7 +230,7 @@ func (c *converter) contents(l *claudecode.Line, blocks []*claudecode.ContentBlo
 // attachment converts context the CLI injected: what it rendered into
 // the request becomes hidden messages in the rendered role; a prompt
 // snapshot becomes a config delta; one with nothing rendered is kept
-// aside. A queued prompt carries two renderings, for mid-turn and for
+// aside, or left out under Slim, since the model never saw it. A queued prompt carries two renderings, for mid-turn and for
 // a new turn; the requests Claude Code logs hold the first, so it is
 // the one written.
 func (c *converter) attachment(l *claudecode.Line, tail string, st *pathState) (string, error) {
@@ -206,6 +258,14 @@ func (c *converter) attachment(l *claudecode.Line, tail string, st *pathState) (
 		if l.Attachment != nil {
 			typ = l.Attachment.Type
 		}
+		if c.opts.Slim {
+			// The model never saw it. A line that names it as its
+			// parent continues from where it stood.
+			if tail != "" {
+				c.bind(l, tail)
+			}
+			return c.drop(l, tail, "claudecode/attachment-unrendered", "an attachment (%s) that rendered nothing into the request is left out", typ)
+		}
 		return c.custom(l, tail, "claudecode/attachment-unrendered", "an attachment (%s) that rendered nothing into the request is a custom entry", typ)
 	}
 	role := openresponses.RoleUser
@@ -224,6 +284,7 @@ func (c *converter) attachment(l *claudecode.Line, tail string, st *pathState) (
 		e := itemEntry(&openresponses.Message{Role: role, Content: openresponses.Contents{&openresponses.InputText{Text: r.Content}}})
 		e.Visible = &hidden
 		if i == 0 {
+			e.InstructionsPart, e.InstructionsLayers = c.layer(l)
 			if c.opts.Slim {
 				c.addf(agentimport.Dropped, "claudecode/attachment", l, "the %s attachment's payload is left out; its rendering is the message", l.Attachment.Type)
 			} else {
@@ -231,6 +292,13 @@ func (c *converter) attachment(l *claudecode.Line, tail string, st *pathState) (
 					return "", err
 				}
 				c.addf(agentimport.Kept, "claudecode/attachment", l, "the %s attachment's payload is %s:attachment", l.Attachment.Type, Source)
+				c.identity(&claudecode.Line{Raw: attachmentOnly(l.Raw), No: l.No}, Source+":attachment")
+			}
+			if l.Attachment.Type == "session_context" {
+				var v any
+				if json.Unmarshal(l.Raw, &v) == nil && has(v, []string{"attachment", "context", "userEmail"}) {
+					c.report.Identity(c.file, l.No, "attachment.context.userEmail", "the text of the message it rendered")
+				}
 			}
 			if err := c.lineMembers(e, l, "line"); err != nil {
 				return "", err
@@ -632,4 +700,97 @@ func (c *converter) linkAgents() {
 			}
 		}
 	}
+}
+
+// attachmentOnly is a line's attachment member alone, as a line, for
+// the identity members claudecode:attachment carries.
+func attachmentOnly(raw json.RawMessage) json.RawMessage {
+	var m map[string]json.RawMessage
+	if json.Unmarshal(raw, &m) != nil || m["attachment"] == nil {
+		return nil
+	}
+	out, _ := json.Marshal(map[string]json.RawMessage{"attachment": m["attachment"]})
+	return out
+}
+
+// layer names the instruction layers an attachment's message was
+// composed from, by RFC 0001's well-known sources: an instruction file
+// (CLAUDE.md, a nested one included) agentsmd, memory Claude Code keeps
+// between sessions agentmemory, the skill listing agentskill. A message
+// of one layer names it in the single form; one of several files names
+// each, in the order the message holds them (format 0.18's list); one
+// holding a file of a type Claude Code is not known to write names
+// none, and is reported. Claude Code records no trust of a layer, so
+// the item carries none.
+func (c *converter) layer(l *claudecode.Line) (*agentsession.LayerRef, []agentsession.LayerRef) {
+	var a struct {
+		Type string `json:"type"`
+		Path string `json:"path"`
+		// Content is a nested memory's object, and a skill listing's
+		// text.
+		Content json.RawMessage `json:"content"`
+		Files   []struct {
+			Path string `json:"path"`
+			Type string `json:"type"`
+		} `json:"files"`
+	}
+	if json.Unmarshal(attachmentRaw(l.Raw), &a) != nil {
+		return nil, nil
+	}
+	// source is the layer a memory file's type names: the instruction
+	// files Claude Code reads (project, user, local, managed) and its
+	// own memory; "" for a type it has not been seen to write.
+	source := func(typ string) string {
+		switch typ {
+		case "AutoMem":
+			return agentsession.LayerAgentMemory
+		case "Project", "User", "Local", "Managed":
+			return agentsession.LayerAgentsMD
+		}
+		return ""
+	}
+	switch a.Type {
+	case "skill_listing":
+		return &agentsession.LayerRef{Source: agentsession.LayerAgentSkill}, nil
+	case "nested_memory":
+		var content struct {
+			Type string `json:"type"`
+		}
+		_ = json.Unmarshal(a.Content, &content)
+		if src := source(content.Type); a.Path != "" && src != "" {
+			c.report.Identity(c.file, l.No, "attachment.path", "the message's instructions_part id")
+			return &agentsession.LayerRef{ID: a.Path, Source: src}, nil
+		}
+	case "instructions":
+		var layers []agentsession.LayerRef
+		seen := map[string]bool{}
+		for _, f := range a.Files {
+			src := source(f.Type)
+			if f.Path == "" || src == "" || seen[f.Path] {
+				c.addf(agentimport.Lossy, "claudecode/instructions-layers", l,
+					"a message composed from %d instruction files holds one of a type, or a path, that names no layer; instructions_part names none", len(a.Files))
+				return nil, nil
+			}
+			seen[f.Path] = true
+			layers = append(layers, agentsession.LayerRef{ID: f.Path, Source: src})
+			c.report.Identity(c.file, l.No, "attachment.files[].path", "the message's instructions_part id")
+		}
+		switch len(layers) {
+		case 0:
+		case 1:
+			return &layers[0], nil
+		default:
+			return nil, layers
+		}
+	}
+	return nil, nil
+}
+
+// attachmentRaw is a line's attachment member.
+func attachmentRaw(raw json.RawMessage) json.RawMessage {
+	var m map[string]json.RawMessage
+	if json.Unmarshal(raw, &m) != nil {
+		return nil
+	}
+	return m["attachment"]
 }

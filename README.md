@@ -51,7 +51,14 @@ the store is kept as it is, listed, and is no failure, unless `-force`
 replaces it; the other sessions of the same conversion are written all
 the same, so converting a tree again adds what is new since. `-slim` drops what the model never saw rather than keep it
 in namespaced members, and `-strict` exits 1 when anything was dropped
-or had no place in the format. A Codex rollout compressed with zstd is
+or met a gap [docs/incompatibilities.md](docs/incompatibilities.md)
+does not list; a listed gap is a known shape of the format, not a fact
+of one transcript. `-accept code,...` names finding codes `-strict`
+lets through. `-derive` writes the entries derivation rules infer from
+the converted path, each marked `agentimport:derived`: for every source,
+what a shell call published (a pushed branch or tag, a pull request
+opened), as an `agentimport:published` record carrying the call's
+`call_id`, and the revision a commit printed, as an `env` entry. A Codex rollout compressed with zstd is
 refused; decompress it with `zstd -d` first.
 
 Each source is two packages: one that reads the native format as it

@@ -39,6 +39,11 @@ type Options struct {
 	// metrics, token ids and logprobs. Each drop is still reported.
 	// Custom entries are kept.
 	Slim bool
+	// Derive writes the entries the module's derivation rules infer
+	// from the converted path, each marked agentimport:derived: what a
+	// shell call published and the revision a commit printed
+	// (docs/plans/agentimport.md).
+	Derive bool
 	// CreatedAt is the session's created_at when a document holds no
 	// timestamp at all. Zero leaves it the epoch, and either is
 	// reported. ConvertFile sets it to the file's modification time.
@@ -83,6 +88,12 @@ func (c *Converted) add(paths []string) {
 // ConvertFile reads the document at path and converts it, with the
 // continuations and sub-agent files it names that its directory holds.
 func ConvertFile(path string, opts Options) (*agentimport.Result, error) {
+	res, err := convertFileReport(path, opts)
+	res.ScrubIdentity()
+	return res, err
+}
+
+func convertFileReport(path string, opts Options) (*agentimport.Result, error) {
 	f, err := atif.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -110,6 +121,12 @@ func ConvertFile(path string, opts Options) (*agentimport.Result, error) {
 // conversion: a sub-agent or continuation that cannot be read or
 // converted is a finding.
 func Convert(f *atif.File, opts Options) (*agentimport.Result, error) {
+	res, err := convertReport(f, opts)
+	res.ScrubIdentity()
+	return res, err
+}
+
+func convertReport(f *atif.File, opts Options) (*agentimport.Result, error) {
 	return newFamily(opts).run(f, "")
 }
 

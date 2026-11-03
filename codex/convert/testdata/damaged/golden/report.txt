@@ -1,11 +1,14 @@
 codex: 19 lines: mapped 7 kept 8 dropped 1 malformed 3
-  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
   gap      agentimport/vcs-branch                            1  the git branch is the vcs member codex:branch; the format's vcs has no branch (at 1)
   dropped  codex/token-count-repeat                          1  a token count identical to the one before it (at 14)
   lossy    codex/call-without-output                         2  call bad_id__1 has no output; Codex sends later requests an output it makes up for it, which the rollout does not record (at 18, 18)
   lossy    codex/no-model                                    1  no turn context named the model before this response (older rollouts record none); the response has no model (at 10)
   lossy    codex/response-id                                 1  the rollout names no response ids (only the token usage records of newer rollouts do); a response is named codex-line-<n> after its first item's line (at 10)
   lossy    codex/tools-unrecorded                            1  Codex does not record the tool definitions it sends the model; the session's config has none (at 1)
+  kept     agentimport/identity                              2  identity member session_meta.id is carried into the header's id, or agentimport:source's native_id
+             session_meta.cwd                                1
+             session_meta.id                                 1
+  kept     agentimport/provenance                            1  the import is recorded in the header member agentimport:source
   kept     codex/custom-tool-call                            1  a Responses custom_tool_call is a function call, marked codex:tool_kind "custom"; its free-form input is the arguments {"input": …} (at 11)
   kept     codex/ghost-snapshot                              1  a ghost snapshot, the git state Codex kept for undo and never sent the model, is a custom entry (at 7)
   kept     codex/mistyped-member                             1  members whose value is not of the type Codex defines are kept as written beside the object's other members: payload.status (at 19)
