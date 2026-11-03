@@ -734,11 +734,17 @@ func (c *converter) layer(l *claudecode.Line) *agentsession.LayerRef {
 	if json.Unmarshal(attachmentRaw(l.Raw), &a) != nil {
 		return nil
 	}
+	// source is the layer a memory file's type names: the instruction
+	// files Claude Code reads (project, user, local, managed) and its
+	// own memory; "" for a type it has not been seen to write.
 	source := func(typ string) string {
-		if typ == "AutoMem" {
+		switch typ {
+		case "AutoMem":
 			return agentsession.LayerAgentMemory
+		case "Project", "User", "Local", "Managed":
+			return agentsession.LayerAgentsMD
 		}
-		return agentsession.LayerAgentsMD
+		return ""
 	}
 	switch a.Type {
 	case "skill_listing":
@@ -748,13 +754,13 @@ func (c *converter) layer(l *claudecode.Line) *agentsession.LayerRef {
 			Type string `json:"type"`
 		}
 		_ = json.Unmarshal(a.Content, &content)
-		if a.Path != "" {
+		if src := source(content.Type); a.Path != "" && src != "" {
 			c.report.Identity(c.file, l.No, "attachment.path", "the message's instructions_part id")
-			return &agentsession.LayerRef{ID: a.Path, Source: source(content.Type)}
+			return &agentsession.LayerRef{ID: a.Path, Source: src}
 		}
 	case "instructions":
 		switch {
-		case len(a.Files) == 1 && a.Files[0].Path != "":
+		case len(a.Files) == 1 && a.Files[0].Path != "" && source(a.Files[0].Type) != "":
 			c.report.Identity(c.file, l.No, "attachment.files[].path", "the message's instructions_part id")
 			return &agentsession.LayerRef{ID: a.Files[0].Path, Source: source(a.Files[0].Type)}
 		case len(a.Files) > 1:

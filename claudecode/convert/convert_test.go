@@ -558,7 +558,9 @@ func TestInstructionLayers(t *testing.T) {
 			}
 		}
 	}
-	want := []string{"-", "agentmemory /home/u/.claude/projects/demo/memory/MEMORY.md", "agentskill ", "-", "agentsmd /work/demo/pkg/CLAUDE.md", "-"}
+	// A memory file of a type Claude Code has not been seen to write
+	// names no layer.
+	want := []string{"-", "agentmemory /home/u/.claude/projects/demo/memory/MEMORY.md", "agentskill ", "-", "agentsmd /work/demo/pkg/CLAUDE.md", "-", "-"}
 	if strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Errorf("instructions_part:\n%q\nwant\n%q", got, want)
 	}
