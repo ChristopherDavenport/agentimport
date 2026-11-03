@@ -399,3 +399,31 @@ func TestDerive(t *testing.T) {
 		}
 	}
 }
+
+// TestInstructionLayers: pi renders the context files (AGENTS.md and the
+// like) in its project_context section and the skill catalogue in its
+// skills section (core/system-prompt.js, buildSystemPromptSections), so
+// those instruction parts carry the well-known sources; the others none.
+func TestInstructionLayers(t *testing.T) {
+	dir := testfix.Variant(t, "testdata/anthropic", `"cwd":"Working directory: /work/demo"`,
+		`"project_context":"<project_context>\nUse tabs.\n</project_context>","skills":"<skills>\n- docs-style\n</skills>","cwd":"Working directory: /work/demo"`)
+	matches, _ := filepath.Glob(filepath.Join(dir, "*.jsonl"))
+	res, err := ConvertFile(matches[0], Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, err := reread(t, res.Sessions[0]).Context()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, p := range ctx.Settings.InstructionsParts {
+		got[p.ID] = p.Source
+	}
+	want := map[string]string{"section/project_context": agentsession.LayerAgentsMD, "section/skills": agentsession.LayerAgentSkill, "section/preamble": "", "section/cwd": ""}
+	for id, src := range want {
+		if s, ok := got[id]; !ok || s != src {
+			t.Errorf("part %s: source %q (present %v), want %q", id, s, ok, src)
+		}
+	}
+}

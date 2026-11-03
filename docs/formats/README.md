@@ -90,6 +90,8 @@ list), and the item's `trust` carries any trust the source records of a
 layer (none does). Claude Code (`nested_memory`, `instructions` and
 `skill_listing` attachments) and Codex (the AGENTS.md instructions
 message and the skills catalogue) send layers as messages of their
-own, and their items name them. Every other source's page says, under
+own, and their items name them; so does OpenCode 2's `system` row
+saying which instruction files changed. pi's instruction parts name
+theirs (`project_context`, `skills`). Every other source's page says, under
 Instruction layers, why it has none to name: the layers are inside a
 system prompt stored whole or not at all, or beside a person's text.

@@ -225,11 +225,14 @@ config delta, and reports the difference.
 
 pi composes its system prompt from contents and named sections, which
 the session holds as instruction parts `content/<n>` and
-`section/<name>`. An extension names its sections as it likes, and
-none of pi's names says a part is an instruction file, the skill
-catalogue or memory, so no part carries a well-known `source`; pi sends
-no instruction layer as a message of its own, so no item carries
-`instructions_part`.
+`section/<name>` (`core/system-prompt.js`, `buildSystemPromptSections`).
+Two of pi's sections are instruction layers, and their parts carry RFC
+0001's well-known `source`: `project_context`, where pi renders the
+context files it loaded (AGENTS.md, CLAUDE.md), is `agentsmd`, and
+`skills`, the skill catalogue, is `agentskill`. The other sections
+(`preamble`, `tools`, `rules`, `docs`, `addendum`, `cwd`) and an
+extension's own carry none. pi sends no layer as a message of its own,
+so no item carries `instructions_part`.
 
 ## Identity
 

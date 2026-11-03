@@ -39,7 +39,10 @@ versions may break the API.
   (`ItemEntry.InstructionsLayers`); one holding a file of an unknown
   type names none and is reported (`claudecode/instructions-layers`).
   Codex's AGENTS.md instructions message names `agentsmd` with the
-  directory Codex names, and its skills catalogue `agentskill`. Each
+  directory Codex names, and its skills catalogue `agentskill`. pi's
+  `project_context` and `skills` system sections are instruction parts
+  with `source` `agentsmd` and `agentskill`. OpenCode 2's `system` row
+  for changed instruction files names each file under `agentsmd`. Each
   other source's format page says why it has no layer to name.
 
 - Added: skill reads recorded as agentskill records them, a `custom`

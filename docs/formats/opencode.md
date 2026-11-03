@@ -397,12 +397,16 @@ before the session are the copies: their usage is in
 
 ## Instruction layers
 
-OpenCode builds the system prompt, its AGENTS.md files among it, for
-each request and does not store it (`opencode/system-prompt`). An
-OpenCode 2 `system` row saying the instructions changed carries the
-new text and a description, not the file, and `agentsmd` asks for the
-file in `id`, so its item carries no `instructions_part`; a user row's
-skills are recorded as skill reads (`agentskill:read`).
+OpenCode builds the system prompt for each request and does not store
+it (`opencode/system-prompt`). When the instruction files change in a
+session, OpenCode 2 writes a `system` row with the change
+(`core/src/instruction-discovery.ts`): `Instructions from: <path>` for a
+file it carries, `The instructions from <path> no longer apply.`, and
+`The instructions from <path> changed.` over a diff. Such a row's item
+names each file in `instructions_part` under `agentsmd`, in the order
+the row holds them, the list form of format 0.18 when there are
+several. A user row's skills are recorded as skill reads
+(`agentskill:read`).
 
 ## Identity
 
@@ -417,6 +421,7 @@ harvest the values from the original and check its output for them
 | --- | --- | --- |
 | `session.id` | the header's `id` | the native session |
 | `session.directory` | the header's `cwd`, and `opencode:session` | the user's home directory, through the project path |
+| `system row instruction file path` | an instructions-change `system` row's `instructions_part` `id` | the home directory, through the file's path |
 
 The report lists the session's ID and working directory (`agentimport/identity`); the other members are carried as listed and not yet counted.
 

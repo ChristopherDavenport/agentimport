@@ -147,7 +147,11 @@ func (w *v2walk) row(r *opencode.Row2) error {
 		}
 		return w.item(r, e, ts, "text")
 	case opencode.TypeSystem:
-		return w.item(r, agentsession.NewItemEntry(openresponses.SystemText(d.Text)), ts, "text")
+		e := agentsession.NewItemEntry(openresponses.SystemText(d.Text))
+		if e.InstructionsPart, e.InstructionsLayers = instructionLayers(d.Text); e.InstructionsPart != nil || e.InstructionsLayers != nil {
+			sc.report.Identity(r.Unit, 0, "system row instruction file path", "the item's instructions_part id")
+		}
+		return w.item(r, e, ts, "text")
 	case opencode.TypeShell:
 		if opencode.MetadataBool(d.Metadata, "background") {
 			sc.addf(sc.keepKind(), "opencode/shell-background", r.Unit, "a shell command run in the background enters context through its result, not here")
@@ -873,4 +877,33 @@ func exitCode(raw json.RawMessage) (int64, bool) {
 	}
 	v, err := n.Int64()
 	return v, err == nil
+}
+
+// instructionFile matches the lines OpenCode 2 renders an instruction
+// file's change with (core/src/instruction-discovery.ts): the file whose
+// instructions it carries, those that no longer apply, and those whose
+// diff it carries.
+var instructionFile = regexp.MustCompile(`(?m)^(?:Instructions from: (.+)|The instructions from (.+) no longer apply\.|The instructions from (.+) changed\. Here's the diff:)$`)
+
+// instructionLayers names the instruction files a system row OpenCode 2
+// composed from them carries, in the order it holds them: one in the
+// single form of instructions_part, several in format 0.18's list.
+func instructionLayers(text string) (*agentsession.LayerRef, []agentsession.LayerRef) {
+	var layers []agentsession.LayerRef
+	seen := map[string]bool{}
+	for _, m := range instructionFile.FindAllStringSubmatch(text, -1) {
+		path := m[1] + m[2] + m[3]
+		if path == "" || seen[path] {
+			continue
+		}
+		seen[path] = true
+		layers = append(layers, agentsession.LayerRef{ID: path, Source: agentsession.LayerAgentsMD})
+	}
+	switch len(layers) {
+	case 0:
+		return nil, nil
+	case 1:
+		return &layers[0], nil
+	}
+	return nil, layers
 }

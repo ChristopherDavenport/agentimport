@@ -127,10 +127,21 @@ func (s sysState) parts() []agentsession.InstructionPart {
 	}
 	for _, x := range jsOrder(s.sections) {
 		if x.Text != "" {
-			out = append(out, agentsession.InstructionPart{ID: "section/" + x.Name, Text: x.Text})
+			out = append(out, agentsession.InstructionPart{ID: "section/" + x.Name, Text: x.Text, Source: sectionLayers[x.Name]})
 		}
 	}
 	return out
+}
+
+// sectionLayers are the layers pi's own sections hold, by RFC 0001's
+// well-known sources: project_context renders the context files
+// (AGENTS.md, CLAUDE.md) and skills the skill catalogue
+// (core/system-prompt.js, buildSystemPromptSections). An extension's
+// section of the same name replaces pi's; the name still says what pi
+// puts there.
+var sectionLayers = map[string]string{
+	"project_context": agentsession.LayerAgentsMD,
+	"skills":          agentsession.LayerAgentSkill,
 }
 
 // functionTool converts a pi tool declaration.
