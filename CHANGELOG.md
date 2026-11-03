@@ -7,8 +7,9 @@ versions may break the API.
 
 ## Unreleased
 
-- Added: Claude Code's instruction layers sent as messages carry RFC
-  0001's `instructions_part` (format 0.17) with the well-known `source`:
+- **Added: Claude Code's instruction layers sent as messages carry RFC
+  0001's `instructions_part` (format 0.17) (breaking: those entries'
+  IDs, and every ID after them, move).** It has the well-known `source`:
   a `nested_memory` or one-file `instructions` attachment names its
   file under `agentsmd`, or `agentmemory` for Claude Code's memory, and
   the skill listing is `agentskill`. A message composed from several
@@ -78,23 +79,26 @@ versions may break the API.
   `exec_command` and `write_stdin`; `codex/exit-code`). It
   is kept under `-slim` and says nothing of `failed`.
 
-- Changed: Codex `env` entries are whole snapshots, as RFC 0001 0.17
-  reads them. A `turn_context` that moves the working directory inside
+- **Changed: Codex `env` entries are whole snapshots, as RFC 0001 0.17
+  reads them (breaking: the IDs of `env` entries after a move inside the
+  session's directory, and every ID after them, move).** A `turn_context` that moves the working directory inside
   the session's repeats the session meta's `vcs`, reported as a guess
   (`codex/vcs-carried`, lossy), and one that moves outside it writes
   none (`codex/vcs-after-cwd`); before, every later `env` dropped the
   git state. Members of `git` Codex adds are kept as `codex:<name>` vcs
   members (`codex/git-members`); they were lost.
 
-- Fixed: an OpenCode 2 user row's skills kept only their text, which
-  is sent; the rest of each element, the skill's name among it, was
+- **Fixed: an OpenCode 2 user row's skills kept only their text
+  (breaking: the IDs of user rows with skills, and every ID after them,
+  move).** The text is sent; the rest of each element, the skill's name among it, was
   lost unreported. Each element but its text is now `opencode:skills`
   on the item (`opencode/members`, dropped under `-slim`), and a skill
   with no text, which OpenCode does not send, is reported
   (`opencode/skill-untexted`).
 
-- Fixed: `-slim` drops a Claude Code attachment that rendered nothing
-  into the request (`credential_org`, `deferred_tools_record`), which
+- **Fixed: `-slim` drops a Claude Code attachment that rendered
+  nothing (breaking: a slim conversion's IDs after one move)** into the
+  request (`credential_org`, `deferred_tools_record`), which
   the model never saw, and reports it `dropped`; it kept each as a
   custom entry, carrying the account's organization ID into every slim
   import.
@@ -113,7 +117,8 @@ versions may break the API.
   puts it, and leave `docs/incompatibilities.md`. Under `-slim`, ATIF's
   usage detail is reported `dropped`.
 
-- Changed: sessions are written in format 0.17 (agentsession v0.0.34,
+- **Changed: sessions are written in format 0.17 (breaking: some entry
+  IDs move)** (agentsession v0.0.34,
   openresponses v0.0.18; were v0.0.28 and v0.0.15). No entry hash
   changes but where an item now keeps a member it does not define: an
   Open Responses item keeps every member as written (openresponses
