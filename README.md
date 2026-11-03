@@ -55,10 +55,10 @@ or met a gap [docs/incompatibilities.md](docs/incompatibilities.md)
 does not list; a listed gap is a known shape of the format, not a fact
 of one transcript. `-accept code,...` names finding codes `-strict`
 lets through. `-derive` writes the entries derivation rules infer from
-the converted path, each marked `agentimport:derived`: today what a
-Claude Code `Bash` or Codex shell call published (a pushed branch or
-tag, a pull request opened), as an `agentimport:published` record
-carrying the call's `call_id`. A Codex rollout compressed with zstd is
+the converted path, each marked `agentimport:derived`: for every source,
+what a shell call published (a pushed branch or tag, a pull request
+opened), as an `agentimport:published` record carrying the call's
+`call_id`, and the revision a commit printed, as an `env` entry. A Codex rollout compressed with zstd is
 refused; decompress it with `zstd -d` first.
 
 Each source is two packages: one that reads the native format as it

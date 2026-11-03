@@ -45,6 +45,11 @@ type Options struct {
 	// not map, the original text of what a request rewrote, display-only
 	// messages, a stale sidecar. Each drop is still reported.
 	Slim bool
+	// Derive writes the entries the module's derivation rules infer
+	// from the converted path, each marked agentimport:derived: what a
+	// shell call published and the revision a commit printed
+	// (docs/plans/agentimport.md).
+	Derive bool
 	// Alone converts a session without its sub-agents and team tasks,
 	// which are otherwise converted with it.
 	Alone bool

@@ -214,7 +214,13 @@ func (sc *sconv) run() error {
 		return err
 	}
 	sc.report.HeaderIdentity("", h, "session.id", "session.directory")
+	if sc.fam.opts.Derive {
+		if err := agentimport.MarkDerived(&h); err != nil {
+			return err
+		}
+	}
 	sc.b = agentimport.NewBuilder(h, Source, sc.report)
+	sc.b.Derive, sc.b.ShellTools = sc.fam.opts.Derive, shellTools
 	sc.kids = sc.findKids()
 	if err := sc.start(); err != nil {
 		return err
@@ -703,6 +709,13 @@ func (sc *sconv) append(e agentsession.Entry) (string, error) {
 		return "", err
 	}
 	sc.at = id
+	// Derivation writes after a shell call's output what its output
+	// says the call did, when asked for; the session goes on from there.
+	if tail, err := sc.b.DeriveAfter(id, e); err != nil {
+		return "", err
+	} else {
+		sc.at = tail
+	}
 	return id, nil
 }
 
@@ -881,3 +894,6 @@ func strayWhy(s *opencode.Stray) string {
 	}
 	return agentimport.ErrorText(s.Err)
 }
+
+// shellTools are the shell tools whose calls the derivation rules read.
+var shellTools = map[string]bool{"bash": true}

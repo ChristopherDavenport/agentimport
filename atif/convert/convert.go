@@ -39,6 +39,11 @@ type Options struct {
 	// metrics, token ids and logprobs. Each drop is still reported.
 	// Custom entries are kept.
 	Slim bool
+	// Derive writes the entries the module's derivation rules infer
+	// from the converted path, each marked agentimport:derived: what a
+	// shell call published and the revision a commit printed
+	// (docs/plans/agentimport.md).
+	Derive bool
 	// CreatedAt is the session's created_at when a document holds no
 	// timestamp at all. Zero leaves it the epoch, and either is
 	// reported. ConvertFile sets it to the file's modification time.

@@ -28,7 +28,7 @@ type Derivation struct {
 
 // DeriveRules are the derivation rules a conversion that asks for
 // derivation runs, as agentimport:source's derived names them.
-var DeriveRules = []string{"published-refs"}
+var DeriveRules = []string{"commit-revision", "published-refs"}
 
 // PublishedNS is the namespace of the custom entry that records what a
 // call published: a branch or tag pushed, a pull request opened. What
@@ -117,8 +117,10 @@ func PublishedEntry(callID, command, output string) (*agentsession.CustomEntry, 
 // arguments: a "command" or "cmd" string, or a "command" argv, joined.
 func ShellCommand(arguments string) string {
 	var a struct {
-		Command json.RawMessage `json:"command"`
-		Cmd     string          `json:"cmd"`
+		Command    json.RawMessage `json:"command"`
+		Cmd        string          `json:"cmd"`
+		Keystrokes string          `json:"keystrokes"`
+		Commands   []string        `json:"commands"`
 	}
 	if json.Unmarshal([]byte(arguments), &a) != nil {
 		return ""
@@ -131,7 +133,13 @@ func ShellCommand(arguments string) string {
 	if json.Unmarshal(a.Command, &argv) == nil && len(argv) > 0 {
 		return strings.Join(argv, " ")
 	}
-	return a.Cmd
+	if a.Cmd != "" {
+		return a.Cmd
+	}
+	if len(a.Commands) > 0 {
+		return strings.Join(a.Commands, "; ")
+	}
+	return a.Keystrokes
 }
 
 // dryRun reports whether a git push command asks for a dry run, which
@@ -143,4 +151,77 @@ func dryRun(command string) bool {
 		}
 	}
 	return false
+}
+
+// RevisionCode is the code a derived env entry carrying a commit's
+// revision is reported under.
+const RevisionCode = "agentimport/commit-revision"
+
+var commitLine = regexp.MustCompile(`(?m)^\[([^\s\]]+)(?: \(root-commit\))? ([0-9a-f]{7,40})\] `)
+
+// CommitRevision reads the revision a git commit printed, "[<branch>
+// <revision>] <subject>", abbreviated as git prints it. A command that is
+// not a commit, a dry run, or a quiet commit that printed nothing yields
+// "".
+func CommitRevision(command, output string) string {
+	if !strings.Contains(command, "git commit") {
+		return ""
+	}
+	for _, f := range strings.Fields(command) {
+		if f == "--dry-run" {
+			return ""
+		}
+	}
+	if m := commitLine.FindStringSubmatch(output); m != nil {
+		return m[2]
+	}
+	return ""
+}
+
+// Derived is one entry a rule derived, and the code it is reported under.
+type Derived struct {
+	Entry agentsession.Entry
+	Code  string
+}
+
+// DerivedEntries are the entries the derivation rules infer from a
+// shell call's command and output, in the order they follow its output:
+// an env entry carrying the revision a commit printed (RFC 0001: an env
+// entry is a whole snapshot, so it repeats cwd; vcs.revision may be the
+// abbreviation git printed), then the record of what the call published.
+// Each carries agentimport:derived naming its rule and the call.
+func DerivedEntries(callID, command, output, cwd string) ([]Derived, error) {
+	var out []Derived
+	if rev := CommitRevision(command, output); rev != "" {
+		env := agentsession.NewEnvEntry(cwd)
+		env.VCS = &agentsession.VCS{System: "git", Revision: rev}
+		mark, err := json.Marshal(Derivation{Rule: "commit-revision", CallID: callID})
+		if err != nil {
+			return nil, err
+		}
+		env.Unknown = map[string]json.RawMessage{DerivedMember: mark}
+		out = append(out, Derived{env, RevisionCode})
+	}
+	p, err := PublishedEntry(callID, command, output)
+	if err != nil {
+		return nil, err
+	}
+	if p != nil {
+		out = append(out, Derived{p, PublishedCode})
+	}
+	return out, nil
+}
+
+// MarkDerived names, in a header's agentimport:source, the derivation
+// rules the conversion runs: entries after a derived one have other ids
+// than a conversion without derivation gives them.
+func MarkDerived(h *agentsession.Header) error {
+	var src Source
+	if raw, ok := h.Extra[SourceMember]; ok {
+		if err := json.Unmarshal(raw, &src); err != nil {
+			return err
+		}
+	}
+	src.Derived = DeriveRules
+	return SetSource(h, src)
 }

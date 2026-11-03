@@ -39,6 +39,11 @@ type Options struct {
 	// does not map, snapshots and patches, OpenCode 2's queued input.
 	// Each drop is still reported.
 	Slim bool
+	// Derive writes the entries the module's derivation rules infer
+	// from the converted path, each marked agentimport:derived: what a
+	// shell call published and the revision a commit printed
+	// (docs/plans/agentimport.md).
+	Derive bool
 	// Alone converts each session without its sub-agents, which are
 	// otherwise converted with the session that ran them.
 	Alone bool

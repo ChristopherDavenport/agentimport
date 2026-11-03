@@ -161,16 +161,19 @@ The pass therefore runs inside each converter, as a rule set the
 converter consults when it writes an output (`Options.Derive`), before
 `Verify`, with derivation off writing byte-identical output to today's.
 A rule names the source's shell tool and how its output is shaped, so
-each source opts in rule by rule. The first rule, published refs
-(`agentimport.PublishedRefs`), reads what a `git push` reports it
-updated and the URL `gh pr create` prints, and writes an
-`agentimport:published` custom entry after the call's output, carrying
-its `call_id` (Claude Code's `Bash`, Codex's shell tools; the command
-takes `-derive`). A session derivation ran on says so in its
+each source opts in rule by rule. Two rules run, for every source's
+shell tools (listed in `docs/formats/README.md`; the command takes
+`-derive`): commit revision (`agentimport.CommitRevision`) reads the
+revision a commit prints and writes an `env` entry after the call's
+output repeating the working directory, `vcs.revision` the abbreviation
+git printed; published refs (`agentimport.PublishedRefs`) reads what a
+`git push` reports it updated and the URL `gh pr create` prints, and
+writes an `agentimport:published` custom entry carrying the call's
+`call_id`. Converters that append through the builder's tail call
+`Builder.DeriveAfter`, which reads the call the builder saw appended. A session derivation ran on says so in its
 header's `agentimport:source`, `derived` naming the rules, since the
 entries after a derived one have other ids than a plain conversion
-gives them. A revision a commit prints, written as an `env`
-entry's `vcs.revision`, is the next rule.
+gives them.
 
 ### Findings
 

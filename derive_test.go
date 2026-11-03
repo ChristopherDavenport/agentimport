@@ -34,3 +34,21 @@ func TestPublishedRefs(t *testing.T) {
 		t.Errorf("PublishedEntry = %+v, %v", e, err)
 	}
 }
+
+func TestCommitRevision(t *testing.T) {
+	for command, want := range map[string]string{
+		"git commit -m wip":           "abc1234",
+		"git commit --dry-run -m wip": "",
+		"git status":                  "",
+	} {
+		if got := CommitRevision(command, "[main abc1234] wip\n 1 file changed"); got != want {
+			t.Errorf("%q: %q, want %q", command, got, want)
+		}
+	}
+	if got := CommitRevision("git commit -q -m wip", ""); got != "" {
+		t.Errorf("a quiet commit: %q", got)
+	}
+	if got := CommitRevision("git commit -m first", "[main (root-commit) 0a1b2c3d] first"); got != "0a1b2c3d" {
+		t.Errorf("a root commit: %q", got)
+	}
+}

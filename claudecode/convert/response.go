@@ -76,16 +76,16 @@ func (c *converter) response(r *claudecode.Response, tail string, st *pathState)
 			}
 			_ = json.Unmarshal(call.Use.Input, &in)
 			out, _ := e.Item.(*openresponses.FunctionCallOutput)
-			d, err := agentimport.PublishedEntry(callID, in.Command, out.Output.String())
+			ds, err := agentimport.DerivedEntries(callID, in.Command, out.Output.String(), call.Result.CWD)
 			if err != nil {
 				return "", err
 			}
-			if d != nil {
-				d.Timestamp = e.Timestamp
-				if tail, err = c.b.Append(tail, d); err != nil {
+			for _, d := range ds {
+				d.Entry.Base().Timestamp = e.Timestamp
+				if tail, err = c.b.Append(tail, d.Entry); err != nil {
 					return "", err
 				}
-				c.addf(agentimport.Kept, agentimport.PublishedCode, call.Result, "what the Bash call published, as its output says, is a derived %s record carrying its call_id", agentimport.PublishedNS)
+				c.addf(agentimport.Kept, d.Code, call.Result, "what the Bash call did, as its output says, is a derived entry carrying agentimport:derived and its call_id")
 			}
 		}
 		if call.Use.Name == "Skill" {

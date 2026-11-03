@@ -46,7 +46,7 @@ func (c *common) register(fs *flag.FlagSet) {
 		return nil
 	})
 	fs.BoolVar(&c.slim, "slim", false, "drop what the model never saw rather than keep it in namespaced members")
-	fs.BoolVar(&c.derive, "derive", false, "write the entries derivation rules infer from the path, marked agentimport:derived (Claude Code, Codex)")
+	fs.BoolVar(&c.derive, "derive", false, "write the entries derivation rules infer from the path, marked agentimport:derived")
 }
 
 // acceptSet is the set -accept builds from its codes.

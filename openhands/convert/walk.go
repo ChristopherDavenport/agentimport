@@ -240,7 +240,13 @@ func (c *conv) run() error {
 		return err
 	}
 	c.report.HeaderIdentity("", h, "id", "workspace.working_dir")
+	if c.fam.opts.Derive {
+		if err := agentimport.MarkDerived(&h); err != nil {
+			return err
+		}
+	}
 	c.b = agentimport.NewBuilder(h, Source, c.report)
+	c.b.Derive, c.b.ShellTools = c.fam.opts.Derive, shellTools
 	c.b.File = strings.TrimSuffix(c.prefix, "/")
 	c.files()
 	c.indexUsage()
@@ -773,3 +779,6 @@ func (c *conv) setTail(i int, id string) {
 		}
 	}
 }
+
+// shellTools are the shell tools whose calls the derivation rules read.
+var shellTools = map[string]bool{"terminal": true, "execute_bash": true}

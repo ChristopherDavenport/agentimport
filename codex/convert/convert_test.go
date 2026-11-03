@@ -803,7 +803,7 @@ func TestPublished(t *testing.T) {
 		if err := json.Unmarshal(res.Sessions[0].Header().Extra[agentimport.SourceMember], &src); err != nil {
 			t.Fatal(err)
 		}
-		if got := strings.Join(src.Derived, ","); (derive && got != "published-refs") || (!derive && got != "") {
+		if got := strings.Join(src.Derived, ","); (derive && got != strings.Join(agentimport.DeriveRules, ",")) || (!derive && got != "") {
 			t.Errorf("derive %v: agentimport:source derived %q", derive, got)
 		}
 	}

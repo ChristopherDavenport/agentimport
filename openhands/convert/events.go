@@ -848,7 +848,11 @@ func (c *conv) output(i int) error {
 	if err != nil {
 		return err
 	}
-	at = id
+	// Derivation writes after a terminal call's output what its output
+	// says the call did, when asked for.
+	if at, err = c.b.DeriveAfter(id, e); err != nil {
+		return err
+	}
 	cl.answers = append(cl.answers, i)
 	c.items[i] = []string{id}
 	if at, err = c.peerChildren(i, at, cl); err != nil {

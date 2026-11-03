@@ -14,6 +14,7 @@ import (
 	"github.com/ChristopherDavenport/agentimport/clinesdk"
 	"github.com/ChristopherDavenport/agentimport/clinesdk/sqlite"
 	"github.com/ChristopherDavenport/agentimport/internal/doccheck"
+	"github.com/ChristopherDavenport/agentimport/internal/testfix"
 	"github.com/ChristopherDavenport/agentsession"
 	"github.com/ChristopherDavenport/openresponses"
 )
@@ -301,4 +302,40 @@ func short(s string) string {
 		s = s[:50]
 	}
 	return s
+}
+
+// TestDerive: with derivation, a shell call whose output prints the
+// commit it made is followed by a derived env entry carrying the
+// revision, marked agentimport:derived with the call's call_id, and the
+// header names the rules; without it, no derived entry is written.
+func TestDerive(t *testing.T) {
+	for _, derive := range []bool{false, true} {
+		res := func() *agentimport.Result {
+			dir := testfix.Variant(t, "testdata/s1-basic", `"go test ./..."`, `"git commit -m wip"`, `FAIL TestTable (0.01s)`, `[main abc1234] wip\nFAIL TestTable (0.01s)`)
+			r, err := ConvertFile(filepath.Join(dir, "sessions", "1759312800000_ab12c"), Options{Derive: derive})
+			if err != nil {
+				t.Fatal(err)
+			}
+			return r
+		}()
+		n := 0
+		for _, s := range res.Sessions {
+			for _, e := range s.Entries() {
+				env, ok := e.(*agentsession.EnvEntry)
+				if !ok || env.Unknown[agentimport.DerivedMember] == nil {
+					continue
+				}
+				n++
+				if env.VCS == nil || env.VCS.Revision != "abc1234" || !strings.Contains(string(env.Unknown[agentimport.DerivedMember]), `"commit-revision"`) {
+					t.Errorf("derived env %+v %s", env.VCS, env.Unknown[agentimport.DerivedMember])
+				}
+			}
+		}
+		if want := map[bool]int{false: 0, true: 1}[derive]; n != want {
+			t.Errorf("derive %v: %d derived env entries, want %d", derive, n, want)
+		}
+		if derive && !strings.Contains(string(res.Sessions[0].Header().Extra[agentimport.SourceMember]), `"derived"`) {
+			t.Errorf("the header does not name the rules: %s", res.Sessions[0].Header().Extra[agentimport.SourceMember])
+		}
+	}
 }

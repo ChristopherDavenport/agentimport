@@ -12,6 +12,7 @@ import (
 
 	"github.com/ChristopherDavenport/agentimport"
 	"github.com/ChristopherDavenport/agentimport/internal/doccheck"
+	"github.com/ChristopherDavenport/agentimport/internal/testfix"
 	"github.com/ChristopherDavenport/agentimport/pi"
 	"github.com/ChristopherDavenport/agentsession"
 	"github.com/ChristopherDavenport/openresponses"
@@ -358,6 +359,43 @@ func TestShortHash(t *testing.T) {
 	} {
 		if got := shortHash(in); got != want {
 			t.Errorf("shortHash(%q) = %s, want %s", in, got, want)
+		}
+	}
+}
+
+// TestDerive: with derivation, a shell call whose output prints the
+// commit it made is followed by a derived env entry carrying the
+// revision, marked agentimport:derived with the call's call_id, and the
+// header names the rules; without it, no derived entry is written.
+func TestDerive(t *testing.T) {
+	for _, derive := range []bool{false, true} {
+		res := func() *agentimport.Result {
+			dir := testfix.Variant(t, "testdata/anthropic", `"command":"ls"`, `"command":"git commit -m wip"`, `"text":"logo.png\nmain.go"`, `"text":"[main abc1234] wip\n 1 file changed"`)
+			matches, _ := filepath.Glob(filepath.Join(dir, "*.jsonl"))
+			r, err := ConvertFile(matches[0], Options{Derive: derive})
+			if err != nil {
+				t.Fatal(err)
+			}
+			return r
+		}()
+		n := 0
+		for _, s := range res.Sessions {
+			for _, e := range s.Entries() {
+				env, ok := e.(*agentsession.EnvEntry)
+				if !ok || env.Unknown[agentimport.DerivedMember] == nil {
+					continue
+				}
+				n++
+				if env.VCS == nil || env.VCS.Revision != "abc1234" || !strings.Contains(string(env.Unknown[agentimport.DerivedMember]), `"commit-revision"`) {
+					t.Errorf("derived env %+v %s", env.VCS, env.Unknown[agentimport.DerivedMember])
+				}
+			}
+		}
+		if want := map[bool]int{false: 0, true: 1}[derive]; n != want {
+			t.Errorf("derive %v: %d derived env entries, want %d", derive, n, want)
+		}
+		if derive && !strings.Contains(string(res.Sessions[0].Header().Extra[agentimport.SourceMember]), `"derived"`) {
+			t.Errorf("the header does not name the rules: %s", res.Sessions[0].Header().Extra[agentimport.SourceMember])
 		}
 	}
 }

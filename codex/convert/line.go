@@ -187,16 +187,16 @@ func (c *converter) item(l *codex.Line) error {
 		return err
 	}
 	if fo, ok := item.(*openresponses.FunctionCallOutput); ok && c.opts.Derive && shellTools[c.toolNames[fo.CallID]] {
-		d, err := agentimport.PublishedEntry(fo.CallID, agentimport.ShellCommand(c.toolArgs[fo.CallID]), fo.Output.String())
+		ds, err := agentimport.DerivedEntries(fo.CallID, agentimport.ShellCommand(c.toolArgs[fo.CallID]), fo.Output.String(), c.st.cwd)
 		if err != nil {
 			return err
 		}
-		if d != nil {
-			d.Timestamp = e.Timestamp
-			if err := c.emit(d, l); err != nil {
+		for _, d := range ds {
+			d.Entry.Base().Timestamp = e.Timestamp
+			if err := c.emit(d.Entry, l); err != nil {
 				return err
 			}
-			c.addf(agentimport.Kept, agentimport.PublishedCode, l, "what the shell call published, as its output says, is a derived %s record carrying its call_id", agentimport.PublishedNS)
+			c.addf(agentimport.Kept, d.Code, l, "what the shell call did, as its output says, is a derived entry carrying agentimport:derived and its call_id")
 		}
 	}
 	c.countSpawn(l, it)

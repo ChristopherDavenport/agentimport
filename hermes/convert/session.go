@@ -202,7 +202,13 @@ func (sc *sconv) run() error {
 		return err
 	}
 	sc.report.HeaderIdentity("", h, "sessions.id", "sessions.cwd")
+	if sc.fam.opts.Derive {
+		if err := agentimport.MarkDerived(&h); err != nil {
+			return err
+		}
+	}
 	sc.b = agentimport.NewBuilder(h, Source, sc.report)
+	sc.b.Derive, sc.b.ShellTools = sc.fam.opts.Derive, shellTools
 	if err := sc.start(); err != nil {
 		return err
 	}
@@ -459,6 +465,13 @@ func (sc *sconv) append(e agentsession.Entry) (string, error) {
 		return "", err
 	}
 	sc.at = id
+	// Derivation writes after a shell call's output what its output
+	// says the call did, when asked for; the session goes on from there.
+	if tail, err := sc.b.DeriveAfter(id, e); err != nil {
+		return "", err
+	} else {
+		sc.at = tail
+	}
 	return id, nil
 }
 
@@ -513,3 +526,6 @@ func (sc *sconv) custom(ts time.Time, unit, code, what string, data any) error {
 	sc.addf(agentimport.Kept, code, unit, "%s, which is not context, is a custom entry", what)
 	return nil
 }
+
+// shellTools are the shell tools whose calls the derivation rules read.
+var shellTools = map[string]bool{"terminal": true}

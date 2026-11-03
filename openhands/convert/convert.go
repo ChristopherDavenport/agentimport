@@ -42,6 +42,11 @@ type Options struct {
 	// agent server's state updates, token IDs, completion logs and
 	// stream fragments. Each drop is still reported.
 	Slim bool
+	// Derive writes the entries the module's derivation rules infer
+	// from the converted path, each marked agentimport:derived: what a
+	// shell call published and the revision a commit printed
+	// (docs/plans/agentimport.md).
+	Derive bool
 	// Location is the zone of OpenHands' timestamps, which are local
 	// time written with no zone; nil reads them as UTC. Either is
 	// reported.

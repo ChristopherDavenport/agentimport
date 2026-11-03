@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ChristopherDavenport/agentsession"
+	"github.com/ChristopherDavenport/openresponses"
 )
 
 // Module is this module's path, as the provenance member names it.
@@ -116,6 +117,16 @@ type Builder struct {
 	tail string
 	// leaf is the entry Leaf named.
 	leaf string
+
+	// Derive asks DeriveAfter to write the entries the derivation rules
+	// infer; ShellTools names the source's shell tools, whose calls the
+	// rules read.
+	Derive     bool
+	ShellTools map[string]bool
+	// calls holds each function call appended, by call_id, and cwd the
+	// working directory the last env entry appended named.
+	calls map[string]*openresponses.FunctionCall
+	cwd   string
 }
 
 // NewBuilder starts a session with header h.
@@ -175,6 +186,17 @@ func (b *Builder) Member(e agentsession.Entry, name string, v any) error {
 // format would fold into it, is moved a nanosecond later and the move
 // reported.
 func (b *Builder) Append(parent string, e agentsession.Entry) (string, error) {
+	switch v := e.(type) {
+	case *agentsession.ItemEntry:
+		if fc, ok := v.Item.(*openresponses.FunctionCall); ok {
+			if b.calls == nil {
+				b.calls = map[string]*openresponses.FunctionCall{}
+			}
+			b.calls[fc.CallID] = fc
+		}
+	case *agentsession.EnvEntry:
+		b.cwd = v.CWD
+	}
 	base := e.Base()
 	if parent == "" {
 		b.S.ResetLeaf()
@@ -342,4 +364,41 @@ func (res *Result) ScrubIdentity() {
 		f := &res.Report.Findings[i]
 		f.File, f.Detail = scrub(f.File), scrub(f.Detail)
 	}
+}
+
+// DeriveAfter writes, after the entry id holding e, the entries the
+// derivation rules infer when e is the output of one of the source's
+// shell calls and the conversion asked for derivation, and returns the
+// entry the session continues from: the last derived one, or id. The
+// call is the one appended with e's call_id; the working directory the
+// one the last env entry, or the header, names.
+func (b *Builder) DeriveAfter(id string, e agentsession.Entry) (string, error) {
+	it, ok := e.(*agentsession.ItemEntry)
+	if !ok || !b.Derive {
+		return id, nil
+	}
+	out, ok := it.Item.(*openresponses.FunctionCallOutput)
+	if !ok {
+		return id, nil
+	}
+	fc := b.calls[out.CallID]
+	if fc == nil || !b.ShellTools[fc.Name] {
+		return id, nil
+	}
+	cwd := b.cwd
+	if cwd == "" {
+		cwd = b.S.Header().CWD
+	}
+	ds, err := DerivedEntries(out.CallID, ShellCommand(fc.Arguments), out.Output.String(), cwd)
+	if err != nil {
+		return "", err
+	}
+	for _, d := range ds {
+		d.Entry.Base().Timestamp = it.Timestamp
+		if id, err = b.Append(id, d.Entry); err != nil {
+			return "", err
+		}
+		b.Report.Addf(Kept, d.Code, b.File, 0, "what the shell call %s did, as its output says, is a derived entry carrying agentimport:derived", d.Code[len("agentimport/"):])
+	}
+	return id, nil
 }

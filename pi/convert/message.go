@@ -86,6 +86,11 @@ func (c *converter) contextItems(l *pi.Line, tail string, es ...*agentsession.It
 			return "", err
 		}
 		c.items[nodeKeyLine(l)] = append(c.items[nodeKeyLine(l)], tail)
+		// Derivation writes after a bash call's output what its output
+		// says the call did, when asked for.
+		if tail, err = c.b.DeriveAfter(tail, e); err != nil {
+			return "", err
+		}
 	}
 	c.mark(l, agentimport.LineMapped)
 	return tail, nil

@@ -45,6 +45,11 @@ type Options struct {
 	// drop is still reported. Context edits, which the model saw, are
 	// kept.
 	Slim bool
+	// Derive writes the entries the module's derivation rules infer
+	// from the converted path, each marked agentimport:derived: what a
+	// shell call published and the revision a commit printed
+	// (docs/plans/agentimport.md).
+	Derive bool
 	// CreatedAt is the session's created_at when a task holds no
 	// timestamp at all. Zero leaves it the epoch; either is reported.
 	CreatedAt time.Time
