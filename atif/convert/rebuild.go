@@ -3,6 +3,7 @@ package convert
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -34,8 +35,8 @@ func (c *docConv) entryRecords() map[string]json.RawMessage {
 // steps rather than rebuilt from them, or "" when it is rebuilt.
 func (c *docConv) rebuildBlocked() string {
 	switch {
-	case len(c.t.Subagents) > 0 || c.t.SubagentsMistyped:
-		return "it embeds sub-agent trajectories, which this converter links to their calls from the steps"
+	case c.t.SubagentsMistyped:
+		return "its sub-agent trajectories are not a list"
 	case c.t.ContinuedRef != "":
 		return "it continues in another document"
 	case c.in.file != nil && c.in.file.Cut != nil:
@@ -505,4 +506,38 @@ func (c *docConv) docLeaf() string {
 // stepID is the entry a step names under agentsession in its extra.
 func stepID(s *atif.Step) string {
 	return str(object(object(s.Ext)["agentsession"])["entry_id"])
+}
+
+// rebuildChildren converts the sub-agent trajectories a document embeds,
+// each into the session its own extra.agentsession names, so the ids
+// the parent's links and outputs name are the children's own: a child
+// that carries its entries is rebuilt to them as the parent is.
+func (c *docConv) rebuildChildren() ([]*agentsession.Session, error) {
+	var out []*agentsession.Session
+	for _, emb := range c.t.Subagents {
+		if emb == nil || c.fam.embedded[emb] {
+			continue
+		}
+		c.fam.embedded[emb] = true
+		as := object(object(emb.Ext)["agentsession"])
+		in := docInput{t: emb, name: c.in.name + "#" + emb.TrajectoryID, dir: c.in.dir}
+		t := target{id: emb.SessionID, native: emb.SessionID, parent: str(as["parent_session"]), spawnedBy: str(as["spawned_by"]), created: c.created}
+		if t.parent == "" {
+			t.parent = c.tgt.id
+		}
+		if t.id == "" || c.fam.ids[t.id] {
+			t.id, t.derived = c.fam.claim(emb.SessionID, c.tgt.id, "trajectory/"+emb.TrajectoryID)
+		} else {
+			c.fam.ids[t.id] = true
+		}
+		sessions, _, err := c.fam.child(in, t, c.report, c.in.name)
+		if err != nil {
+			if errors.Is(err, errNesting) {
+				continue
+			}
+			return nil, err
+		}
+		out = append(out, sessions...)
+	}
+	return out, nil
 }

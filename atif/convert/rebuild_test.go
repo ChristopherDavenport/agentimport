@@ -176,9 +176,11 @@ func TestRebuildEdited(t *testing.T) {
 	}
 }
 
-// TestRebuildBlocked: a document that embeds sub-agents is mapped from
-// its steps, and says that none of its entries keeps its id.
-func TestRebuildBlocked(t *testing.T) {
+// TestRebuildFamily: a document that embeds a sub-agent's trajectory is
+// rebuilt with it, the child into the session its own document names,
+// each entry of it to its id, so the ids the parent names in it are the
+// child's own.
+func TestRebuildFamily(t *testing.T) {
 	s, child := session(t)
 	var main export.Trajectory
 	for tr, err := range export.Trajectories(s) {
@@ -203,8 +205,25 @@ func TestRebuildBlocked(t *testing.T) {
 		t.Fatal(err)
 	}
 	res := convertFixture(t, path, Options{})
-	if !slices.Contains(res.Report.Codes(), "atif/not-rebuilt") {
-		t.Errorf("no atif/not-rebuilt: %v", res.Report.Codes())
+	if slices.Contains(res.Report.Codes(), "atif/not-rebuilt") {
+		t.Errorf("the family is not rebuilt: %v", res.Report.Codes())
+	}
+	var got *agentsession.Session
+	for _, rs := range res.Sessions {
+		if rs.ID() == child.ID() {
+			got = rs
+		}
+	}
+	if got == nil {
+		t.Fatalf("no session %s among %d", child.ID(), len(res.Sessions))
+	}
+	if got.Header().ParentSession != s.ID() {
+		t.Errorf("the child's parent_session is %q", got.Header().ParentSession)
+	}
+	for _, e := range child.Path(child.Leaf()) {
+		if _, ok := got.Entry(e.Base().ID); !ok {
+			t.Errorf("the child's %T %s is not rebuilt to its id", e, e.Base().ID)
+		}
 	}
 }
 

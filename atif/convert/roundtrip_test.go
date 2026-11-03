@@ -140,6 +140,18 @@ func TestExporterRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// An exporter before format 0.17 wrote no entries, and its document
+	// is mapped from its steps, which this test exercises; one with them
+	// is rebuilt to its ids (TestRebuildFamily).
+	strip := func(extra map[string]any) {
+		if as, ok := extra[export.ExtraAgentSession].(map[string]any); ok {
+			delete(as, export.ExtraEntries)
+		}
+	}
+	strip(doc.Extra)
+	for _, sub := range doc.SubagentTrajectories {
+		strip(sub.Extra)
+	}
 	path := filepath.Join(t.TempDir(), "agent", "trajectory.json")
 	if err := export.WriteDocument(path, doc); err != nil {
 		t.Fatal(err)

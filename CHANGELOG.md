@@ -67,8 +67,10 @@ versions may break the API.
   The header's `redacted` and `redacted_from` are restored exactly when
   every entry matched over the whole path, which reaches the document's
   leaf with every step naming an entry (`atif/redaction-not-restored`
-  says why not; a step that names none is `atif/step-not-rebuilt`). A document with sub-agent trajectories or a
-  continuation is still mapped from its steps (`atif/not-rebuilt`),
+  says why not; a step that names none is `atif/step-not-rebuilt`). Embedded sub-agent trajectories are rebuilt
+  with it, each into the session its own document names. A document
+  that continues in another is still mapped from its steps
+  (`atif/not-rebuilt`),
   where `failed`, `trust`, `copied_from`, `from_link` and
   `instructions_part` now come back as core members
   (`atif/meaning-restored`) and a response's `legacy_id` and

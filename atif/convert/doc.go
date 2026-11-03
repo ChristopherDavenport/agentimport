@@ -86,7 +86,11 @@ func (fam *family) one(in docInput, tgt target, report *agentimport.Report) ([]*
 			if s, err = agentimport.Finish(s); err != nil {
 				return nil, "", fmt.Errorf("%s: rebuilt session does not verify: %w", displayName(in.name), err)
 			}
-			return []*agentsession.Session{s}, s.Leaf(), nil
+			children, err := c.rebuildChildren()
+			if err != nil {
+				return nil, "", err
+			}
+			return append([]*agentsession.Session{s}, children...), s.Leaf(), nil
 		}
 		c.addf(agentimport.Lossy, "atif/not-rebuilt", 0,
 			"the document carries the %d entries it was exported from, but %s; it is mapped from its steps, so none of them keeps the document's id", len(recs), why)
