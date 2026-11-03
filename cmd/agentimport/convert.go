@@ -12,7 +12,7 @@ import (
 	"github.com/ChristopherDavenport/agentsession/jsonl"
 )
 
-const convertUsage = `usage: agentimport convert -o <store> [-from auto|claudecode|pi|codex|atif|cline|clinesdk|openhands|opencode|hermes] [-strict] [-slim] [-force] [-report text|json] <file|dir>...
+const convertUsage = `usage: agentimport convert -o <store> [-from auto|claudecode|pi|codex|atif|cline|clinesdk|openhands|opencode|hermes] [-strict [-accept code,...]] [-slim] [-force] [-report text|json] <file|dir>...
 
 Converts each session and writes every session the conversion makes,
 the main session and its subsessions, into the agentsession jsonl store
@@ -22,8 +22,9 @@ A session already in the store is kept as it is, and listed, unless
 all the same, so converting a tree again adds what is new.
 Prints the report: in full for one input, and a line per input with
 the reports added up per source for several. Exits 1 when a conversion
-or a write failed, or with -strict when a report holds a dropped or gap
-finding.
+or a write failed, or with -strict when a report holds a dropped
+finding, or a gap docs/incompatibilities.md does not list, whose code
+-accept does not name.
 `
 
 // written is one session written to the store.
@@ -89,7 +90,7 @@ func convertCmd(args []string, stdout, stderr io.Writer) int {
 	defer st.Close()
 
 	ctx := context.Background()
-	t := newTotals()
+	t := newTotals(c.accept)
 	var results []convertJSON
 	newRunner(c.slim, &skip).each(ins, func(o outcome) {
 		var ws []written

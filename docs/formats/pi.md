@@ -243,7 +243,7 @@ every converter can report are in [README.md](README.md).
 | --- | --- | --- |
 | `agentimport/reasoning-provider` | gap | An Anthropic, Bedrock or Gemini signature is in `encrypted_content`, which says nothing of the provider that can replay it; the entry carries `pi:provider`. |
 | `agentimport/tool-error` | gap | A tool result had `isError`; `function_call_output` has no error flag, so it is `pi:is_error`. |
-| `agentimport/usage-detail` | gap | Usage has members Responses usage lacks (cache writes, the dollar cost); they are in `pi:usage`. |
+| `agentimport/usage-detail` | kept | Usage has members Responses usage lacks (cache writes, the dollar cost); they are in `pi:usage`. |
 | `agentimport/context-replace` | gap | A context edit replaced a message's content: a user or extension message is omitted and its replacement written after; an assistant message or tool result stays and the edit is a custom entry. |
 | `agentimport/omit-summary` | gap | A context edit left a branch summary out of context; `omit` names items alone, so it stays. |
 | `agentimport/info-clear` | gap | A `session_info` with an empty name cleared pi's session name; the format cannot clear one, so nothing is written. |

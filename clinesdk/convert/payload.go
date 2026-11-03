@@ -806,7 +806,7 @@ func (sc *sconv) response(k int, m *clinesdk.Message, respID string, ts time.Tim
 			if err := sc.b.Member(e, "usage", m.Metrics); err != nil {
 				return nil, err
 			}
-			sc.at(agentimport.Gap, "agentimport/usage-detail", k, "inputTokens counts cache reads and writes already; cacheReadTokens is cached_tokens, and the metrics with the cache writes and the cost are %s:usage", Source)
+			sc.at(agentimport.Kept, "agentimport/usage-detail", k, "inputTokens counts cache reads and writes already; cacheReadTokens is cached_tokens, and the metrics with the cache writes and the cost are %s:usage", Source)
 		}
 	}
 	rest, err := messageRest(m, "modelInfo", "metrics")

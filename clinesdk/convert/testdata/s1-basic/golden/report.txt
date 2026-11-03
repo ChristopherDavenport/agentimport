@@ -1,8 +1,6 @@
 clinesdk: 13 files and elements: mapped 12 kept 1 dropped 0 malformed 0
-  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
   gap      agentimport/reasoning-provider                    2  a reasoning signature from anthropic in encrypted_content, tagged clinesdk:provider (at 1759312800000_ab12c.messages.json:2, 1759312800000_ab12c.messages.json:10)
   gap      agentimport/tool-error                            1  is_error is the member clinesdk:is_error; function_call_output has no error flag (at 1759312800000_ab12c.messages.json:8)
-  gap      agentimport/usage-detail                          4  inputTokens counts cache reads and writes already; cacheReadTokens is cached_tokens, and the metrics with the cache writes and the cost are clinesdk:usage (at 1759312800000_ab12c.messages.json:2, 1759312800000_ab12c.messages.json:4, 1759312800000_ab12c.messages.json:7, 1759312800000_ab12c.messages.json:10)
   lossy    clinesdk/file-block                               1  a file block is the text Cline sends for it, the content in <file_content path=...>; the block as written is clinesdk:original (at 1759312800000_ab12c.messages.json:9)
   lossy    clinesdk/no-response-id                           4  Cline records no response ID; the response is resp_2 (at 1759312800000_ab12c.messages.json:2, 1759312800000_ab12c.messages.json:4, 1759312800000_ab12c.messages.json:7, 1759312800000_ab12c.messages.json:10)
   lossy    clinesdk/no-stop-reason                           1  Cline records no stop reason; every response is completed
@@ -11,6 +9,8 @@ clinesdk: 13 files and elements: mapped 12 kept 1 dropped 0 malformed 0
   lossy    clinesdk/structured-output                        1  a structured tool result is the JSON text Cline sends for it (at 1759312800000_ab12c.messages.json:3)
   lossy    clinesdk/system-prompt-latest                     1  the system prompt is the one the file holds, the latest Cline sent; earlier requests may have sent another
   lossy    clinesdk/user-input                               3  Cline sends a user's text trimmed and without its <user_input> or <user_command> wrapper, which names the mode; the item holds the text sent, the block as written is clinesdk:original (at 1759312800000_ab12c.messages.json:1, 1759312800000_ab12c.messages.json:9, 1759312800000_ab12c.messages.json:11)
+  kept     agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  kept     agentimport/usage-detail                          4  inputTokens counts cache reads and writes already; cacheReadTokens is cached_tokens, and the metrics with the cache writes and the cost are clinesdk:usage (at 1759312800000_ab12c.messages.json:2, 1759312800000_ab12c.messages.json:4, 1759312800000_ab12c.messages.json:7, 1759312800000_ab12c.messages.json:10)
   kept     clinesdk/display-only                             1  a display-only message, which the chat view shows and no request sends, is a custom entry (at 1759312800000_ab12c.messages.json:6)
   kept     clinesdk/extension-item                           1  a redacted_thinking block is the anthropic.redacted_thinking item (at 1759312800000_ab12c.messages.json:10)
   kept     clinesdk/manifest                                 1  the manifest is the header member clinesdk:manifest

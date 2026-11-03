@@ -1,5 +1,4 @@
 hermes: 20 rows: mapped 17 kept 0 dropped 1 malformed 2
-  gap      agentimport/provenance                            4  the import is recorded in the header's agentimport:source member
   dropped  hermes/orphan                                     1  a message row that belongs to no session it can be converted with is left out: its session has no row in sessions that can be read
   dropped  hermes/system-prompt                              4  the session row holds no system prompt; the settings carry the model alone
   dropped  hermes/tools                                      4  Hermes does not store the session's tool definitions; the settings carry no tools
@@ -7,6 +6,7 @@ hermes: 20 rows: mapped 17 kept 0 dropped 1 malformed 2
   lossy    hermes/created-at                                 1  the session row holds no start time Hermes accepts; created_at is its first message's
   lossy    hermes/parent-missing                             1  the session's parent, gone_parent, has no row in the database; parent_session names it
   lossy    hermes/subagent-unlinked                          1  the session is a sub-agent of cyc_one, linked to no call (no delegate_task call of the parent was running when it started); its session names the parent in parent_session alone
+  kept     agentimport/provenance                            4  the import is recorded in the header's agentimport:source member
   kept     hermes/content-part                               1  2 content parts Open Responses does not define are carried as extension parts
   kept     hermes/members                                    5  kept in hermes:columns
   kept     hermes/reasoning-carrier                          1  1 entries of reasoning_details no item holds, such as a provider's native carrier, are kept in the row's columns

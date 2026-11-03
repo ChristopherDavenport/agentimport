@@ -347,7 +347,7 @@ every converter can report are in [README.md](README.md).
 | Code | Kind | Meaning |
 | --- | --- | --- |
 | `agentimport/reasoning-provider` | gap | Encrypted reasoning is in `encrypted_content`, which says nothing of the provider that can replay it; the entry carries `codex:provider`, the session's model provider. |
-| `agentimport/usage-detail` | gap | A response's usage counts cache writes, which Responses usage has no place for; the native usage is `codex:usage`. |
+| `agentimport/usage-detail` | kept | A response's usage counts cache writes, which Responses usage has no place for; the native usage is `codex:usage`. |
 | `agentimport/vcs-branch` | gap | The git branch is the vcs member `codex:branch`; the format's vcs has no branch. |
 | `codex/assistant-input` | kept | An assistant message the harness wrote (a delivered or inherited message, compaction output, another agent's instruction as JSON) is input, not a response's output; it is marked `codex:input`. |
 | `codex/call-id-renamed` | repaired | A call id another call of the session holds, an empty one, or one with characters providers refuse, was renamed; the native one is `codex:call_id`. |

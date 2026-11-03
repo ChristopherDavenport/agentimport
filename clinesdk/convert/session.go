@@ -416,7 +416,7 @@ func (sc *sconv) header() (agentsession.Header, error) {
 	if err := agentimport.SetSource(&h, src); err != nil {
 		return h, err
 	}
-	sc.addf(agentimport.Gap, "agentimport/provenance", "", 0, "the import is recorded in the header member %s", agentimport.SourceMember)
+	sc.addf(agentimport.Kept, "agentimport/provenance", "", 0, "the import is recorded in the header member %s", agentimport.SourceMember)
 	if sc.tgt.derived != "" {
 		sc.addf(agentimport.Lossy, "clinesdk/session-id", "", 0, "%s", sc.tgt.derived)
 	}

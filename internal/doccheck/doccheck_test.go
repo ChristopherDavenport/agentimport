@@ -19,7 +19,14 @@ func TestSharedCodes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !gaps["agentimport/provenance"] {
-		t.Error("agentimport/provenance is not in incompatibilities.md")
+	// Converter detail is kept under the converter's namespace, not a
+	// gap.
+	for _, c := range []string{"agentimport/provenance", "agentimport/usage-detail"} {
+		if gaps[c] {
+			t.Errorf("%s is in incompatibilities.md", c)
+		}
+	}
+	if !gaps["agentimport/vcs-branch"] {
+		t.Error("agentimport/vcs-branch is not in incompatibilities.md")
 	}
 }

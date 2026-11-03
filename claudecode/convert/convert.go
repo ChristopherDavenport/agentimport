@@ -235,7 +235,7 @@ func (cv *conversion) header(tr *claudecode.Transcript, file string, t target) (
 	if err := agentimport.SetSource(&h, src); err != nil {
 		return h, err
 	}
-	cv.report.Addf(agentimport.Gap, "agentimport/provenance", file, 0,
+	cv.report.Addf(agentimport.Kept, "agentimport/provenance", file, 0,
 		"the import is recorded in the header member %s", agentimport.SourceMember)
 	if e, ok := firstEnvelope(tr); ok && (e.Entrypoint != "" || e.UserType != "") {
 		env := map[string]string{}

@@ -587,7 +587,7 @@ func (c *converter) responseEntry(p *pending, respID string) (*agentsession.Resp
 				if err := c.b.Member(e, "usage", p.usage); err != nil {
 					return nil, nil, err
 				}
-				c.addf(agentimport.Gap, "agentimport/usage-detail", src,
+				c.addf(agentimport.Kept, "agentimport/usage-detail", src,
 					"usage has members Responses usage lacks (cache writes); the native usage is %s:usage", Source)
 			}
 		}

@@ -1,8 +1,8 @@
 // Command agentimport converts other coding agents' session logs into
 // the Agent Session Format, and reports what each conversion changed.
 //
-//	agentimport convert -o <store> [-from auto|claudecode|pi|codex|atif|cline|clinesdk|openhands|opencode|hermes] [-strict] [-slim] [-force] [-report text|json] <file|dir>...
-//	agentimport report [-from auto|claudecode|pi|codex|atif|cline|clinesdk|openhands|opencode|hermes] [-strict] [-slim] [-json] <file|dir>...
+//	agentimport convert -o <store> [-from auto|claudecode|pi|codex|atif|cline|clinesdk|openhands|opencode|hermes] [-strict [-accept code,...]] [-slim] [-force] [-report text|json] <file|dir>...
+//	agentimport report [-from auto|claudecode|pi|codex|atif|cline|clinesdk|openhands|opencode|hermes] [-strict [-accept code,...]] [-slim] [-json] <file|dir>...
 //	agentimport version
 //
 // convert writes every session a conversion makes, the main session and
@@ -24,7 +24,10 @@
 // skipped when it was found in a directory and an error when named.
 //
 // Both commands exit 1 when a conversion failed, and with -strict when
-// a report holds a dropped or gap finding; 2 on bad usage.
+// a report holds a dropped finding, or a gap docs/incompatibilities.md
+// does not list, whose code -accept does not name; 2 on bad usage. A
+// documented gap is a known shape of the session format, not a fact of
+// one transcript.
 package main
 
 import (

@@ -143,8 +143,8 @@ func (c *docConv) metricsMember(e agentsession.Entry, line int, m *atif.Metrics)
 		return nil
 	}
 	if _, ok := rest["cost_usd"]; ok || rest["extra"] != nil {
-		_, verb := c.keeping("metrics")
-		c.addf(agentimport.Gap, "agentimport/usage-detail", line, "Responses usage has no cost and no place for the producer's extra counts; they are %s", verb)
+		kind, verb := c.keeping("metrics")
+		c.addf(kind, "agentimport/usage-detail", line, "Responses usage has no cost and no place for the producer's extra counts; they are %s", verb)
 	}
 	if c.fam.opts.Slim {
 		c.addf(agentimport.Dropped, "atif/metrics", line, "the metrics beside the token counts (cost, extra, token ids, logprobs) are left out")

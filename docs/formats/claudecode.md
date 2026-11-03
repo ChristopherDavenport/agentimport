@@ -189,10 +189,10 @@ the codes marked "kept, or dropped" are dropped instead.
 
 | Code | Kind | Meaning |
 | --- | --- | --- |
-| `agentimport/provenance` | gap | Once per session: the import is recorded in the header member `agentimport:source`. |
+| `agentimport/provenance` | kept | Once per session: the import is recorded in the header member `agentimport:source`. |
 | `agentimport/reasoning-provider` | gap | A thinking signature is in `encrypted_content`, which says nothing of the provider that can replay it; the entry carries `claudecode:provider`. |
 | `agentimport/tool-error` | gap | A tool result had `is_error`; `function_call_output` has no error flag, so it is `claudecode:is_error`. |
-| `agentimport/usage-detail` | gap | A response's usage has members Responses usage lacks; they are in `claudecode:usage`. |
+| `agentimport/usage-detail` | kept | A response's usage has members Responses usage lacks; they are in `claudecode:usage`. |
 | `agentimport/vcs-branch` | gap | The git branch is the vcs member `claudecode:branch`; the format's vcs records a revision, not a branch. |
 | `claudecode/extension-part` | kept | A user or tool-result block with no Open Responses input part (`tool_reference`, a block kept raw) is the extension part `anthropic.<type>` carrying it; see *Extension types*. |
 | `claudecode/agent-meta` | kept, or dropped | A sub-agent's meta file is the header member `claudecode:agent_meta`. |

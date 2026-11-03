@@ -481,7 +481,7 @@ func (c *converter) responseEntry(r *claudecode.Response, stop string) (*agentse
 			return nil, err
 		}
 		if !copied {
-			c.addf(agentimport.Gap, "agentimport/usage-detail", last,
+			c.addf(agentimport.Kept, "agentimport/usage-detail", last,
 				"cache writes are folded into input_tokens; the native usage is %s:usage", Source)
 		}
 		if len(usages) > 1 {

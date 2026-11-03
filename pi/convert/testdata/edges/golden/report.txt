@@ -1,12 +1,12 @@
 pi: 20 lines: mapped 15 kept 0 dropped 3 malformed 2
   gap      agentimport/context-replace                       1  the user message is left out of context and its replacement written where the edit was, not in its place (at 11)
   gap      agentimport/info-clear                            1  a session_info with no name clears pi's session name; the session format cannot clear one, so the earlier name stands (at 15)
-  gap      agentimport/provenance                            1  the import is recorded in the header member agentimport:source
-  gap      agentimport/usage-detail                          4  cache writes are folded into input_tokens; the native usage and its cost are pi:usage (at 4, 8, 12, 20)
   dropped  pi/context-edit-target                            2  an edit of an entry that is not in context on this path changes nothing, as pi applies it (at 6, 10)
   dropped  pi/input-block-members                            1  members of an input block a part has no place for are left out: extra (at 16)
   dropped  pi/invalid-block                                  2  a content block that is not an object (null) is left out (at 16, 16)
   dropped  pi/system-content                                 1  a block of type "image" in a system message is not part of the prompt pi renders (at 9)
+  kept     agentimport/provenance                            1  the import is recorded in the header member agentimport:source
+  kept     agentimport/usage-detail                          4  cache writes are folded into input_tokens; the native usage and its cost are pi:usage (at 4, 8, 12, 20)
   kept     pi/block-members                                  1  members of a text block an item has no place for are pi:block: redacted (at 20)
   kept     pi/message-members                                4  kept in pi:message: api, provider (at 4, 8, 12, 20)
   kept     pi/mistyped-member                                1  members whose value is not of the type pi defines are kept as written beside the object's other unmapped members: message.content[0].redacted (at 20)

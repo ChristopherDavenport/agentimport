@@ -279,7 +279,7 @@ every converter can report are in [README.md](README.md).
 
 | Code | Kind | Meaning |
 | --- | --- | --- |
-| `agentimport/usage-detail` | gap | Metrics carry a cost or extra counts Responses usage has no place for; they are in `atif:metrics`. |
+| `agentimport/usage-detail` | kept, or dropped | Metrics carry a cost or extra counts Responses usage has no place for; they are in `atif:metrics`. |
 | `atif/callless-subagent` | gap | A sub-agent no call spawned is linked by a `subsession` link with no `call_id`, which RFC 0001 does not define. |
 | `atif/compaction-unrecorded` | gap | A replace boundary records no summary, in its results or a user step after it; it is a custom entry and the context keeps what came before. |
 | `atif/context-pruning` | gap | A pruning or truncate boundary names nothing it removed; it is a custom entry and the context keeps everything. |

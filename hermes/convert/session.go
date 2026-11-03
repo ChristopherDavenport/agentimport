@@ -259,7 +259,7 @@ func (sc *sconv) header(msgs []*hermes.Message) (agentsession.Header, error) {
 	if err := agentimport.SetSource(&h, agentimport.Source{Format: Source, NativeID: native}); err != nil {
 		return h, err
 	}
-	sc.addf(agentimport.Gap, "agentimport/provenance", "", "the import is recorded in the header's %s member", agentimport.SourceMember)
+	sc.addf(agentimport.Kept, "agentimport/provenance", "", "the import is recorded in the header's %s member", agentimport.SourceMember)
 	extra := map[string]json.RawMessage{}
 	if native != "" {
 		extra[Source+":session_id"] = rawJSON(native)

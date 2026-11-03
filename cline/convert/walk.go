@@ -413,7 +413,7 @@ func (c *conv) header() (agentsession.Header, error) {
 	if err := agentimport.SetSource(&h, src); err != nil {
 		return h, err
 	}
-	c.addf(agentimport.Gap, "agentimport/provenance", "", 0, "the import is recorded in the header member %s", agentimport.SourceMember)
+	c.addf(agentimport.Kept, "agentimport/provenance", "", 0, "the import is recorded in the header member %s", agentimport.SourceMember)
 	if c.tgt.derived != "" {
 		c.addf(agentimport.Lossy, "cline/session-id", "", 0, "%s", c.tgt.derived)
 	}

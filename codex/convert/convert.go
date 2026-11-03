@@ -429,7 +429,7 @@ func (c *converter) header() (agentsession.Header, error) {
 	if err := agentimport.SetSource(&h, src); err != nil {
 		return h, err
 	}
-	c.addf(agentimport.Gap, "agentimport/provenance", nil, "the import is recorded in the header member %s", agentimport.SourceMember)
+	c.addf(agentimport.Kept, "agentimport/provenance", nil, "the import is recorded in the header member %s", agentimport.SourceMember)
 	if c.f.Legacy {
 		c.addf(agentimport.Lossy, "codex/legacy-layout", nil,
 			"the rollout predates the envelope (before September 2025): its items carry no timestamps, so entries take the time of the last line that had one")

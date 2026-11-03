@@ -687,7 +687,7 @@ func (c *conv) usage(k int, m *cline.Message, e *agentsession.ResponseEntry) err
 		if err := c.b.Member(e, "usage", json.RawMessage(raw)); err != nil {
 			return err
 		}
-		c.uiAt(agentimport.Gap, "agentimport/usage-detail", req.ui, "cache writes are folded into input_tokens; the request record's usage and cost are %s:usage", Source)
+		c.uiAt(agentimport.Kept, "agentimport/usage-detail", req.ui, "cache writes are folded into input_tokens; the request record's usage and cost are %s:usage", Source)
 		return nil
 	}
 	if m.Metrics != nil && m.Metrics.Tokens != nil {

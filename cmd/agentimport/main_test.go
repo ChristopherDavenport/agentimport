@@ -281,21 +281,89 @@ func TestConvertOverwrite(t *testing.T) {
 	}
 }
 
+// cleanSession is a two-line Claude Code session that converts with
+// nothing dropped and no gap.
+const cleanSession = `{"type":"user","uuid":"u1","parentUuid":null,"timestamp":"2026-09-01T10:00:00.000Z","message":{"role":"user","content":"Hi."},"isSidechain":false,"cwd":"/work/demo","version":"2.1.290","sessionId":"11111111-1111-4111-8111-0000000000c1"}
+{"type":"assistant","uuid":"a1","parentUuid":"u1","timestamp":"2026-09-01T10:00:01.000Z","message":{"id":"msg_01","type":"message","role":"assistant","model":"claude-opus-5-5","content":[{"type":"text","text":"Hello."}],"stop_reason":"end_turn","usage":{"input_tokens":3,"output_tokens":2}},"requestId":"req_01","isSidechain":false,"cwd":"/work/demo","version":"2.1.290","sessionId":"11111111-1111-4111-8111-0000000000c1"}
+`
+
 func TestStrict(t *testing.T) {
-	// Every conversion reports the provenance gap, so -strict refuses
-	// any; without it the same run passes.
-	in := "../../pi/convert/testdata/anthropic"
+	// A documented gap is a known shape of the format and says nothing
+	// of one transcript, so -strict passes a clean session; a dropped
+	// finding fails it unless -accept names its code.
+	clean := filepath.Join(t.TempDir(), "11111111-1111-4111-8111-0000000000c1.jsonl")
+	if err := os.WriteFile(clean, []byte(cleanSession), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	slim := "../../pi/convert/testdata/anthropic"
 	for _, tc := range []struct {
 		args []string
 		code int
 	}{
-		{[]string{"report", in}, 0},
-		{[]string{"report", "-strict", in}, 1},
-		{[]string{"convert", "-o", t.TempDir(), in}, 0},
-		{[]string{"convert", "-strict", "-o", t.TempDir(), in}, 1},
+		{[]string{"report", "-strict", clean}, 0},
+		{[]string{"convert", "-strict", "-o", t.TempDir(), clean}, 0},
+		{[]string{"report", "-slim", slim}, 0},
+		{[]string{"report", "-strict", "-slim", slim}, 1},
+		{[]string{"convert", "-strict", "-slim", "-o", t.TempDir(), slim}, 1},
+		{[]string{"report", "-strict", "-slim", "-accept", "pi/usage,pi/meta", slim}, 1},
+		{[]string{"report", "-accept", "", clean}, 2},
 	} {
 		if code, out, errOut := runCmd(t, tc.args...); code != tc.code {
 			t.Errorf("%v: exit %d, want %d\n%s%s", tc.args, code, tc.code, out, errOut)
+		}
+	}
+	// -accept names every code the slim conversion drops, and then it
+	// passes.
+	code, out, _ := runCmd(t, "report", "-json", "-slim", slim)
+	if code != 0 {
+		t.Fatalf("report -json: exit %d", code)
+	}
+	var res struct{ Aggregate map[string]summary }
+	if err := json.Unmarshal([]byte(out), &res); err != nil {
+		t.Fatal(err)
+	}
+	var dropped []string
+	for _, g := range res.Aggregate["pi"].Groups {
+		if g.Kind == agentimport.Dropped {
+			dropped = append(dropped, g.Code)
+		}
+	}
+	if len(dropped) == 0 {
+		t.Fatal("the slim conversion dropped nothing")
+	}
+	if code, out, _ := runCmd(t, "report", "-strict", "-slim", "-accept", strings.Join(dropped, ","), slim); code != 0 {
+		t.Errorf("-accept %v: exit %d\n%s", dropped, code, out)
+	}
+}
+
+func TestStrictFails(t *testing.T) {
+	report := func(fs ...agentimport.Finding) outcome {
+		r := agentimport.NewReport("claudecode")
+		for _, f := range fs {
+			r.Add(f)
+		}
+		return outcome{res: &agentimport.Result{Report: r}}
+	}
+	unreached := agentimport.Finding{Code: "claudecode/unreached", Kind: agentimport.Dropped, Line: 3}
+	documented := agentimport.Finding{Code: "agentimport/vcs-branch", Kind: agentimport.Gap}
+	undocumented := agentimport.Finding{Code: "claudecode/nowhere", Kind: agentimport.Gap}
+	kept := agentimport.Finding{Code: "agentimport/provenance", Kind: agentimport.Kept}
+	for _, tc := range []struct {
+		name   string
+		o      outcome
+		accept []string
+		fails  bool
+	}{
+		{"clean", report(kept), nil, false},
+		{"documented gap", report(kept, documented), nil, false},
+		{"unreached", report(kept, unreached), nil, true},
+		{"unreached accepted", report(unreached), []string{"claudecode/unreached"}, false},
+		{"undocumented gap", report(undocumented), nil, true},
+		{"undocumented gap accepted", report(undocumented), []string{"claudecode/nowhere"}, false},
+		{"failed", outcome{err: os.ErrNotExist}, nil, false},
+	} {
+		if got := tc.o.strictFails(acceptSet(tc.accept)); got != tc.fails {
+			t.Errorf("%s: strictFails = %v, want %v", tc.name, got, tc.fails)
 		}
 	}
 }
@@ -305,7 +373,7 @@ func TestReport(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d\n%s%s", code, out, errOut)
 	}
-	for _, want := range []string{"converted: claudecode ", "claudecode: ", "pi: ", "codex: ", "atif: ", "roots and steps:", "gap      agentimport/provenance"} {
+	for _, want := range []string{"converted: claudecode ", "claudecode: ", "pi: ", "codex: ", "atif: ", "roots and steps:", "kept     agentimport/provenance"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("report lacks %q:\n%s", want, out)
 		}

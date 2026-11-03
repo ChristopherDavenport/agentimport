@@ -675,7 +675,7 @@ func (c *converter) responseEntry(l *pi.Line, respID string) (*agentsession.Resp
 		if err := c.b.Member(e, "usage", m.Usage); err != nil {
 			return nil, err
 		}
-		c.addf(agentimport.Gap, "agentimport/usage-detail", l,
+		c.addf(agentimport.Kept, "agentimport/usage-detail", l,
 			"cache writes are folded into input_tokens; the native usage and its cost are %s:usage", Source)
 	}
 	if err := c.messageMembers(e, l, nil); err != nil {

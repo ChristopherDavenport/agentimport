@@ -146,8 +146,9 @@ code its document does not list, so the document cannot fall behind the
 code.
 
 `Report` groups findings by code with counts and the first few line
-numbers, prints as text or JSON, and answers `Has(kinds...)` so a
-caller can refuse a lossy conversion (`agentimport convert -strict`).
+numbers, prints as text or JSON, and answers `Has(kinds...)`.
+`DocumentedGap` says whether a gap code is in the table, which
+`agentimport convert -strict` uses to refuse a lossy conversion.
 
 ### Identity and provenance
 
@@ -157,7 +158,9 @@ caller can refuse a lossy conversion (`agentimport convert -strict`).
 - `harness` names the source agent and the version on its first line.
 - The header carries `agentimport:source`, a namespaced member:
   `{format, native_id, converter}` (the converter's module version).
-  The RFC defines no import provenance; this is a `gap`.
+  The RFC defines no import provenance, and its core test puts a
+  writer's own detail in a member under the writer's namespace, which
+  is where this is; it is reported `kept` (`agentimport/provenance`).
 - Every entry made from a native line carries the native identity in a
   namespaced member beside the body (`claudecode:uuid`, `pi:id`), as
   the RFC suggests for a native call ID. The converter keeps its own
@@ -236,7 +239,10 @@ it, and a session that fails to write does not stop its siblings, so
 converting a tree again adds the sub-agents spawned since.
 `report` converts without writing and adds the findings up per source,
 which is how a corpus is surveyed. `-strict` exits 1 on any `dropped`
-or `gap` finding; a failed conversion exits 1 either way.
+finding and on a `gap` code `docs/incompatibilities.md` does not list;
+a listed gap is a known shape of the format and says nothing of one
+transcript. `-accept code,...` names codes that do not fail it. A
+failed conversion exits 1 either way.
 
 With `-from auto`, a directory is searched with every source's finder
 and each file is detected by name and first lines: a Codex rollout by

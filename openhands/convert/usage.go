@@ -157,7 +157,7 @@ func (c *conv) joinUsage(i int, e *agentsession.ResponseEntry, native string) er
 			return err
 		}
 		if extra["cache_write_tokens"] > 0 {
-			c.at(agentimport.Gap, "agentimport/usage-detail", i, "cache writes have no place in Responses usage; OpenHands counts them in prompt tokens, and the count is in %s:usage", Source)
+			c.at(agentimport.Kept, "agentimport/usage-detail", i, "cache writes have no place in Responses usage; OpenHands counts them in prompt tokens, and the count is in %s:usage", Source)
 		} else {
 			c.at(agentimport.Kept, "openhands/usage-member", i, "the context window and the per-turn tokens OpenHands records with the usage are in %s:usage", Source)
 		}

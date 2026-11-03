@@ -193,7 +193,7 @@ func (c *converter) header() (agentsession.Header, error) {
 	if err := agentimport.SetSource(&h, agentimport.Source{Format: Source}); err != nil {
 		return h, err
 	}
-	c.addf(agentimport.Gap, "agentimport/provenance", nil,
+	c.addf(agentimport.Kept, "agentimport/provenance", nil,
 		"the import is recorded in the header member %s", agentimport.SourceMember)
 	if hl == nil {
 		return h, nil

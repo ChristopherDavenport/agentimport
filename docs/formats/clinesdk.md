@@ -316,7 +316,7 @@ child reached twice is converted once.
 | `agentimport/context-replace` | gap | Cline sends an item rewritten from a request on: an outdated read, a cut assistant text. The item stays as first sent; the rewrite is a custom entry. |
 | `agentimport/reasoning-provider` | gap | A thinking or Gemini thought signature is in `encrypted_content`, the message's provider in `clinesdk:provider`. |
 | `agentimport/tool-error` | gap | A failed call's output carries `clinesdk:is_error`. |
-| `agentimport/usage-detail` | gap | Cache writes, in the input already, and the cost are `clinesdk:usage`. |
+| `agentimport/usage-detail` | kept | Cache writes, in the input already, and the cost are `clinesdk:usage`. |
 | `clinesdk/child-failed` | dropped | A sub-agent's or team task's history that could not be converted. |
 | `clinesdk/children-alone` | dropped | A child not converted, with `Options.Alone`. |
 | `clinesdk/compaction-copy` | dropped | The sidecar's copy of a history message, which the compaction keeps from `first_kept`. |

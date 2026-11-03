@@ -24,13 +24,36 @@ import (
 type common struct {
 	from   string
 	strict bool
+	accept map[string]bool
 	slim   bool
 }
 
 func (c *common) register(fs *flag.FlagSet) {
 	fs.StringVar(&c.from, "from", "auto", "the source format: "+fromValues())
-	fs.BoolVar(&c.strict, "strict", false, "exit 1 when a report holds a dropped or gap finding")
+	fs.BoolVar(&c.strict, "strict", false, "exit 1 when a report holds a dropped finding, or a gap docs/incompatibilities.md does not list")
+	fs.Func("accept", "with -strict, finding codes that do not fail it, comma-separated", func(v string) error {
+		codes := strings.Split(v, ",")
+		if slices.Contains(codes, "") {
+			return fmt.Errorf("an empty code in %q", v)
+		}
+		if c.accept == nil {
+			c.accept = map[string]bool{}
+		}
+		for _, code := range codes {
+			c.accept[code] = true
+		}
+		return nil
+	})
 	fs.BoolVar(&c.slim, "slim", false, "drop what the model never saw rather than keep it in namespaced members")
+}
+
+// acceptSet is the set -accept builds from its codes.
+func acceptSet(codes []string) map[string]bool {
+	set := map[string]bool{}
+	for _, c := range codes {
+		set[c] = true
+	}
+	return set
 }
 
 func (c *common) check() error {
@@ -50,9 +73,23 @@ type outcome struct {
 	err error
 }
 
-// strictFails reports whether -strict refuses the outcome's report.
-func (o outcome) strictFails() bool {
-	return o.res != nil && o.res.Report.Has(agentimport.Dropped, agentimport.Gap)
+// strictFails reports whether -strict refuses the outcome's report: it
+// holds a dropped finding, or a gap docs/incompatibilities.md does not
+// list, whose code accept does not name. A documented gap is a known
+// shape of the session format and says nothing of one transcript.
+func (o outcome) strictFails(accept map[string]bool) bool {
+	if o.res == nil {
+		return false
+	}
+	for _, f := range o.res.Report.Findings {
+		if accept[f.Code] {
+			continue
+		}
+		if f.Kind == agentimport.Dropped || f.Kind == agentimport.Gap && !agentimport.DocumentedGap(f.Code) {
+			return true
+		}
+	}
+	return false
 }
 
 // convertOne converts one input. A converter is held never to panic and
@@ -423,10 +460,12 @@ type totals struct {
 	files   map[string]int
 	failed  []outcome
 	strict  int
+	// accept is -accept's codes, which do not count toward strict.
+	accept map[string]bool
 }
 
-func newTotals() *totals {
-	return &totals{reports: map[string]*agentimport.Report{}, files: map[string]int{}}
+func newTotals(accept map[string]bool) *totals {
+	return &totals{reports: map[string]*agentimport.Report{}, files: map[string]int{}, accept: accept}
 }
 
 func (t *totals) add(o outcome) {
@@ -442,7 +481,7 @@ func (t *totals) add(o outcome) {
 		t.reports[name] = r
 	}
 	r.Merge(o.res.Report)
-	if o.strictFails() {
+	if o.strictFails(t.accept) {
 		t.strict++
 	}
 }
@@ -493,7 +532,7 @@ func (t *totals) aggregate() map[string]summary {
 }
 
 // exit is the status for the totals: 1 on a failure, or with -strict on
-// a dropped or gap finding.
+// a dropped finding or an undocumented gap that -accept does not name.
 func (t *totals) exit(strict bool) int {
 	if len(t.failed) > 0 || strict && t.strict > 0 {
 		return 1

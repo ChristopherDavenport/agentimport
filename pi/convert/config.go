@@ -415,7 +415,7 @@ func (c *converter) summaryMembers(e agentsession.Entry, l *pi.Line) error {
 		if err := c.b.Member(e, "usage", l.Usage); err != nil {
 			return err
 		}
-		c.addf(agentimport.Gap, "agentimport/usage-detail", l,
+		c.addf(agentimport.Kept, "agentimport/usage-detail", l,
 			"cache writes are folded into input_tokens; the native usage and its cost are %s:usage", Source)
 	}
 	if len(l.Details) > 0 && string(l.Details) != "null" {

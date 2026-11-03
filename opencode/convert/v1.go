@@ -1016,7 +1016,7 @@ func (sc *sconv) usageMembers(resp *agentsession.ResponseEntry, extra map[string
 		return err
 	}
 	if _, ok := extra["cache_write_tokens"]; ok {
-		sc.addf(agentimport.Gap, "agentimport/usage-detail", unit, "cache writes have no place in Responses usage; they are folded into input tokens, and the count, with the cost, is in %s:usage", Source)
+		sc.addf(agentimport.Kept, "agentimport/usage-detail", unit, "cache writes have no place in Responses usage; they are folded into input tokens, and the count, with the cost, is in %s:usage", Source)
 		return nil
 	}
 	sc.addf(agentimport.Kept, "opencode/usage-member", unit, "the cost and the total OpenCode records with the usage are in %s:usage", Source)

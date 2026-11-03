@@ -303,7 +303,7 @@ entry takes the token usage whose `response_id` is its
 `llm_response_id`, and its latency: `input_tokens` the prompt tokens,
 which are litellm's and count cache reads and writes, `cached_tokens`
 the cache reads, `output_tokens` and `reasoning_tokens`; cache writes
-(gap `agentimport/usage-detail`), the context window and the per-turn
+(kept, `agentimport/usage-detail`), the context window and the per-turn
 tokens are `openhands:usage`. An `ACPAgent` passes on the wrapped
 agent's counts, which leave the cache out of the input (Anthropic's) or
 count it in (OpenAI's): cache reads larger than the input can only be
@@ -384,7 +384,7 @@ every converter can report are in [README.md](README.md).
 | `agentimport/fold-head` | gap | OpenHands put a condensation's summary after the events it kept at the head of the context; the compaction puts its summary first and pins the head after it. |
 | `agentimport/reasoning-provider` | gap | A reasoning signature (Anthropic's, OpenAI's encrypted reasoning) is in `encrypted_content`, tagged `openhands:provider`. |
 | `agentimport/tool-error` | gap | A tool result's `is_error`, or an agent error, is `openhands:is_error`. |
-| `agentimport/usage-detail` | gap | Cache writes, counted in the prompt tokens, are `openhands:usage`. |
+| `agentimport/usage-detail` | kept | Cache writes, counted in the prompt tokens, are `openhands:usage`. |
 | `openhands/bad-content` | dropped | A content part that is not an object or not text or an image, or extended content on an assistant message. |
 | `openhands/bad-file-name` | dropped | A file of `events/` whose name is not an event file's. |
 | `openhands/bad-metrics` | dropped | A usage ID's metrics that are not an object. |

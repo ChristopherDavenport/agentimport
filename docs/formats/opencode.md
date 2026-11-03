@@ -408,7 +408,7 @@ every converter can report are in [README.md](README.md).
 | `agentimport/fold-head` | gap | OpenCode's compacted context starts with a message it sent verbatim; the compaction's summary is that message and the rest follows it. |
 | `agentimport/reasoning-provider` | gap | A reasoning signature or encrypted content is in `encrypted_content`, its provider in `opencode:provider`. |
 | `agentimport/tool-error` | gap | A failed call's output carries `opencode:is_error`. |
-| `agentimport/usage-detail` | gap | Cache writes, folded into input, and the cost are `opencode:usage`. |
+| `agentimport/usage-detail` | kept | Cache writes, folded into input, and the cost are `opencode:usage`. |
 | `opencode/attachment-mime` | dropped | An OpenCode 2 attachment of a type it does not send. |
 | `opencode/attachment-repeated` | lossy | An image attached twice under one mention, sent once. |
 | `opencode/call-id` | repaired | A call ID that is empty, malformed or repeated is renamed; the native one is `opencode:call_id`. |

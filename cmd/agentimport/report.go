@@ -6,12 +6,14 @@ import (
 	"io"
 )
 
-const reportUsage = `usage: agentimport report [-from auto|claudecode|pi|codex|atif|cline|clinesdk|openhands|opencode|hermes] [-strict] [-slim] [-json] <file|dir>...
+const reportUsage = `usage: agentimport report [-from auto|claudecode|pi|codex|atif|cline|clinesdk|openhands|opencode|hermes] [-strict [-accept code,...]] [-slim] [-json] <file|dir>...
 
 Converts each session without writing anything and prints what the
 conversions changed, added up per source: where every native line went
 and the findings grouped by code. Exits 1 when a conversion failed, or
-with -strict when a report holds a dropped or gap finding.
+with -strict when a report holds a dropped finding, or a gap
+docs/incompatibilities.md does not list, whose code -accept does not
+name.
 `
 
 // fileJSON is one input in report -json.
@@ -48,7 +50,7 @@ func reportCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "agentimport report:", err)
 		return 1
 	}
-	t := newTotals()
+	t := newTotals(c.accept)
 	var files []fileJSON
 	newRunner(c.slim, &skip).each(ins, func(o outcome) {
 		t.add(o)

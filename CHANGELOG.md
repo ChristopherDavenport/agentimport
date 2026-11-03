@@ -7,6 +7,20 @@ versions may break the API.
 
 ## Unreleased
 
+- **Changed: `-strict` fails only on a dropped finding and on a gap
+  `docs/incompatibilities.md` does not list (breaking for scripts that
+  relied on it failing on every gap).** A listed gap is a known shape
+  of the session format and says nothing of one transcript, so every
+  conversion failed `-strict` on `agentimport/provenance` alone.
+  `-accept code,...` names finding codes `-strict` lets through.
+  `agentimport.DocumentedGap` reads the table, embedded in the module.
+- **Changed: `agentimport/provenance` and `agentimport/usage-detail`
+  are `kept` findings, no longer gaps (breaking for readers of the
+  report's kinds).** Both are the converter's or the source's own
+  detail in a member under its namespace, where RFC 0001's core test
+  puts it, and leave `docs/incompatibilities.md`. Under `-slim`, ATIF's
+  usage detail is reported `dropped`.
+
 - Changed: sessions are written in format 0.17 (agentsession v0.0.34,
   openresponses v0.0.18; were v0.0.28 and v0.0.15). No entry hash
   changes but where an item now keeps a member it does not define: an

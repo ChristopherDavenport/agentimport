@@ -1,5 +1,4 @@
 opencode: 105 records: mapped 93 kept 0 dropped 12 malformed 0
-  gap      agentimport/provenance                           12  the import is recorded in the header's agentimport:source member
   gap      agentimport/reasoning-provider                    4  the reasoning's signature or encrypted content is anthropic's, which encrypted_content does not say; the item entry carries opencode:provider
   dropped  opencode/duplicate-store                          2  OpenCode 2's migration copied the session from the V1 tables, and OpenCode 2 wrote nothing after the copy; the session is the V1 record's, and the copy (3 rows) is left out
   dropped  opencode/system-prompt                           12  OpenCode builds the system prompt and the tool list for each request and does not store them; the settings carry the model alone
@@ -9,6 +8,7 @@ opencode: 105 records: mapped 93 kept 0 dropped 12 malformed 0
   lossy    opencode/revert-staged                            1  the session stages a revert from this row: it and the 2 rows after it are on a branch the session does not resume, as OpenCode deletes them before its next step
   lossy    opencode/session-id                               4  OpenCode 2 carried on a session it migrated from the V1 tables, which converts under the native ID; this one's ID is derived from it, as SubsessionID(native ID, "opencode2")
   lossy    opencode/state-namespaced                         1  the provider state is under its namespace, anthropic, as OpenCode 2's migration copied it from V1, where OpenCode 2 keeps it bare; it is read either way
+  kept     agentimport/provenance                           12  the import is recorded in the header's agentimport:source member
   kept     opencode/fork-usage                               4  the response is a copy, a fork's or a migration's, and its usage, the origin's, is kept in opencode:copied_usage
   kept     opencode/members                                 59  kept in opencode:message
   kept     opencode/session-record                          12  the session record's members the header has no place for are in the header's opencode:session member
