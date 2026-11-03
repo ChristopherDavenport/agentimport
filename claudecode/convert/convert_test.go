@@ -568,3 +568,38 @@ func TestInstructionLayers(t *testing.T) {
 		t.Errorf("no claudecode/instructions-layers: %v", res.Report.Codes())
 	}
 }
+
+// TestPublished: with derivation, each Bash call whose output says what
+// it published is followed by a derived agentimport:published record
+// carrying its call_id; a quiet command yields none. Without it the
+// conversion writes no derived entry.
+func TestPublished(t *testing.T) {
+	for _, derive := range []bool{false, true} {
+		_, res := convertFixture(t, fixtures(t)["published"], Options{Derive: derive})
+		var recs []*agentsession.CustomEntry
+		for _, e := range res.Sessions[0].Entries() {
+			if c, ok := e.(*agentsession.CustomEntry); ok && c.NS == agentimport.PublishedNS {
+				recs = append(recs, c)
+			}
+		}
+		if !derive {
+			if len(recs) != 0 {
+				t.Errorf("without derivation: %d records", len(recs))
+			}
+			continue
+		}
+		if len(recs) != 2 {
+			t.Fatalf("%d published records, want 2", len(recs))
+		}
+		want := []string{`{"refs":[{"kind":"branch","ref":"feat","remote":"github.com:acme/demo.git"}]}`, `{"refs":[{"kind":"pull_request","url":"https://github.com/acme/demo/pull/42"}]}`}
+		for i, r := range recs {
+			if string(r.Data) != want[i] || r.CallID == "" || !strings.Contains(string(r.Unknown[agentimport.DerivedMember]), r.CallID) {
+				t.Errorf("record %d: %s call %q derived %s", i, r.Data, r.CallID, r.Unknown[agentimport.DerivedMember])
+			}
+			parent, _ := res.Sessions[0].Entry(r.Parent)
+			if it, ok := parent.(*agentsession.ItemEntry); !ok || openresponses.CallID(it.Item) != r.CallID {
+				t.Errorf("record %d follows %T, not its call's output", i, parent)
+			}
+		}
+	}
+}

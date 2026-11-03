@@ -33,6 +33,10 @@ type Options struct {
 	// reported. Custom entries, the format's own place for records it
 	// does not define, are kept.
 	Slim bool
+	// Derive writes the entries the module's derivation rules infer
+	// from the converted path, each marked agentimport:derived: a shell
+	// call's published refs (docs/plans/agentimport.md).
+	Derive bool
 	// Index finds the rollouts of the threads a thread spawned, which
 	// are converted with it, each its own session after its parent's.
 	// ConvertFile indexes the tree the rollout is in when it is nil
@@ -275,6 +279,9 @@ type converter struct {
 	// toolNames maps a recorded call id to its tool's name, so only a
 	// shell tool's output is read for an exit code.
 	toolNames map[string]string
+	// toolArgs maps a recorded call id to its arguments, for the
+	// derivation rules that read a shell call's command.
+	toolArgs map[string]string
 
 	// spawns maps a spawn call to the thread it started, as the call's
 	// output or a record beside it names it; tasks to the agent path a

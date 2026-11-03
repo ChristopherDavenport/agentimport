@@ -774,3 +774,24 @@ func TestExitCodeShellOnly(t *testing.T) {
 		t.Errorf("exit codes %v; want call_sh 2 and none for call_rn", got)
 	}
 }
+
+// TestPublished: with derivation, a shell call whose output prints the
+// pull request it opened is followed by a derived agentimport:published
+// record carrying its call_id.
+func TestPublished(t *testing.T) {
+	for _, derive := range []bool{false, true} {
+		res := convertFixture(t, fixtures(t)["published"], Options{Derive: derive})
+		n := 0
+		for _, e := range res.Sessions[0].Entries() {
+			if c, ok := e.(*agentsession.CustomEntry); ok && c.NS == agentimport.PublishedNS {
+				n++
+				if c.CallID != "call_pr" || string(c.Data) != `{"refs":[{"kind":"pull_request","url":"https://github.com/acme/demo/pull/7"}]}` {
+					t.Errorf("record %s, call %q", c.Data, c.CallID)
+				}
+			}
+		}
+		if want := map[bool]int{false: 0, true: 1}[derive]; n != want {
+			t.Errorf("derive %v: %d records, want %d", derive, n, want)
+		}
+	}
+}

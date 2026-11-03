@@ -7,6 +7,15 @@ versions may break the API.
 
 ## Unreleased
 
+- Added: derivation, opt-in (`-derive`, `Options.Derive` for Claude Code
+  and Codex). A derived entry carries `agentimport:derived`
+  (`agentimport.DerivedMember`) naming its rule and the call it read.
+  The first rule writes what a shell call published, the refs a `git
+  push` reports and the pull request `gh pr create` prints, as an
+  `agentimport:published` custom entry after the call's output with the
+  call's `call_id` (`agentimport/published-refs`). Without `-derive`
+  the output is as before.
+
 - Added: the leaf label a converter writes when a session resumes at an
   entry that is not its last, an entry no native line maps to, is
   reported (`agentimport/leaf-label`), so the report says what the

@@ -29,6 +29,10 @@ type Options struct {
 	// rendering, the request log and file-history checkpoints. Each
 	// drop is still reported.
 	Slim bool
+	// Derive writes the entries the module's derivation rules infer
+	// from the converted path, each marked agentimport:derived: a Bash
+	// call's published refs (docs/plans/agentimport.md).
+	Derive bool
 }
 
 // ConvertFile reads the session whose main transcript is path, with its

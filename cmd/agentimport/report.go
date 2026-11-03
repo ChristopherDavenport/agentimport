@@ -52,7 +52,7 @@ func reportCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	t := newTotals(c.accept)
 	var files []fileJSON
-	newRunner(c.slim, &skip).each(ins, func(o outcome) {
+	newRunner(c.slim, &skip).withDerive(c.derive).each(ins, func(o outcome) {
 		t.add(o)
 		f := fileJSON{Path: o.in.path, Source: o.in.source.name, Error: errString(o.err)}
 		if o.res != nil {

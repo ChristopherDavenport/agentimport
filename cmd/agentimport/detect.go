@@ -49,7 +49,7 @@ var sources = []source{
 		name: ccconvert.Source,
 		find: claudecode.FindSessions,
 		convert: func(path string, r *runner) (*agentimport.Result, error) {
-			return ccconvert.ConvertFile(path, ccconvert.Options{Slim: r.slim})
+			return ccconvert.ConvertFile(path, ccconvert.Options{Slim: r.slim, Derive: r.derive})
 		},
 	},
 	{

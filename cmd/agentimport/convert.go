@@ -92,7 +92,7 @@ func convertCmd(args []string, stdout, stderr io.Writer) int {
 	ctx := context.Background()
 	t := newTotals(c.accept)
 	var results []convertJSON
-	newRunner(c.slim, &skip).each(ins, func(o outcome) {
+	newRunner(c.slim, &skip).withDerive(c.derive).each(ins, func(o outcome) {
 		var ws []written
 		var kept []string
 		if o.err == nil {

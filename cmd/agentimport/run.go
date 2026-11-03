@@ -26,6 +26,7 @@ type common struct {
 	strict bool
 	accept map[string]bool
 	slim   bool
+	derive bool
 }
 
 func (c *common) register(fs *flag.FlagSet) {
@@ -45,6 +46,7 @@ func (c *common) register(fs *flag.FlagSet) {
 		return nil
 	})
 	fs.BoolVar(&c.slim, "slim", false, "drop what the model never saw rather than keep it in namespaced members")
+	fs.BoolVar(&c.derive, "derive", false, "write the entries derivation rules infer from the path, marked agentimport:derived (Claude Code, Codex)")
 }
 
 // acceptSet is the set -accept builds from its codes.
@@ -112,6 +114,7 @@ func (r *runner) convertOne(in input) (o outcome) {
 // an ATIF continuation or sub-agent file with the document naming it.
 type runner struct {
 	slim    bool
+	derive  bool
 	skipped *[]skipped
 	indexes map[indexKey]*codexIndex
 	// atifDone records the ATIF files conversions converted,
@@ -131,6 +134,13 @@ type indexKey struct {
 type codexIndex struct {
 	x   *codex.Index
 	err error
+}
+
+// withDerive asks the converters that have derivation rules to apply
+// them.
+func (r *runner) withDerive(derive bool) *runner {
+	r.derive = derive
+	return r
 }
 
 func newRunner(slim bool, skip *[]skipped) *runner {
@@ -170,7 +180,7 @@ func (r *runner) index(path string) (*codex.Index, error) {
 func (r *runner) convertCodex(path string) (*agentimport.Result, error) {
 	x, err := r.index(path)
 	if err != nil {
-		res, cerr := codexconvert.ConvertFile(path, codexconvert.Options{Slim: r.slim, Alone: true})
+		res, cerr := codexconvert.ConvertFile(path, codexconvert.Options{Slim: r.slim, Derive: r.derive, Alone: true})
 		if cerr != nil {
 			return nil, cerr
 		}
@@ -178,7 +188,7 @@ func (r *runner) convertCodex(path string) (*agentimport.Result, error) {
 			"the tree the rollout is in could not be indexed (%v); it is converted without its sub-agents", err)
 		return res, nil
 	}
-	return codexconvert.ConvertFile(path, codexconvert.Options{Slim: r.slim, Index: x})
+	return codexconvert.ConvertFile(path, codexconvert.Options{Slim: r.slim, Derive: r.derive, Index: x})
 }
 
 // planned is an input whose conversion may wait: a Codex sub-agent's

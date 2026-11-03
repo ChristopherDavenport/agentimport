@@ -181,6 +181,19 @@ func (c *converter) item(l *codex.Line) error {
 	if err := c.emit(e, l); err != nil {
 		return err
 	}
+	if fo, ok := item.(*openresponses.FunctionCallOutput); ok && c.opts.Derive && shellTools[c.toolNames[fo.CallID]] {
+		d, err := agentimport.PublishedEntry(fo.CallID, agentimport.ShellCommand(c.toolArgs[fo.CallID]), fo.Output.String())
+		if err != nil {
+			return err
+		}
+		if d != nil {
+			d.Timestamp = e.Timestamp
+			if err := c.emit(d, l); err != nil {
+				return err
+			}
+			c.addf(agentimport.Kept, agentimport.PublishedCode, l, "what the shell call published, as its output says, is a derived %s record carrying its call_id", agentimport.PublishedNS)
+		}
+	}
 	c.countSpawn(l, it)
 	if answerTypes[it.Type] && !output && it.CallID != "" {
 		if err := c.linkSpawn(l, it); err != nil {
@@ -323,6 +336,14 @@ func (c *converter) convertItem(l *codex.Line, raw json.RawMessage, it *codex.It
 			c.toolNames = map[string]string{}
 		}
 		c.toolNames[id] = it.Name
+		if c.toolArgs == nil {
+			c.toolArgs = map[string]string{}
+		}
+		var args string
+		if json.Unmarshal(it.Arguments, &args) != nil {
+			args = string(it.Arguments)
+		}
+		c.toolArgs[id] = args
 	case answerTypes[it.Type] && it.CallID != "":
 		if rec, ok := c.st.calls[it.CallID]; ok {
 			id = rec

@@ -152,7 +152,13 @@ The pass therefore runs inside each converter, as a rule set the
 converter consults when it writes an output (`Options.Derive`), before
 `Verify`, with derivation off writing byte-identical output to today's.
 A rule names the source's shell tool and how its output is shaped, so
-each source opts in rule by rule.
+each source opts in rule by rule. The first rule, published refs
+(`agentimport.PublishedRefs`), reads what a `git push` reports it
+updated and the URL `gh pr create` prints, and writes an
+`agentimport:published` custom entry after the call's output, carrying
+its `call_id` (Claude Code's `Bash`, Codex's shell tools; the command
+takes `-derive`). A revision a commit prints, written as an `env`
+entry's `vcs.revision`, is the next rule.
 
 ### Findings
 

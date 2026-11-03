@@ -70,6 +70,24 @@ func (c *converter) response(r *claudecode.Response, tail string, st *pathState)
 			return "", err
 		}
 		tail = id
+		if call.Use.Name == "Bash" && c.opts.Derive {
+			var in struct {
+				Command string `json:"command"`
+			}
+			_ = json.Unmarshal(call.Use.Input, &in)
+			out, _ := e.Item.(*openresponses.FunctionCallOutput)
+			d, err := agentimport.PublishedEntry(callID, in.Command, out.Output.String())
+			if err != nil {
+				return "", err
+			}
+			if d != nil {
+				d.Timestamp = e.Timestamp
+				if tail, err = c.b.Append(tail, d); err != nil {
+					return "", err
+				}
+				c.addf(agentimport.Kept, agentimport.PublishedCode, call.Result, "what the Bash call published, as its output says, is a derived %s record carrying its call_id", agentimport.PublishedNS)
+			}
+		}
 		if call.Use.Name == "Skill" {
 			var in struct {
 				Skill string `json:"skill"`
