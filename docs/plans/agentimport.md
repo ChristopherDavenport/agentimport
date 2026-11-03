@@ -113,6 +113,44 @@ a test asserts it for every fixture. The default drops only lines that
 carry no information beyond what the output already says (a line whose
 content is fully re-derived elsewhere); every drop has a finding.
 
+### Entries no line maps to
+
+Converters also write entries no native line maps to, of two kinds:
+
+- **Structural** entries are ones the format needs: a session's first
+  `config`, a `leaf` label, pi's `append`, a `fork_of` link a header
+  implies. They say nothing the native log does not; each is reported
+  under a code of its own so the report says what was added. (Not yet
+  done per converter: issue #28's follow-up.)
+- **Derived** entries are inferred from the content of the converted
+  path: a revision a `git commit` printed, a pull request a command
+  opened (#29). Only an importer infers entries from content, so by
+  RFC 0001's core test the mark is a harness detail in this module's
+  namespace, not a format member.
+
+The rule, for any importer:
+
+> An entry no native line maps to is structural, written because the
+> format requires it, or derived, inferred from the content of the
+> converted path. A derived entry carries `agentimport:derived` naming
+> its rule and its inputs (a `call_id` or entry IDs), is reported under
+> that rule's code, is written only by an opt-in pass, and states only
+> what its input states.
+
+A derived record about a call carries the call's `call_id`, so since
+format 0.15 it goes with the call when a redaction leaves the call out,
+and every rewriter keeps the namespaced mark.
+
+Where the pass runs is the open point. A derived entry stands after
+its input, say after a call's output, and an entry's id hashes its
+parent, so appending one after conversion in the middle of a path
+would branch it, and putting it in line would move every id after it.
+The pass therefore runs inside each converter, as a rule set the
+converter consults when it writes an output (`Options.Derive`), before
+`Verify`, with derivation off writing byte-identical output to today's.
+A rule names the source's shell tool and how its output is shaped, so
+each source opts in rule by rule.
+
 ### Findings
 
 Below line level, a finding records each place the output differs from
