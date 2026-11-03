@@ -137,8 +137,8 @@ versions may break the API.
   puts it, and leave `docs/incompatibilities.md`. Under `-slim`, ATIF's
   usage detail is reported `dropped`.
 
-- **Changed: sessions are written in format 0.17 (breaking: some entry
-  IDs move)** (agentsession v0.0.34,
+- **Changed: sessions are written in format 0.18 (breaking: a reader of
+  0.17 refuses them, and some entry IDs move)** (agentsession v0.0.35; first v0.0.34, format 0.17,
   openresponses v0.0.18; were v0.0.28 and v0.0.15). No entry hash
   changes but where an item now keeps a member it does not define: an
   Open Responses item keeps every member as written (openresponses
