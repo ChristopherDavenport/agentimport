@@ -70,7 +70,11 @@ a skill's instructions in a hidden user message after the `Skill`
 call's output, which says only that the skill launched, so its record
 follows that message and names the call; OpenCode 2 sends a skill's
 text in the user message, with no call, so its record follows the
-message and names none.
+message and names none; so does Codex for a `<skill>` part of a user
+message (`<name>` and `<path>` read from it), and OpenHands for each
+of a user message's `activated_skills`, whose knowledge it sends in the
+extended content (by name alone).
 Sources that record skill reads: Claude Code (a `Skill` call and the
-hidden message that carries the instructions) and OpenCode 2 (a user
-row's `skills`).
+hidden message that carries the instructions), OpenCode 2 (a user
+row's `skills`), Codex (a `<skill>` part) and OpenHands
+(`activated_skills`).

@@ -255,6 +255,21 @@ func (c *conv) message(i int) error {
 			return err
 		}
 		ids = append(ids, at)
+		// The skills this message activated, whose knowledge OpenHands
+		// sends in its extended content: a read each, as agentskill
+		// records one, after the message, by name alone.
+		for _, name := range m.ActivatedSkills {
+			if name == "" {
+				continue
+			}
+			rec, err := agentimport.SkillRead{Name: name}.Entry("")
+			if err != nil {
+				return err
+			}
+			if err := add(rec); err != nil {
+				return err
+			}
+		}
 	}
 	c.items[i] = ids
 	if at, err = c.critic(i, at, m.CriticResult, lastOf(ids)); err != nil {

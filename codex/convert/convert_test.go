@@ -2,6 +2,7 @@ package convert
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -793,5 +794,27 @@ func TestPublished(t *testing.T) {
 		if want := map[bool]int{false: 0, true: 1}[derive]; n != want {
 			t.Errorf("derive %v: %d records, want %d", derive, n, want)
 		}
+	}
+}
+
+// TestSkillRead: a <skill> part Codex's skills extension sends in a user
+// message is recorded as agentskill records a read, after the message:
+// the skill's name, its path, and the digest of the text sent.
+func TestSkillRead(t *testing.T) {
+	res := convertFixture(t, fixtures(t)["skill"], Options{})
+	var recs []*agentsession.CustomEntry
+	for _, e := range res.Sessions[0].Entries() {
+		if c, ok := e.(*agentsession.CustomEntry); ok && c.NS == agentimport.SkillReadNS {
+			recs = append(recs, c)
+		}
+	}
+	if len(recs) != 1 {
+		t.Fatalf("%d agentskill:read records, want 1", len(recs))
+	}
+	var want agentimport.SkillRead
+	want.Served("<skill>\n<name>docs-style</name>\n<path>/work/demo/.codex/skills/docs-style/SKILL.md</path>\nWrite short sentences.\n</skill>")
+	var got agentimport.SkillRead
+	if err := json.Unmarshal(recs[0].Data, &got); err != nil || got.Name != "docs-style" || got.Location != "/work/demo/.codex/skills/docs-style/SKILL.md" || got.SHA256 != want.SHA256 {
+		t.Errorf("record %s", recs[0].Data)
 	}
 }

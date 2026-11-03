@@ -94,7 +94,7 @@ rollouts' session meta lines instead (see Sub-agents and forks).
 | `forked_from_id` | a `fork_of` link, the session's first entry |
 | a `spawn_agent` call's output, or the record naming the thread it started | a `peer` link to the thread's session after the output; the thread's rollout converts into that session, after this one (see below) |
 | `response_item` that is model output (assistant message, reasoning, calls, compaction items) | `item` entries tied to a `response` entry written after them |
-| `response_item` that is input (user, developer messages, outputs, harness-written assistant messages) | `item` entries |
+| `response_item` that is input (user, developer messages, outputs, harness-written assistant messages) | `item` entries; after a user message, an `agentskill:read` record per `<skill>` part ([Skill reads](README.md#skill-reads)) |
 | a type openresponses types (`message`, `function_call`, `function_call_output`, `reasoning`, `compaction`) | that item; members it has no place for in `codex:item` |
 | `custom_tool_call` | a `function_call`: `call_id`, `name`, and the free-form input as the arguments `{"input": "<text>"}` (the item's own arguments when it records them); the entry carries `codex:tool_kind: "custom"`, and a `ctc_` item id as `codex:item_id`, since a function call's id is an `fc_` id |
 | `custom_tool_call_output` | a `function_call_output` for that call, `codex:tool_kind: "custom"` |

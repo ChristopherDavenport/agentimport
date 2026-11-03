@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -179,6 +180,9 @@ func (c *converter) item(l *codex.Line) error {
 		c.pending.outputs = append(c.pending.outputs, e)
 	}
 	if err := c.emit(e, l); err != nil {
+		return err
+	}
+	if err := c.skillReads(item, e, l); err != nil {
 		return err
 	}
 	if fo, ok := item.(*openresponses.FunctionCallOutput); ok && c.opts.Derive && shellTools[c.toolNames[fo.CallID]] {
@@ -1214,4 +1218,44 @@ func wrapperExitCode(text string) (int64, bool) {
 		return n, err == nil
 	}
 	return 0, false
+}
+
+var (
+	skillName = regexp.MustCompile(`(?s)^\s*<skill>\s*<name>(.*?)</name>`)
+	skillPath = regexp.MustCompile(`(?s)</name>\s*<path>(.*?)</path>`)
+)
+
+// skillReads writes the agentskill:read record of each skill a user
+// message carried, after it: Codex's skills extension sends a selected
+// skill's instructions as a <skill> part, <name> and <path> first
+// (ext/skills/src/fragments.rs), with no call.
+func (c *converter) skillReads(item openresponses.Item, e *agentsession.ItemEntry, l *codex.Line) error {
+	m, ok := item.(*openresponses.Message)
+	if !ok || m.Role != openresponses.RoleUser {
+		return nil
+	}
+	for _, p := range m.Content {
+		t, ok := p.(*openresponses.InputText)
+		if !ok || !matchesMarked("<skill>", "</skill>", t.Text) {
+			continue
+		}
+		name := skillName.FindStringSubmatch(t.Text)
+		if name == nil {
+			continue
+		}
+		r := agentimport.SkillRead{Name: name[1]}
+		if path := skillPath.FindStringSubmatch(t.Text); path != nil {
+			r.Location = path[1]
+		}
+		r.Served(t.Text)
+		rec, err := r.Entry("")
+		if err != nil {
+			return err
+		}
+		rec.Timestamp = e.Timestamp
+		if err := c.emit(rec, l); err != nil {
+			return err
+		}
+	}
+	return nil
 }

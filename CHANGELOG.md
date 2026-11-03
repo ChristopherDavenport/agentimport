@@ -35,7 +35,8 @@ versions may break the API.
   says them its `location`, `bytes` and `sha256` of the text served,
   and the serving call's `call_id`: Claude Code's `Skill` call and the
   hidden message carrying the instructions, and OpenCode 2's user-row
-  skills. `docs/formats/README.md` documents the shape relied on.
+  skills, Codex's `<skill>` parts and OpenHands' `activated_skills`.
+  `docs/formats/README.md` documents the shape relied on.
 
 - Added: identity members in the report. A finding of code
   `agentimport/identity` (`agentimport.IdentityCode`,

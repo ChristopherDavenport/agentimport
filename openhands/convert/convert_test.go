@@ -242,3 +242,19 @@ func TestLocation(t *testing.T) {
 		t.Errorf("created_at %s, want %s", h.CreatedAt, want)
 	}
 }
+
+// TestSkillRead: a user message's activated_skills, whose knowledge
+// OpenHands sends in the extended content, are each recorded as
+// agentskill records a read, after the message, by name.
+func TestSkillRead(t *testing.T) {
+	res := convertFixture(t, fixtures(t)["critic"], Options{})
+	var names []string
+	for _, e := range res.Sessions[0].Entries() {
+		if c, ok := e.(*agentsession.CustomEntry); ok && c.NS == agentimport.SkillReadNS {
+			names = append(names, string(c.Data))
+		}
+	}
+	if len(names) != 1 || names[0] != `{"name":"style"}` {
+		t.Errorf("records %v, want one for style", names)
+	}
+}
