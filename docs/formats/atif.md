@@ -249,9 +249,17 @@ asks (Projections/ATIF): each entry is put back together from its record
 there, its item from its step (by its position in `item_entry_ids`, or
 the item of a step or observation result, a spilled image read back as
 its data URL) and a response's body from its step; its id is computed
-and compared with the one the document names. (Format 0.18 also
-compares each step's visible fields, by a digest the export will
-carry; this converter does not check them yet.) An entry that
+and compared with the one the document names. As format 0.18 asks, the
+document's media that agentsession's `WriteDocument` moved to files is
+first put back inline (`export.InlineMedia`), and an entry matches only
+when the document's visible fields (everything but its steps, which
+count by their number, and its sub-agents; its `extra`, the entries and
+`redacted_from` among it) hash to the `extra.agentsession.visible` it
+records, its steps are numbered in order, and the step the entry maps
+to hashes to its own: the id covers the raw item, not what a reader
+sees, so an edit of a step's text alone, or of the document's extra,
+matches nothing it touches. A document without the hashes, as an
+exporter before 0.18 wrote, rebuilds no entry to its id. An entry that
 matches, under a parent that matched, is the exported entry, its meaning
 members (`failed`, `trust`, `copied_from`, `from_link`,
 `instructions_part`, unknown members) and its history members
@@ -261,7 +269,7 @@ with it, listed (`atif/entry-not-rebuilt`), its history members
 `atif:<name>` (`atif/history-member`). The header's `redacted` and
 `redacted_from` are restored exactly when every entry matched and the
 document holds the whole path: from a first entry to the leaf its
-`trajectory_id` names, every step naming an entry of the document (a
+`extra.agentsession.leaf` names (its `trajectory_id` when absent), every step naming an entry of the document (a
 step that names none is left out, `atif/step-not-rebuilt`), and the
 root's `redacted` `true`; otherwise they stay in `atif:extra`
 and the report says why (`atif/redaction-not-restored`). Every step is

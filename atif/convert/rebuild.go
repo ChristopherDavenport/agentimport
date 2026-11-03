@@ -12,6 +12,7 @@ import (
 	"github.com/ChristopherDavenport/agentimport"
 	"github.com/ChristopherDavenport/agentimport/atif"
 	"github.com/ChristopherDavenport/agentsession"
+	"github.com/ChristopherDavenport/agentsession/export"
 	"github.com/ChristopherDavenport/openresponses"
 )
 
@@ -49,9 +50,11 @@ func (c *docConv) rebuildBlocked() string {
 type rebuilt struct {
 	id   string
 	line map[string]json.RawMessage
-	// verified: the line hashes to the id the document names.
-	verified bool
-	parent   string
+	// verified: the line hashes to the id the document names, and the
+	// document and its step hash to the visible fields the export
+	// recorded; visible says those hashes did not.
+	verified, visible bool
+	parent            string
 	// step is the step, by index, that carried the entry's body, or -1.
 	step int
 }
@@ -60,6 +63,10 @@ type rebuilt struct {
 // step's content is in them, so each step is mapped.
 func (c *docConv) rebuildEntries(h agentsession.Header, recs map[string]json.RawMessage) (*agentsession.Session, error) {
 	c.report.Line(agentimport.LineMapped)
+	// The document as the export built it: its media back inline from
+	// the files beside it, as format 0.18 asks before the hashes are
+	// checked, and the steps read from that.
+	doc := c.inlined()
 	bodies, steps := c.stepBodies()
 	ents := map[string]*rebuilt{}
 	for id, raw := range recs {
@@ -123,9 +130,31 @@ func (c *docConv) rebuildEntries(h agentsession.Header, recs map[string]json.Raw
 			c.report.Line(agentimport.LineMapped)
 		}
 	}
-	// Format 0.18 also asks that an entry's step show what the entry
-	// projects; the export will carry a digest of each step's visible
-	// fields to compare, and until it does nothing here checks them.
+	// An entry matches only when what a reader sees is what was
+	// exported (0.18): the document's visible fields, its extra and its
+	// step count among them, hash to the value it records and its steps
+	// are numbered in order, or no entry matches; and the step the entry
+	// maps to hashes to its own.
+	docOK := sealed(doc, export.DocumentVisible(doc)) && export.StepsInOrder(doc)
+	if !docOK {
+		for _, r := range ents {
+			if r.verified {
+				r.verified, r.visible = false, true
+			}
+		}
+	}
+	steps2, _ := doc["steps"].([]any)
+	for _, sv := range steps2 {
+		step, _ := sv.(map[string]any)
+		if docOK && sealed(step, export.StepVisible(step)) {
+			continue
+		}
+		for _, id := range stepEntryIDs(step) {
+			if r := ents[id]; r != nil && r.verified {
+				r.verified, r.visible = false, true
+			}
+		}
+	}
 
 	s := agentsession.New(h)
 	newID := map[string]string{}
@@ -133,6 +162,8 @@ func (c *docConv) rebuildEntries(h agentsession.Header, recs map[string]json.Raw
 	for _, r := range order {
 		why := ""
 		switch {
+		case r.visible:
+			why = "the document, or the step it maps to, does not hash to the visible fields the export recorded, as an edit of what a reader sees, or a document without the hashes, leaves it"
 		case !r.verified:
 			why = "its members hash to another id, as an edit after the export, or a document stripped of a body, leaves them"
 		case r.parent != "" && ents[r.parent] == nil:
@@ -540,4 +571,74 @@ func (c *docConv) rebuildChildren() ([]*agentsession.Session, error) {
 		out = append(out, sessions...)
 	}
 	return out, nil
+}
+
+// inlined is the document as JSON, with the media agentsession's
+// WriteDocument moved to files beside it put back inline
+// (export.InlineMedia), and makes the converter read its steps from it.
+// A document that does not re-read is left as it was, and its hashes
+// then fail.
+func (c *docConv) inlined() map[string]any {
+	raw, err := json.Marshal(c.t)
+	var doc map[string]any
+	if err != nil || decodeAny(raw, &doc) != nil {
+		return nil
+	}
+	if c.in.dir == "" {
+		return doc
+	}
+	if err := export.InlineMedia(doc, c.in.dir); err != nil {
+		return doc
+	}
+	data, err := json.Marshal(doc)
+	if err != nil {
+		return doc
+	}
+	if f, err := atif.Parse(data); err == nil && f.Doc != nil {
+		c.t = f.Doc
+	}
+	return doc
+}
+
+// decodeAny decodes JSON keeping numbers as written.
+func decodeAny(data []byte, v any) error {
+	d := json.NewDecoder(bytes.NewReader(data))
+	d.UseNumber()
+	return d.Decode(v)
+}
+
+// sealed reports whether visible, the visible fields of v, hash to the
+// value v's extra.agentsession.visible records.
+func sealed(v, visible map[string]any) bool {
+	extra, _ := v["extra"].(map[string]any)
+	as, _ := extra["agentsession"].(map[string]any)
+	want, _ := as[export.ExtraVisible].(string)
+	got, err := export.VisibleHash(visible)
+	return err == nil && want != "" && got == want
+}
+
+// stepEntryIDs are the ids of the entries a step, as JSON, is made from:
+// its own, its items' and response's, and its observation results'.
+func stepEntryIDs(step map[string]any) []string {
+	obj := func(v any) map[string]any { m, _ := v.(map[string]any); return m }
+	extra := obj(step["extra"])
+	var ids []string
+	add := func(v any) {
+		if id, ok := v.(string); ok && id != "" {
+			ids = append(ids, id)
+		}
+	}
+	add(obj(extra["agentsession"])["entry_id"])
+	items, _ := extra["item_entry_ids"].([]any)
+	for _, id := range items {
+		add(id)
+	}
+	add(obj(obj(extra["openresponses"])["response"])["entry_id"])
+	if o := obj(step["observation"]); o != nil {
+		rs, _ := o["results"].([]any)
+		for _, rv := range rs {
+			add(obj(obj(obj(rv)["extra"])["agentsession"])["entry_id"])
+		}
+	}
+	return ids
 }
