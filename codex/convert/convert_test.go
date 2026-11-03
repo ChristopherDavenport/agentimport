@@ -751,3 +751,26 @@ func TestUnder(t *testing.T) {
 		}
 	}
 }
+
+// TestExitCodeShellOnly: the exit code is read from a shell tool's
+// output alone; another tool's output that happens to open the same way
+// is not read, and neither is failed.
+func TestExitCodeShellOnly(t *testing.T) {
+	res := convertFixture(t, fixtures(t)["exitcode"], Options{})
+	got := map[string]string{}
+	for _, e := range res.Sessions[0].Entries() {
+		it, ok := e.(*agentsession.ItemEntry)
+		if !ok {
+			continue
+		}
+		if fo, ok := it.Item.(*openresponses.FunctionCallOutput); ok {
+			got[fo.CallID] = string(it.Unknown[agentimport.ExitCodeMember])
+			if it.Failed {
+				t.Errorf("%s is failed", fo.CallID)
+			}
+		}
+	}
+	if got["call_sh"] != "2" || got["call_rn"] != "" {
+		t.Errorf("exit codes %v; want call_sh 2 and none for call_rn", got)
+	}
+}

@@ -663,3 +663,26 @@ func TestNestedMembers(t *testing.T) {
 	}
 	t.Fatal("no output for toolu_2")
 }
+
+// TestMissingResultNotFailed: the output classic Cline sends for a call
+// no result answers says nothing of the call's failure, and the log
+// carries no flag, so it is not marked failed.
+func TestMissingResultNotFailed(t *testing.T) {
+	res := convertFixture(t, fixtures(t)["classic-reject"], Options{})
+	n := 0
+	for _, e := range res.Sessions[0].Entries() {
+		it, ok := e.(*agentsession.ItemEntry)
+		if !ok {
+			continue
+		}
+		if _, synth := it.Unknown[Source+":synthesized"]; synth {
+			n++
+			if it.Failed {
+				t.Errorf("the synthesized output %s is failed", it.ID)
+			}
+		}
+	}
+	if n == 0 {
+		t.Fatal("no synthesized output to check")
+	}
+}

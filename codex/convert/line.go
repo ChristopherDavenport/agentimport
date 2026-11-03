@@ -199,7 +199,7 @@ func (c *converter) itemMembers(e *agentsession.ItemEntry, l *codex.Line, item o
 	}
 	if fo, ok := item.(*openresponses.FunctionCallOutput); ok {
 		c.checkTruncation(l, fo.Output.String(), hm)
-		if n, ok := wrapperExitCode(fo.Output.String()); ok {
+		if n, ok := wrapperExitCode(fo.Output.String()); ok && shellTools[c.toolNames[fo.CallID]] {
 			agentimport.SetExitCode(e, n)
 			c.addf(agentimport.Kept, "codex/exit-code", l, "the command's exit code, from the fixed wrapper Codex puts around its output, is %s; Codex records no failure of a call, and none is inferred", agentimport.ExitCodeMember)
 		}
@@ -319,6 +319,10 @@ func (c *converter) convertItem(l *codex.Line, raw json.RawMessage, it *codex.It
 				"call id %q is held by another call of the session, is empty, or has characters providers refuse; it is %q, and the native one is %s:call_id", it.CallID, id, Source)
 		}
 		c.st.addCall(it.CallID, id)
+		if c.toolNames == nil {
+			c.toolNames = map[string]string{}
+		}
+		c.toolNames[id] = it.Name
 	case answerTypes[it.Type] && it.CallID != "":
 		if rec, ok := c.st.calls[it.CallID]; ok {
 			id = rec
@@ -1141,6 +1145,10 @@ func cloneVCS(v *agentsession.VCS) *agentsession.VCS {
 	out.Unknown = maps.Clone(v.Unknown)
 	return &out
 }
+
+// shellTools are the tools whose output Codex wraps in an exit code
+// header: the shell tools and unified exec.
+var shellTools = map[string]bool{"shell": true, "shell_command": true, "local_shell": true, "container.exec": true, "exec_command": true, "write_stdin": true}
 
 // wrapperExitCode reads a command's exit code from the fixed wrapper
 // Codex puts around its output for the model: the shell tools'

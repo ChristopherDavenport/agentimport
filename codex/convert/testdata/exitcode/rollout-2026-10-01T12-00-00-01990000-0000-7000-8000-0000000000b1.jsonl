@@ -1,0 +1,8 @@
+{"timestamp":"2026-10-01T12:00:01.000Z","type":"session_meta","payload":{"id":"01990000-0000-7000-8000-0000000000b1","timestamp":"2026-10-01T12:00:00.000Z","cwd":"/work/demo","originator":"codex_cli_rs","cli_version":"0.160.0","source":"cli","model_provider":"openai","base_instructions":{"text":"You are Codex, a coding agent."}}}
+{"timestamp":"2026-10-01T12:00:02.000Z","type":"turn_context","payload":{"turn_id":"turn-1","cwd":"/work/demo","approval_policy":"on-request","sandbox_policy":{"type":"workspace-write"},"model":"gpt-5-codex","effort":"medium","summary":"auto"}}
+{"timestamp":"2026-10-01T12:00:03.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Build it."}]}}
+{"timestamp":"2026-10-01T12:00:04.000Z","type":"response_item","payload":{"type":"function_call","name":"shell_command","arguments":"{\"command\":\"make\"}","call_id":"call_sh"}}
+{"timestamp":"2026-10-01T12:00:05.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call_sh","output":"Exit code: 2\nWall time: 0.3 seconds\nOutput:\nmake: *** [all] Error 2"}}
+{"timestamp":"2026-10-01T12:00:06.000Z","type":"response_item","payload":{"type":"function_call","name":"read_notes","arguments":"{}","call_id":"call_rn"}}
+{"timestamp":"2026-10-01T12:00:07.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call_rn","output":"Exit code: 9\nWall time: 1 seconds\nOutput:\nthe notes quote a shell log"}}
+{"timestamp":"2026-10-01T12:00:08.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"It fails."}]}}

@@ -398,8 +398,6 @@ func (c *conv) missingResult(k int, p *call, ts time.Time, skip string, setMembe
 	}
 	out := &openresponses.FunctionCallOutput{CallID: p.id, Output: openresponses.FunctionCallOutputData{Text: resultMissingText}}
 	e := itemEntry(out, ts)
-	// Cline gave the call up and sends this in its place.
-	e.Failed = true
 	if err := c.b.Member(e, "synthesized", true); err != nil {
 		return err
 	}

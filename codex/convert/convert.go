@@ -272,6 +272,9 @@ type converter struct {
 	// inside that directory repeats: an env entry is a whole snapshot.
 	metaCWD string
 	metaVCS *agentsession.VCS
+	// toolNames maps a recorded call id to its tool's name, so only a
+	// shell tool's output is read for an exit code.
+	toolNames map[string]string
 
 	// spawns maps a spawn call to the thread it started, as the call's
 	// output or a record beside it names it; tasks to the agent path a
