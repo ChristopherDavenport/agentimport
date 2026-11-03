@@ -7,6 +7,12 @@ versions may break the API.
 
 ## Unreleased
 
+- Fixed: `-slim` drops a Claude Code attachment that rendered nothing
+  into the request (`credential_org`, `deferred_tools_record`), which
+  the model never saw, and reports it `dropped`; it kept each as a
+  custom entry, carrying the account's organization ID into every slim
+  import.
+
 - **Changed: `-strict` fails only on a dropped finding and on a gap
   `docs/incompatibilities.md` does not list (breaking for scripts that
   relied on it failing on every gap).** A listed gap is a known shape

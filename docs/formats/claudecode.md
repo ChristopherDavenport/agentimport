@@ -128,7 +128,7 @@ the parent's response that spawned it.
 | `compact_boundary` and its summary | `compaction` under the logical parent: `summary` the summary message, `first_kept` the first preserved line, `config` the settings in force, `tokens_before` | metadata in `claudecode:compact_metadata` |
 | `ai-title`, `custom-title`, `summary` | `info` with `name` | kind in `claudecode:title_kind` |
 | last `last-prompt` | the leaf: the end of the unit holding `leafUuid` (a response's last output), with a `leaf` label unless it is the file's last entry | |
-| other side records, system lines, attachments with nothing rendered | `custom`, `ns` `claudecode`, `data` the line | |
+| other side records, system lines, attachments with nothing rendered | `custom`, `ns` `claudecode`, `data` the line | under Slim an attachment with nothing rendered is left out (`claudecode/attachment-unrendered`) |
 | every line | its uuid in member `claudecode:uuid` of each entry made from it; members not mapped in `claudecode:line`, a message's in `claudecode:message`, a block's in `claudecode:block` | |
 
 **Arguments.** `content[].input` is the input after the CLI normalised
@@ -203,7 +203,7 @@ the codes marked "kept, or dropped" are dropped instead.
 | `claudecode/alternate-rendering` | lossy | A queued prompt's attachment carries a second rendering, for a new turn; the first, which the requests Claude Code logs hold, is the message, the other is in `claudecode:line`. |
 | `claudecode/attachment` | kept, or dropped | An attachment's payload, beside the message its rendering became, is `claudecode:attachment`. |
 | `claudecode/block-members` | kept, or dropped | Members of a content block or a rendering the item does not carry (a tool_use's `caller`, a text's `citations`) are `claudecode:block`, `claudecode:blocks` or `claudecode:rendered`. |
-| `claudecode/attachment-unrendered` | kept | An attachment that rendered nothing into the request is a custom entry. |
+| `claudecode/attachment-unrendered` | kept, or dropped | An attachment that rendered nothing into the request (`credential_org`, `deferred_tools_record` and the like) is a custom entry; under Slim it is left out, since the model never saw it, and a line naming it as its parent continues from where it stood. |
 | `claudecode/call-id-renamed` | repaired | A tool_use ID another call of the session holds was renamed; the native one is `claudecode:call_id`. |
 | `claudecode/compact-metadata` | kept, or dropped | A compaction's metadata is `claudecode:compact_metadata`. |
 | `claudecode/compaction-kept` | lossy | A compaction preserved no line on the path; `first_kept` is the entry before the compaction, the least the format can keep. |

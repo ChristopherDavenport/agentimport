@@ -370,6 +370,41 @@ func TestLeaf(t *testing.T) {
 	}
 }
 
+// TestSlimUnrendered checks that a slim conversion drops an attachment
+// that rendered nothing into the request, which the model never saw,
+// and reports the drop; without Slim it is a custom entry.
+func TestSlimUnrendered(t *testing.T) {
+	for _, slim := range []bool{false, true} {
+		_, res := convertFixture(t, fixtures(t)["identity"], Options{Slim: slim})
+		var b bytes.Buffer
+		if err := agentsession.Write(&b, res.Sessions[0]); err != nil {
+			t.Fatal(err)
+		}
+		if got := bytes.Contains(b.Bytes(), []byte(`"credential_org"`)); got == slim {
+			t.Errorf("slim %v: output holds the credential_org attachment: %v", slim, got)
+		}
+		want := agentimport.Kept
+		if slim {
+			want = agentimport.Dropped
+		}
+		n := 0
+		for _, f := range res.Report.Findings {
+			if f.Code == "claudecode/attachment-unrendered" {
+				n++
+				if f.Kind != want || f.Line != 2 {
+					t.Errorf("slim %v: %+v; want %s at line 2", slim, f, want)
+				}
+			}
+		}
+		if n != 1 {
+			t.Errorf("slim %v: %d attachment-unrendered findings, want 1", slim, n)
+		}
+		if slim && res.Report.Tally[agentimport.LineDropped] != 1 {
+			t.Errorf("slim: tally %v; want the attachment's line dropped", res.Report.Tally)
+		}
+	}
+}
+
 // TestSlim checks that a slim conversion leaves the sidecars out and
 // still accounts for them.
 func TestSlim(t *testing.T) {

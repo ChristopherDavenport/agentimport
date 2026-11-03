@@ -178,7 +178,7 @@ func (c *converter) contents(l *claudecode.Line, blocks []*claudecode.ContentBlo
 // attachment converts context the CLI injected: what it rendered into
 // the request becomes hidden messages in the rendered role; a prompt
 // snapshot becomes a config delta; one with nothing rendered is kept
-// aside. A queued prompt carries two renderings, for mid-turn and for
+// aside, or left out under Slim, since the model never saw it. A queued prompt carries two renderings, for mid-turn and for
 // a new turn; the requests Claude Code logs hold the first, so it is
 // the one written.
 func (c *converter) attachment(l *claudecode.Line, tail string, st *pathState) (string, error) {
@@ -205,6 +205,14 @@ func (c *converter) attachment(l *claudecode.Line, tail string, st *pathState) (
 		typ := ""
 		if l.Attachment != nil {
 			typ = l.Attachment.Type
+		}
+		if c.opts.Slim {
+			// The model never saw it. A line that names it as its
+			// parent continues from where it stood.
+			if tail != "" {
+				c.bind(l, tail)
+			}
+			return c.drop(l, tail, "claudecode/attachment-unrendered", "an attachment (%s) that rendered nothing into the request is left out", typ)
 		}
 		return c.custom(l, tail, "claudecode/attachment-unrendered", "an attachment (%s) that rendered nothing into the request is a custom entry", typ)
 	}
