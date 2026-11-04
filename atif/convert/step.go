@@ -34,6 +34,9 @@ func (c *docConv) steps() error {
 		}
 		c.checkStepID(i, s)
 		if c.exporter {
+			if err := c.hostSpawns(i, s); err != nil {
+				return err
+			}
 			if n, ok, err := c.exporterStep(i); ok || err != nil {
 				i += n
 				if err != nil {

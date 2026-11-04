@@ -35,6 +35,12 @@ versions may break the API.
   every child's leaf in `parents`; the first child's ID derives from the
   call's, and a later one keeps its own (`atif/subagent-shared-call`).
 
+- Added: a document agentsession's exporter wrote, mapped from its
+  steps, links the children the host started that it carries under a
+  step's `extra.agentsession.subsessions` (format 0.19) by their
+  `spawn_id`, where before each was a session with `parent_session`
+  alone (`atif/host-spawn`, `atif/host-spawn-unresolved`).
+
 - Fix: an ATIF continuation whose predecessor's instruction parts carry
   a keep, or a hash of their own text, keeps them, cleared of both, with
   their sources and trust, since agentsession v0.0.37's

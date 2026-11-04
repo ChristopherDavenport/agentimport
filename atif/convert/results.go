@@ -390,6 +390,131 @@ func (c *docConv) calllessRef(i int, s *atif.Step, ref *atif.Ref) ([]agentsessio
 	return []agentsession.Entry{link}, nil
 }
 
+// hostSpawns writes the links to the children the host started that a
+// step of agentsession's exporter carries under
+// extra.agentsession.subsessions (RFC 0001, Projections/ATIF, 0.19):
+// each link came before the entry the step was built from, so it is
+// written before the step, by the spawn_id the record names. The
+// records are taken out of the step's extra, which is kept as before.
+func (c *docConv) hostSpawns(i int, s *atif.Step) error {
+	ext := object(s.Ext)
+	as := object(ext["agentsession"])
+	raw, ok := as["subsessions"]
+	if !ok {
+		return nil
+	}
+	var recs []json.RawMessage
+	if json.Unmarshal(raw, &recs) != nil {
+		// Not a list: the extra keeps it as written.
+		return nil
+	}
+	for _, rec := range recs {
+		e, err := c.hostSpawn(i, s, rec)
+		if err != nil {
+			return err
+		}
+		if _, err := c.appendEntry(e); err != nil {
+			return err
+		}
+	}
+	delete(as, "subsessions")
+	data, err := json.Marshal(as)
+	if err != nil {
+		return err
+	}
+	ext["agentsession"] = data
+	if s.Ext, err = json.Marshal(ext); err != nil {
+		return err
+	}
+	return nil
+}
+
+// hostSpawn converts one subsessions record: the child its
+// subagent_trajectory_ref names, linked by the record's spawn_id, or by
+// one the conversion chooses when the record's is not one the format
+// takes or another link of the session carries it. A record whose child
+// cannot be converted is a custom entry.
+func (c *docConv) hostSpawn(i int, s *atif.Step, rec json.RawMessage) (agentsession.Entry, error) {
+	keep := func() (agentsession.Entry, error) {
+		raw, err := c.clean(i+1, rec)
+		if err != nil {
+			return nil, err
+		}
+		data, err := json.Marshal(map[string]json.RawMessage{"subsession": raw})
+		if err != nil {
+			return nil, err
+		}
+		c.addf(agentimport.Dropped, "atif/host-spawn-unresolved", i+1,
+			"a child the host started, carried under extra.agentsession.subsessions, names no trajectory this conversion can read; the record is a custom entry")
+		return &agentsession.CustomEntry{NS: Source, Data: data}, nil
+	}
+	fields := object(rec)
+	var ref *atif.Ref
+	if raw, ok := fields["subagent_trajectory_ref"]; ok {
+		if json.Unmarshal(raw, &ref) != nil {
+			ref = nil
+		}
+	}
+	if ref == nil {
+		return keep()
+	}
+	spawnID := str(fields["spawn_id"])
+	chosen := !spawnIDForm(spawnID) || c.spawnIDs[spawnID]
+	if chosen {
+		spawnID = c.spawnID(c.line(i + 1))
+	}
+	child, _, ok, err := c.spawn(i, s, ref, "", spawnID)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return keep()
+	}
+	c.spawnIDs[spawnID] = true
+	link := agentsession.NewSpawnLink(child, spawnID)
+	link.URL, link.Task, link.Context = str(fields["url"]), str(fields["task"]), str(fields["context"])
+	if err := c.refMembers(link, i, ref); err != nil {
+		return nil, err
+	}
+	rest := map[string]json.RawMessage{}
+	for k, v := range fields {
+		switch k {
+		case "spawn_id", "subagent_trajectory_ref", "url", "task", "context":
+		default:
+			rest[k] = v
+		}
+	}
+	if len(rest) > 0 && !c.fam.opts.Slim {
+		if err := c.b.Member(link, "subsession", rest); err != nil {
+			return nil, err
+		}
+	}
+	if chosen {
+		c.addf(agentimport.Lossy, "atif/host-spawn", i+1,
+			"a child the host started, carried under extra.agentsession.subsessions, is session %s, linked by spawn_id %s, which the conversion chose: the record's is missing, not one the format takes, or another link's", child, spawnID)
+	} else {
+		c.addf(agentimport.Lossy, "atif/host-spawn", i+1,
+			"a child the host started, carried under extra.agentsession.subsessions, is session %s, linked by the record's spawn_id %s in a new link entry; the record's entry_id and session are %s:subsession", child, spawnID, Source)
+	}
+	return link, nil
+}
+
+// spawnIDForm reports whether id is a spawn_id in the form RFC 0001
+// takes: a non-empty string of ASCII letters, digits, '_' and '-'.
+func spawnIDForm(id string) bool {
+	if id == "" {
+		return false
+	}
+	for _, r := range id {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_', r == '-':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // spawnID is the spawn_id for a child the host started at the line
 // given, the step's place in the document as findings name it, also in
 // a Claude Code sub-agent's session made from interleaved steps:

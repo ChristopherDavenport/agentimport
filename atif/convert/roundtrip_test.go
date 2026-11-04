@@ -403,3 +403,85 @@ func TestExporterCallRefs(t *testing.T) {
 		t.Errorf("%d subsession links, want 2", n)
 	}
 }
+
+// TestExporterHostSpawn exports a session with a child the host started
+// and imports the document mapped from its steps: the child is linked
+// by the spawn_id the exporter carried under subsessions, not left with
+// parent_session alone.
+func TestExporterHostSpawn(t *testing.T) {
+	at := time.Date(2026, 10, 8, 9, 0, 0, 0, time.UTC)
+	tick := func() time.Time { at = at.Add(time.Second); return at }
+	add := func(s *agentsession.Session, e agentsession.Entry) {
+		t.Helper()
+		e.Base().Timestamp = tick()
+		if _, err := s.Append(e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h := &agentsession.Harness{Name: "rt", Version: "1"}
+	s := agentsession.New(agentsession.Header{ID: "hs-main", CreatedAt: at, Harness: h})
+	add(s, &agentsession.ConfigEntry{Model: "m-1"})
+	add(s, agentsession.NewItemEntry(openresponses.UserText("Hi.")))
+	reply := agentsession.NewItemEntry(openresponses.AssistantText("Hello."))
+	reply.ResponseID = "resp_1"
+	add(s, reply)
+	add(s, &agentsession.ResponseEntry{ResponseID: "resp_1", Model: "m-1", Status: openresponses.ResponseStatusCompleted})
+	childID := agentsession.SpawnedSessionID("hs-main", "memory-1")
+	child := agentsession.New(agentsession.Header{ID: childID, CreatedAt: tick(), ParentSession: "hs-main", SpawnedBy: "memory-1", Harness: h})
+	add(child, &agentsession.ConfigEntry{Model: "m-2"})
+	add(child, agentsession.NewItemEntry(openresponses.UserText("Consolidate.")))
+	add(s, agentsession.NewSpawnLink(childID, "memory-1"))
+	add(s, agentsession.NewItemEntry(openresponses.UserText("Next.")))
+
+	var main export.Trajectory
+	for tr, err := range export.Trajectories(s) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		if tr.Main {
+			main = tr
+		}
+	}
+	doc, err := export.ToATIF(main, export.Options{Subsessions: func(id string) (*agentsession.Session, error) {
+		if id == childID {
+			return child, nil
+		}
+		return nil, nil
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	strip := func(extra map[string]any) {
+		if as, ok := extra[export.ExtraAgentSession].(map[string]any); ok {
+			delete(as, export.ExtraEntries)
+		}
+	}
+	strip(doc.Extra)
+	for _, sub := range doc.SubagentTrajectories {
+		strip(sub.Extra)
+	}
+	path := filepath.Join(t.TempDir(), "agent", "trajectory.json")
+	if err := export.WriteDocument(path, doc); err != nil {
+		t.Fatal(err)
+	}
+	res := convertFixture(t, path, Options{})
+	if len(res.Sessions) != 2 {
+		t.Fatalf("%d sessions, want the main one and the child", len(res.Sessions))
+	}
+	parent := res.Sessions[0].ID()
+	if h := res.Sessions[1].Header(); h.ParentSession != parent || h.SpawnedBy != "memory-1" || h.ID != agentsession.SpawnedSessionID(parent, "memory-1") {
+		t.Errorf("child: id %s parent %q spawned_by %q", h.ID, h.ParentSession, h.SpawnedBy)
+	}
+	var links []*agentsession.LinkEntry
+	for _, e := range reread(t, res.Sessions[0]).Entries() {
+		if l, ok := e.(*agentsession.LinkEntry); ok {
+			links = append(links, l)
+		}
+	}
+	if len(links) != 1 || links[0].SpawnID != "memory-1" || links[0].CallID != "" || links[0].Session != res.Sessions[1].ID() {
+		t.Errorf("links %+v", links)
+	}
+	if slices.Contains(res.Report.Codes(), "atif/subagent-unlinked") {
+		t.Error("the child the host started is reported unlinked")
+	}
+}

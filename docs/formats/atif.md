@@ -201,6 +201,7 @@ result is read as a callee the call waited for:
 | --- | --- |
 | a reference on a call's result, naming an embedded trajectory of the same document by `trajectory_id` or a file by `trajectory_path` | its own session with `parent_session` and `spawned_by`; the parent gets a `subsession` link before the output, whose `parents` names the child's leaf; a result naming several gets a link to each, all with the call's `call_id`, and the output names every leaf; the first child's ID is derived from the call's, a later one keeps its own |
 | a reference on a result with no call (Terminus 2's summarisation helpers, RFC 0001's compaction example) | a child the host started (RFC 0001 0.19, `link`): the parent gets a `subsession` link carrying `spawn_id` and no `call_id`, `step-<n>` for the step's line, `step-<n>-2` and on for a later one of the same step; the child's `spawned_by` is that `spawn_id`, its `parent_session` the parent and its ID derived over `["spawn",<parent>,<spawn_id>]` |
+| a record under a step's `extra.agentsession.subsessions`, which agentsession's exporter writes for a child the host started | a child the host started: a `subsession` link with the record's `spawn_id`, before the step, and the child's `spawned_by` that `spawn_id` |
 | an embedded trajectory no reference names (Qwen Code's orphans, Muse Code's children) | its own session with `parent_session`, no link |
 | a reference that cannot be resolved (a URL, a missing file, `session_id` alone as before v1.7, a file outside the conversion's directory) | kept in `atif:refs` on the output, or a custom entry |
 | Claude Code steps with `extra.is_sidechain`, by `extra.agent_id` | its own session, out of the main one: a subsession of the call whose result's `extra.tool_result_metadata.tool_use_result.agentId` names the agent, linked as above, when its `status` is `completed` or absent; else a `peer` of that call, the link after its output and no `spawned_by`; with no such call, `parent_session` alone |
@@ -361,6 +362,7 @@ every converter can report are in [README.md](README.md).
 | `atif/context-pruning` | gap | A pruning or truncate boundary names nothing it removed; it is a custom entry and the context keeps everything. |
 | `atif/deterministic-dispatch` | gap | A step with `llm_call_count` 0: calls no model made are function calls marked `atif:llm_call_count`, with no response. |
 | `atif/continuation-missing` | dropped | The continuation cannot be read; its name is `atif:continued_trajectory_ref`. |
+| `atif/host-spawn-unresolved` | dropped | A `subsessions` record names no trajectory the conversion can read; it is a custom entry holding the record. |
 | `atif/empty-step` | dropped | A step with nothing to convert. |
 | `atif/media-unread` | dropped | An image file outside the conversion's directory, or named while no directory is given, is not read; it is a text placeholder. |
 | `atif/metrics` | kept, or dropped | What the metrics hold beside the three counts is `atif:metrics`. |
@@ -381,6 +383,7 @@ every converter can report are in [README.md](README.md).
 | `atif/context-injection` | lossy | An append boundary's results are user messages. |
 | `atif/copied-context` | lossy | Copied history is converted as the session's own entries, its usage in `atif:usage`. |
 | `atif/exporter-config` | lossy | The exporter writes no compaction checkpoint; the compaction's config is the settings where it is rebuilt. |
+| `atif/host-spawn` | lossy | A child the host started, which agentsession's exporter carries under a step's `extra.agentsession.subsessions` (format 0.19), is converted from its `subagent_trajectory_ref` and linked by the record's `spawn_id` before the step, in a new link entry; the record's `entry_id` and `session` are `atif:subsession`. A `spawn_id` that is missing, not in the format's form, or another link's is replaced by one the conversion chooses, as for `atif/callless-subagent`. A record at the root's extra, written when no step follows the link, stays in `atif:extra`. |
 | `atif/folded-history` | lossy | The exporter's kept window, written after its compaction, is put back before it. |
 | `atif/llm-call-count` | lossy | `llm_call_count` above 1 is the response's `attempts`, which counts retries of one call. |
 | `atif/media-missing` | lossy | An image names no file, a URL no request can name, or a file that cannot be read; it is a text placeholder. |
