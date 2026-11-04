@@ -25,7 +25,10 @@ versions may break the API.
   `atif/callless-subagent` is now `lossy`, no longer a gap, and leaves
   `docs/incompatibilities.md`. The step's line is its place in the
   document, as findings name it, also for a Claude Code sub-agent's
-  session made from interleaved steps.
+  session made from interleaved steps. The entry that takes the children's
+  work in, the compaction a replace boundary becomes (Terminus 2's
+  summarisers) or the user message of the result's content, names each
+  child's leaf in `parents`, as RFC 0001 asks of a host-started child.
 
 - Fix: every sub-agent an ATIF call's result names is a subsession of
   that call. The second and later were linked as sub-agents no call

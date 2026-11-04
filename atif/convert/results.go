@@ -309,12 +309,14 @@ func (c *docConv) resultCustom(i int, r *atif.Result, callID string) (agentsessi
 // message, which is what Harbor's own export sends the model.
 func (c *docConv) calllessResult(i int, s *atif.Step, r *atif.Result) ([]agentsession.Entry, error) {
 	line := i + 1
-	entries, err := c.calllessRefs(i, s, r)
+	entries, leaves, err := c.calllessRefs(i, s, r)
 	if err != nil {
 		return nil, err
 	}
 	if hasContent(r.Content) {
 		e := agentsession.NewItemEntry(openresponses.UserMessage(c.inputParts(i, r.Content)...))
+		// The content is what the children it references sent back.
+		e.Parents = leaves
 		if err := c.resultMembers(e, i, r); err != nil {
 			return nil, err
 		}
@@ -339,20 +341,26 @@ func (c *docConv) calllessResult(i int, s *atif.Step, r *atif.Result) ([]agentse
 	return entries, nil
 }
 
-// calllessRefs links the sub-agents a result references with no call.
-func (c *docConv) calllessRefs(i int, s *atif.Step, r *atif.Result) ([]agentsession.Entry, error) {
+// calllessRefs links the sub-agents a result references with no call,
+// and returns the links and the children's leaves, which the entry that
+// takes their work in names in parents (RFC 0001, link).
+func (c *docConv) calllessRefs(i int, s *atif.Step, r *atif.Result) ([]agentsession.Entry, []agentsession.EntryRef, error) {
 	var out []agentsession.Entry
+	var leaves []agentsession.EntryRef
 	for _, ref := range r.Refs.List {
-		ents, err := c.calllessRef(i, s, ref)
+		ents, leaf, err := c.calllessRef(i, s, ref)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		out = append(out, ents...)
+		if leaf.Entry != "" {
+			leaves = append(leaves, leaf)
+		}
 	}
 	if r.Refs.Object && len(r.Refs.List) > 0 {
 		c.addf(agentimport.Repaired, "atif/ref-object", i+1, "subagent_trajectory_ref is one object, as RFC 0001 v1.0 wrote it, not a list; it is read as a list of one")
 	}
-	return out, nil
+	return out, leaves, nil
 }
 
 // calllessRef converts the sub-agent a reference with no call names,
@@ -360,34 +368,39 @@ func (c *docConv) calllessRefs(i int, s *atif.Step, r *atif.Result) ([]agentsess
 // link), whose subsession link carries a spawn_id the conversion
 // chooses, since the document records none. A reference spawn could
 // not convert is a custom entry.
-func (c *docConv) calllessRef(i int, s *atif.Step, ref *atif.Ref) ([]agentsession.Entry, error) {
+func (c *docConv) calllessRef(i int, s *atif.Step, ref *atif.Ref) ([]agentsession.Entry, agentsession.EntryRef, error) {
+	var none agentsession.EntryRef
 	spawnID := c.spawnID(c.line(i + 1))
-	child, _, ok, err := c.spawn(i, s, ref, "", spawnID)
+	child, leaf, ok, err := c.spawn(i, s, ref, "", spawnID)
 	if err != nil {
-		return nil, err
+		return nil, none, err
 	}
 	if !ok {
 		raw, err := json.Marshal(ref)
 		if err != nil {
-			return nil, err
+			return nil, none, err
 		}
 		if raw, err = c.clean(i+1, raw); err != nil {
-			return nil, err
+			return nil, none, err
 		}
 		data, err := json.Marshal(map[string]json.RawMessage{"subagent_trajectory_ref": raw})
 		if err != nil {
-			return nil, err
+			return nil, none, err
 		}
-		return []agentsession.Entry{&agentsession.CustomEntry{NS: Source, Data: data}}, nil
+		return []agentsession.Entry{&agentsession.CustomEntry{NS: Source, Data: data}}, none, nil
 	}
 	c.spawnIDs[spawnID] = true
 	link := agentsession.NewSpawnLink(child, spawnID)
 	if err := c.refMembers(link, i, ref); err != nil {
-		return nil, err
+		return nil, none, err
 	}
 	c.addf(agentimport.Lossy, "atif/callless-subagent", i+1,
 		"a sub-agent no tool call spawned (a harness's helper, such as a summariser) is a child the host started, session %s, linked by spawn_id %s, which the conversion chose: the document names none", child, spawnID)
-	return []agentsession.Entry{link}, nil
+	var at agentsession.EntryRef
+	if leaf != "" {
+		at = agentsession.EntryRef{Session: child, Entry: leaf}
+	}
+	return []agentsession.Entry{link}, at, nil
 }
 
 // hostSpawns writes the links to the children the host started that a

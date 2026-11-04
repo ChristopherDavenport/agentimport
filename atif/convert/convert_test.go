@@ -389,6 +389,23 @@ func TestSubagents(t *testing.T) {
 	if strings.Join(spawned, " ") != "step-3 step-3-2 step-3-3" {
 		t.Errorf("spawn_ids %v", spawned)
 	}
+	// The compaction built from the helpers' work names each helper's
+	// leaf in parents (RFC 0001, link: a host-started child's work).
+	var fold *agentsession.CompactionEntry
+	for _, e := range reread(t, res.Sessions[0]).Entries() {
+		if c, ok := e.(*agentsession.CompactionEntry); ok {
+			fold = c
+		}
+	}
+	var helpers []agentsession.EntryRef
+	for _, c := range res.Sessions[1:] {
+		helpers = append(helpers, agentsession.EntryRef{Session: c.ID(), Entry: c.Leaf()})
+	}
+	byRef := func(a, b agentsession.EntryRef) int { return strings.Compare(a.Session, b.Session) }
+	slices.SortFunc(helpers, byRef)
+	if fold == nil || !slices.Equal(slices.SortedFunc(slices.Values(fold.Parents), byRef), helpers) {
+		t.Errorf("compaction parents = %v, want %v", fold, helpers)
+	}
 
 	// A call whose result names two sub-agents spawned both: each is a
 	// subsession of the call, linked by its call_id before the output,
