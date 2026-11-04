@@ -42,6 +42,14 @@ func TestSeedConfigParts(t *testing.T) {
 			{ID: "product", Text: "Be careful.", Source: "harness"},
 			{Keep: 1},
 		}, nil},
+		{"a part with no ID", []agentsession.InstructionPart{
+			{ID: "product", Text: "Be careful."},
+			{Text: "Remember the tests."},
+		}, nil},
+		{"a repeated ID", []agentsession.InstructionPart{
+			{ID: "product", Text: "Be careful."},
+			{ID: "product", Text: "Remember the tests."},
+		}, nil},
 		{"parts that do not join to the instructions", []agentsession.InstructionPart{
 			{ID: "product", Text: "Be careful."},
 		}, nil},

@@ -43,7 +43,10 @@ versions may break the API.
   another text, a part with no ID or a repeated one, parts that do not
   join to the instructions) no longer fail the conversion: the first
   config carries the instructions string, reported as
-  `atif/continuation-parts`.
+  `atif/continuation-parts`. Since agentsession v0.0.37 copies a part's
+  trust, which it dropped before, a continuation whose predecessor's
+  parts carry trust writes it in its first config, so that entry's ID,
+  and every ID after it, moves even where nothing is cleared.
 
 ## v0.0.1 - 2026-11-03
 
