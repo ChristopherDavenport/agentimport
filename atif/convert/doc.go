@@ -663,7 +663,15 @@ func (c *docConv) seedConfig() error {
 	if err != nil {
 		return err
 	}
-	cfg, err := agentsession.ConfigFromRequestParts(req, seed.InstructionsParts...)
+	parts, whole := seedParts(seed.InstructionsParts, req.Instructions)
+	var cfg *agentsession.ConfigEntry
+	if whole {
+		cfg, err = agentsession.ConfigFromRequestParts(req, parts...)
+	} else {
+		cfg, err = agentsession.ConfigFromRequest(req)
+		c.addf(agentimport.Lossy, "atif/continuation-parts", 0,
+			"the instruction parts in force where the session it continues ended cannot be written whole (a part the path could not rebuild, a hash of another text, a part with no ID or a repeated one, or parts that do not join to the instructions); the continuation's first config carries the instructions as one string, without the parts' sources and trust")
+	}
 	if err != nil {
 		return err
 	}
@@ -676,6 +684,42 @@ func (c *docConv) seedConfig() error {
 	c.addf(agentimport.Lossy, "atif/continuation-settings", 0,
 		"the continuation's first config carries the settings in force where the session it continues ended; no step of this document maps to it")
 	return nil
+}
+
+// seedParts is the instruction parts in force a continuation's first
+// config carries, and whether they can be written whole: every part
+// carries its text under an ID of its own and they join to the
+// instructions sent. A keep, which means nothing on a part carrying
+// its text, and a hash of that text, which says nothing more, are
+// cleared, so the part keeps its source and trust (agentsession's
+// ConfigFromRequestParts refuses both, as agentturn's recorder clears
+// them). A part the path could not rebuild, or one whose hash is
+// another text's, describes no composition that can be written, and the
+// config falls back to the instructions string. No parts is whole.
+func seedParts(in []agentsession.InstructionPart, instructions string) ([]agentsession.InstructionPart, bool) {
+	if len(in) == 0 {
+		return nil, true
+	}
+	seen := make(map[string]bool, len(in))
+	parts := slices.Clone(in)
+	for i := range parts {
+		p := &parts[i]
+		if p.Unresolved() || p.ID == "" || seen[p.ID] {
+			return nil, false
+		}
+		seen[p.ID] = true
+		p.Keep = 0
+		if p.Hash != "" {
+			if p.Hash != agentsession.HashText(p.Text) {
+				return nil, false
+			}
+			p.Hash = ""
+		}
+	}
+	if agentsession.JoinInstructions(parts) != instructions {
+		return nil, false
+	}
+	return parts, true
 }
 
 // leadingSystem returns a step's text when it is a system step that can

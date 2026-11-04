@@ -25,6 +25,16 @@ versions may break the API.
   `atif/callless-subagent` is now `lossy`, no longer a gap, and leaves
   `docs/incompatibilities.md`.
 
+- Fix: an ATIF continuation whose predecessor's instruction parts carry
+  a keep, or a hash of their own text, keeps them, cleared of both, with
+  their sources and trust, since agentsession v0.0.37's
+  `ConfigFromRequestParts` refuses a part in a delta's form. Parts that
+  cannot be written whole (one the path could not rebuild, a hash of
+  another text, a part with no ID or a repeated one, parts that do not
+  join to the instructions) no longer fail the conversion: the first
+  config carries the instructions string, reported as
+  `atif/continuation-parts`.
+
 ## v0.0.1 - 2026-11-03
 
 - Added: derivation, opt-in (`-derive`, `Options.Derive` for every
