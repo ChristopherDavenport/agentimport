@@ -371,17 +371,75 @@ func TestSubagents(t *testing.T) {
 		t.Errorf("output = %+v, link %s", out, link.ID)
 	}
 
-	// Terminus 2's summarisation helpers: no call, a link with none.
+	// Terminus 2's summarisation helpers: no call, so children the host
+	// started, each linked by a spawn_id of its own that its header's
+	// spawned_by names, and its ID derived from it (RFC 0001 0.19).
 	res = convertFixture(t, fx["file-refs"], Options{})
-	check(t, res, []want{{-1, ""}, {0, ""}, {0, ""}, {0, ""}})
-	n := 0
+	check(t, res, []want{{-1, ""}, {0, "step-3"}, {0, "step-3-2"}, {0, "step-3-3"}})
+	parent := res.Sessions[0].ID()
+	var spawned []string
 	for _, e := range reread(t, res.Sessions[0]).Entries() {
-		if l, ok := e.(*agentsession.LinkEntry); ok && l.Rel == agentsession.RelSubsession && l.CallID == "" {
-			n++
+		if l, ok := e.(*agentsession.LinkEntry); ok && l.Rel == agentsession.RelSubsession {
+			if l.CallID != "" || l.SpawnID == "" || l.Session != agentsession.SpawnedSessionID(parent, l.SpawnID) {
+				t.Errorf("host-started link = %+v", l)
+			}
+			spawned = append(spawned, l.SpawnID)
 		}
 	}
-	if n != 3 {
-		t.Errorf("%d call-less links, want 3", n)
+	if strings.Join(spawned, " ") != "step-3 step-3-2 step-3-3" {
+		t.Errorf("spawn_ids %v", spawned)
+	}
+	// The compaction built from the helpers' work names each helper's
+	// leaf in parents (RFC 0001, link: a host-started child's work).
+	var fold *agentsession.CompactionEntry
+	for _, e := range reread(t, res.Sessions[0]).Entries() {
+		if c, ok := e.(*agentsession.CompactionEntry); ok {
+			fold = c
+		}
+	}
+	var helpers []agentsession.EntryRef
+	for _, c := range res.Sessions[1:] {
+		helpers = append(helpers, agentsession.EntryRef{Session: c.ID(), Entry: c.Leaf()})
+	}
+	byRef := func(a, b agentsession.EntryRef) int { return strings.Compare(a.Session, b.Session) }
+	slices.SortFunc(helpers, byRef)
+	if fold == nil || !slices.Equal(slices.SortedFunc(slices.Values(fold.Parents), byRef), helpers) {
+		t.Errorf("compaction parents = %v, want %v", fold, helpers)
+	}
+
+	// A call whose result names two sub-agents spawned both: each is a
+	// subsession of the call, linked by its call_id before the output,
+	// which names both children's leaves. The first's ID derives from
+	// the call; the second keeps its own.
+	res = convertFixture(t, fx["call-refs"], Options{})
+	check(t, res, []want{{-1, ""}, {0, "fan_1"}, {0, "fan_1"}})
+	if res.Sessions[1].ID() != agentsession.SubsessionID(res.Sessions[0].ID(), "fan_1") || res.Sessions[2].ID() != "worker-b" {
+		t.Errorf("children %s %s", res.Sessions[1].ID(), res.Sessions[2].ID())
+	}
+	var linked []string
+	var parents []agentsession.EntryRef
+	for _, e := range reread(t, res.Sessions[0]).Entries() {
+		switch e := e.(type) {
+		case *agentsession.LinkEntry:
+			if e.Rel != agentsession.RelSubsession || e.CallID != "fan_1" || e.SpawnID != "" {
+				t.Errorf("link = %+v", e)
+			}
+			linked = append(linked, e.Session)
+		case *agentsession.ItemEntry:
+			if _, ok := e.Item.(*openresponses.FunctionCallOutput); ok {
+				parents = e.Parents
+			}
+		}
+	}
+	if len(linked) != 2 || linked[0] != res.Sessions[1].ID() || linked[1] != res.Sessions[2].ID() {
+		t.Errorf("links to %v", linked)
+	}
+	wantParents := []agentsession.EntryRef{{Session: res.Sessions[1].ID(), Entry: res.Sessions[1].Leaf()}, {Session: res.Sessions[2].ID(), Entry: res.Sessions[2].Leaf()}}
+	if !slices.Equal(parents, wantParents) {
+		t.Errorf("output parents %v, want %v", parents, wantParents)
+	}
+	if slices.Contains(res.Report.Codes(), "atif/callless-subagent") {
+		t.Error("a call's second sub-agent is reported as one no call spawned")
 	}
 }
 

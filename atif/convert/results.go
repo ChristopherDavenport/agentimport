@@ -176,34 +176,34 @@ func (c *docConv) output(i int, s *atif.Step, r *atif.Result, cl *call) ([]agent
 			after = append(after, link)
 		}
 	}
+	// Every sub-agent the call's result names is the call's: each is a
+	// subsession linked by its call_id before the output, which names
+	// each child's leaf (RFC 0001, link). The first child's ID derives
+	// from the call's; spawn gives a later one its own.
 	for _, ref := range r.Refs.List {
-		if !linked {
-			child, leaf, ok, err := c.spawn(i, s, ref, cl.id)
-			if err != nil {
-				return nil, err
-			}
-			if ok {
-				linked = true
-				link := agentsession.NewSubsessionLink(child, cl.id)
-				if err := c.refMembers(link, i, ref); err != nil {
-					return nil, err
-				}
-				entries = append(entries, link)
-				if leaf != "" {
-					e.Parents = []agentsession.EntryRef{{Session: child, Entry: leaf}}
-				}
-				continue
-			}
+		child, leaf, ok, err := c.spawn(i, s, ref, cl.id, "")
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
 			if err := c.keepRef(e, i, ref); err != nil {
 				return nil, err
 			}
 			continue
 		}
-		ents, err := c.calllessRef(i, s, ref)
-		if err != nil {
+		if linked {
+			c.addf(agentimport.Lossy, "atif/subagent-shared-call", line,
+				"call %s's result names more than one sub-agent; session %s is another subsession of the call, linked by its call_id, and its ID is not derived from the call's, which the first child holds", cl.id, child)
+		}
+		linked = true
+		link := agentsession.NewSubsessionLink(child, cl.id)
+		if err := c.refMembers(link, i, ref); err != nil {
 			return nil, err
 		}
-		entries = append(entries, ents...)
+		entries = append(entries, link)
+		if leaf != "" {
+			e.Parents = append(e.Parents, agentsession.EntryRef{Session: child, Entry: leaf})
+		}
 	}
 	if err := c.resultMembers(e, i, r); err != nil {
 		return nil, err
@@ -309,12 +309,14 @@ func (c *docConv) resultCustom(i int, r *atif.Result, callID string) (agentsessi
 // message, which is what Harbor's own export sends the model.
 func (c *docConv) calllessResult(i int, s *atif.Step, r *atif.Result) ([]agentsession.Entry, error) {
 	line := i + 1
-	entries, err := c.calllessRefs(i, s, r)
+	entries, leaves, err := c.calllessRefs(i, s, r)
 	if err != nil {
 		return nil, err
 	}
 	if hasContent(r.Content) {
 		e := agentsession.NewItemEntry(openresponses.UserMessage(c.inputParts(i, r.Content)...))
+		// The content is what the children it references sent back.
+		e.Parents = leaves
 		if err := c.resultMembers(e, i, r); err != nil {
 			return nil, err
 		}
@@ -339,52 +341,205 @@ func (c *docConv) calllessResult(i int, s *atif.Step, r *atif.Result) ([]agentse
 	return entries, nil
 }
 
-// calllessRefs links the sub-agents a result references with no call.
-func (c *docConv) calllessRefs(i int, s *atif.Step, r *atif.Result) ([]agentsession.Entry, error) {
+// calllessRefs links the sub-agents a result references with no call,
+// and returns the links and the children's leaves, which the entry that
+// takes their work in names in parents (RFC 0001, link).
+func (c *docConv) calllessRefs(i int, s *atif.Step, r *atif.Result) ([]agentsession.Entry, []agentsession.EntryRef, error) {
 	var out []agentsession.Entry
+	var leaves []agentsession.EntryRef
 	for _, ref := range r.Refs.List {
-		ents, err := c.calllessRef(i, s, ref)
+		ents, leaf, err := c.calllessRef(i, s, ref)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		out = append(out, ents...)
+		if leaf.Entry != "" {
+			leaves = append(leaves, leaf)
+		}
 	}
 	if r.Refs.Object && len(r.Refs.List) > 0 {
 		c.addf(agentimport.Repaired, "atif/ref-object", i+1, "subagent_trajectory_ref is one object, as RFC 0001 v1.0 wrote it, not a list; it is read as a list of one")
 	}
-	return out, nil
+	return out, leaves, nil
 }
 
 // calllessRef converts the sub-agent a reference with no call names,
-// and returns the link to it: a subsession link with no call_id, which
-// RFC 0001 does not define. A reference spawn could not convert is a
-// custom entry.
-func (c *docConv) calllessRef(i int, s *atif.Step, ref *atif.Ref) ([]agentsession.Entry, error) {
-	child, _, ok, err := c.spawn(i, s, ref, "")
+// and returns the link to it: a child the host started (RFC 0001 0.19,
+// link), whose subsession link carries a spawn_id the conversion
+// chooses, since the document records none. A reference spawn could
+// not convert is a custom entry.
+func (c *docConv) calllessRef(i int, s *atif.Step, ref *atif.Ref) ([]agentsession.Entry, agentsession.EntryRef, error) {
+	var none agentsession.EntryRef
+	spawnID := c.spawnID(c.line(i + 1))
+	child, leaf, ok, err := c.spawn(i, s, ref, "", spawnID)
 	if err != nil {
-		return nil, err
+		return nil, none, err
 	}
 	if !ok {
 		raw, err := json.Marshal(ref)
 		if err != nil {
-			return nil, err
+			return nil, none, err
 		}
 		if raw, err = c.clean(i+1, raw); err != nil {
-			return nil, err
+			return nil, none, err
 		}
 		data, err := json.Marshal(map[string]json.RawMessage{"subagent_trajectory_ref": raw})
 		if err != nil {
+			return nil, none, err
+		}
+		return []agentsession.Entry{&agentsession.CustomEntry{NS: Source, Data: data}}, none, nil
+	}
+	c.spawnIDs[spawnID] = true
+	link := agentsession.NewSpawnLink(child, spawnID)
+	if err := c.refMembers(link, i, ref); err != nil {
+		return nil, none, err
+	}
+	c.addf(agentimport.Lossy, "atif/callless-subagent", i+1,
+		"a sub-agent no tool call spawned (a harness's helper, such as a summariser) is a child the host started, session %s, linked by spawn_id %s, which the conversion chose: the document names none", child, spawnID)
+	var at agentsession.EntryRef
+	if leaf != "" {
+		at = agentsession.EntryRef{Session: child, Entry: leaf}
+	}
+	return []agentsession.Entry{link}, at, nil
+}
+
+// hostSpawns writes the links to the children the host started that a
+// step of agentsession's exporter carries under
+// extra.agentsession.subsessions (RFC 0001, Projections/ATIF, 0.19):
+// each link came before the entry the step was built from, so it is
+// written before the step, by the spawn_id the record names. The
+// records are taken out of the step's extra, which is kept as before.
+func (c *docConv) hostSpawns(i int, s *atif.Step) error {
+	ext := object(s.Ext)
+	as := object(ext["agentsession"])
+	raw, ok := as["subsessions"]
+	if !ok {
+		return nil
+	}
+	var recs []json.RawMessage
+	if json.Unmarshal(raw, &recs) != nil {
+		// Not a list: the extra keeps it as written.
+		return nil
+	}
+	for _, rec := range recs {
+		e, err := c.hostSpawn(i, s, rec)
+		if err != nil {
+			return err
+		}
+		if _, err := c.appendEntry(e); err != nil {
+			return err
+		}
+	}
+	delete(as, "subsessions")
+	data, err := json.Marshal(as)
+	if err != nil {
+		return err
+	}
+	ext["agentsession"] = data
+	if s.Ext, err = json.Marshal(ext); err != nil {
+		return err
+	}
+	return nil
+}
+
+// hostSpawn converts one subsessions record: the child its
+// subagent_trajectory_ref names, linked by the record's spawn_id, or by
+// one the conversion chooses when the record's is not one the format
+// takes or another link of the session carries it. A record whose child
+// cannot be converted is a custom entry.
+func (c *docConv) hostSpawn(i int, s *atif.Step, rec json.RawMessage) (agentsession.Entry, error) {
+	keep := func() (agentsession.Entry, error) {
+		raw, err := c.clean(i+1, rec)
+		if err != nil {
 			return nil, err
 		}
-		return []agentsession.Entry{&agentsession.CustomEntry{NS: Source, Data: data}}, nil
+		data, err := json.Marshal(map[string]json.RawMessage{"subsession": raw})
+		if err != nil {
+			return nil, err
+		}
+		c.addf(agentimport.Dropped, "atif/host-spawn-unresolved", i+1,
+			"a child the host started, carried under extra.agentsession.subsessions, names no trajectory this conversion can read; the record is a custom entry")
+		return &agentsession.CustomEntry{NS: Source, Data: data}, nil
 	}
-	link := agentsession.NewLinkEntry(agentsession.RelSubsession, child)
+	fields := object(rec)
+	var ref *atif.Ref
+	if raw, ok := fields["subagent_trajectory_ref"]; ok {
+		if json.Unmarshal(raw, &ref) != nil {
+			ref = nil
+		}
+	}
+	if ref == nil {
+		return keep()
+	}
+	spawnID := str(fields["spawn_id"])
+	chosen := !spawnIDForm(spawnID) || c.spawnIDs[spawnID]
+	if chosen {
+		spawnID = c.spawnID(c.line(i + 1))
+	}
+	child, _, ok, err := c.spawn(i, s, ref, "", spawnID)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return keep()
+	}
+	c.spawnIDs[spawnID] = true
+	link := agentsession.NewSpawnLink(child, spawnID)
+	link.URL, link.Task, link.Context = str(fields["url"]), str(fields["task"]), str(fields["context"])
 	if err := c.refMembers(link, i, ref); err != nil {
 		return nil, err
 	}
-	c.addf(agentimport.Gap, "atif/callless-subagent", i+1,
-		"a sub-agent no tool call spawned (a harness's helper, such as a summariser) is session %s with parent_session and no spawned_by, linked by a subsession link with no call_id, which RFC 0001 does not define", child)
-	return []agentsession.Entry{link}, nil
+	rest := map[string]json.RawMessage{}
+	for k, v := range fields {
+		switch k {
+		case "spawn_id", "subagent_trajectory_ref", "url", "task", "context":
+		default:
+			rest[k] = v
+		}
+	}
+	if len(rest) > 0 && !c.fam.opts.Slim {
+		if err := c.b.Member(link, "subsession", rest); err != nil {
+			return nil, err
+		}
+	}
+	if chosen {
+		c.addf(agentimport.Lossy, "atif/host-spawn", i+1,
+			"a child the host started, carried under extra.agentsession.subsessions, is session %s, linked by spawn_id %s, which the conversion chose: the record's is missing, not one the format takes, or another link's", child, spawnID)
+	} else {
+		c.addf(agentimport.Lossy, "atif/host-spawn", i+1,
+			"a child the host started, carried under extra.agentsession.subsessions, is session %s, linked by the record's spawn_id %s in a new link entry; the record's entry_id and session are %s:subsession", child, spawnID, Source)
+	}
+	return link, nil
+}
+
+// spawnIDForm reports whether id is a spawn_id in the form RFC 0001
+// takes: a non-empty string of ASCII letters, digits, '_' and '-'.
+func spawnIDForm(id string) bool {
+	if id == "" {
+		return false
+	}
+	for _, r := range id {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_', r == '-':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// spawnID is the spawn_id for a child the host started at the line
+// given, the step's place in the document as findings name it, also in
+// a Claude Code sub-agent's session made from interleaved steps:
+// step-<line>, and -2, -3 and so on after it for a second and
+// later child of the same step, so no two links of the session carry
+// one, as RFC 0001 requires.
+func (c *docConv) spawnID(line int) string {
+	id := fmt.Sprintf("step-%d", line)
+	for n := 2; c.spawnIDs[id]; n++ {
+		id = fmt.Sprintf("step-%d-%d", line, n)
+	}
+	return id
 }
 
 // refMembers keeps what a reference holds beside the link made from it.
@@ -422,9 +577,10 @@ func (c *docConv) keepRef(e agentsession.Entry, i int, ref *atif.Ref) error {
 
 // spawn resolves a reference to an embedded trajectory or a file and
 // converts it into a session of its own, after this one: a subsession
-// of callID, or, with none, a sub-agent no call spawned. It returns the
-// child's session ID and leaf, or ok false with the reason reported.
-func (c *docConv) spawn(i int, s *atif.Step, ref *atif.Ref, callID string) (child, leaf string, ok bool, err error) {
+// of callID, or, with none, a child the host started, linked by
+// spawnID. It returns the child's session ID and leaf, or ok false
+// with the reason reported.
+func (c *docConv) spawn(i int, s *atif.Step, ref *atif.Ref, callID, spawnID string) (child, leaf string, ok bool, err error) {
 	line := i + 1
 	if ref == nil || ref.Err != nil {
 		c.addf(agentimport.Dropped, "atif/ref-unresolved", line, "a sub-agent reference that is not an object resolves nothing")
@@ -477,10 +633,18 @@ func (c *docConv) spawn(i int, s *atif.Step, ref *atif.Ref, callID string) (chil
 	if t.created.IsZero() {
 		t.created = c.last
 	}
-	if callID != "" {
+	switch {
+	case callID != "" && !c.fam.ids[agentsession.SubsessionID(c.tgt.id, callID)]:
 		t.id = agentsession.SubsessionID(c.tgt.id, callID)
 		c.fam.ids[t.id] = true
-	} else {
+	case callID != "":
+		// Another child of the call holds the ID derived from it; this
+		// one keeps its own, as a child no call names does.
+		t.id, t.derived = c.fam.claim(in.t.SessionID, c.tgt.id, key)
+	case spawnID != "":
+		t.id, t.spawnedBy = agentsession.SpawnedSessionID(c.tgt.id, spawnID), spawnID
+		c.fam.ids[t.id] = true
+	default:
 		t.id, t.derived = c.fam.claim(in.t.SessionID, c.tgt.id, key)
 	}
 	sessions, leaf, cerr := c.fam.child(in, t, c.report, c.in.name)

@@ -126,7 +126,21 @@ converters.
   teammate, a spawned thread) is a `peer`: the link *after* the call's
   output, since that output is an acknowledgement and the RFC reads an
   output following a link as the callee's answer; the child keeps
-  `parent_session` and no `spawned_by`.
+  `parent_session` and no `spawned_by`. Every callee a call ran is
+  linked by its `call_id`, one link each, and the output's `parents`
+  names every leaf; only one child can hold the ID derived from the
+  call, so the others keep their own.
+- **Children the host started.** A child the harness started and the
+  log references, no call asking for it (ATIF's Terminus summarisers),
+  is a `subsession` linked by `spawn_id` (format 0.19), never a link
+  with neither `call_id` nor `spawn_id`, which agentsession refuses
+  (`ErrSpawnLink`). Take the `spawn_id` from the log when it records
+  one; otherwise derive it from the child's native position, so a
+  re-import gives the same one, unique in the session, and report it
+  `lossy` as invented. The child's `spawned_by` is the `spawn_id` and
+  its ID `SpawnedSessionID(parent, spawn_id)`; the entry that takes its
+  work in names its leaf in `parents` where the log says which. A child
+  nothing references keeps `parent_session` alone, with no link.
 - **Copied history.** A session that starts from a copy of another's
   history (pi's fork, a Claude Code fork agent, a Codex forked thread)
   names the other in `parent_session`; the copy is converted as the

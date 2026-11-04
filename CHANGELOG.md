@@ -5,6 +5,58 @@ All user-visible changes to this library. The format follows
 uses [Semantic Versioning](https://semver.org/); before v1.0.0 minor
 versions may break the API.
 
+## Unreleased
+
+- Dependencies: agentsession v0.0.35 to v0.0.37, format 0.18 to 0.20;
+  every converted session's header names `agentsession/0.20`, and the
+  goldens are regenerated. openresponses stays at v0.0.18.
+
+- **Fix: ATIF sub-agents no call spawned are children the host started
+  (format 0.19) (breaking: their session IDs, the links to them, and
+  every entry ID after a link, move).** A reference on a result with no
+  call, such as Terminus 2's summarisation helpers, was linked by a
+  `subsession` link with neither `call_id` nor `spawn_id`, which
+  agentsession v0.0.36 refuses, so such a document failed to convert.
+  The link now carries a `spawn_id` the conversion chooses, `step-<n>`
+  for the step's line and `step-<n>-2` on for a later one of the same
+  step; the child's `spawned_by` is that `spawn_id`, and its ID is
+  derived from the parent's and it, as a call's child's is from the
+  `call_id`, the native `session_id` kept in `atif:session_id`.
+  `atif/callless-subagent` is now `lossy`, no longer a gap, and leaves
+  `docs/incompatibilities.md`. The step's line is its place in the
+  document, as findings name it, also for a Claude Code sub-agent's
+  session made from interleaved steps. The entry that takes the children's
+  work in, the compaction a replace boundary becomes (Terminus 2's
+  summarisers) or the user message of the result's content, names each
+  child's leaf in `parents`, as RFC 0001 asks of a host-started child.
+
+- Fix: every sub-agent an ATIF call's result names is a subsession of
+  that call. The second and later were linked as sub-agents no call
+  spawned (now host-started children), and a document agentsession's
+  exporter wrote gave every child of one call the same session ID. Each
+  is now linked by the call's `call_id` before the output, which names
+  every child's leaf in `parents`; the first child's ID derives from the
+  call's, and a later one keeps its own (`atif/subagent-shared-call`).
+
+- Added: a document agentsession's exporter wrote, mapped from its
+  steps, links the children the host started that it carries under a
+  step's `extra.agentsession.subsessions` (format 0.19) by their
+  `spawn_id`, where before each was a session with `parent_session`
+  alone (`atif/host-spawn`, `atif/host-spawn-unresolved`).
+
+- Fix: an ATIF continuation whose predecessor's instruction parts carry
+  a keep, or a hash of their own text, keeps them, cleared of both, with
+  their sources and trust, since agentsession v0.0.37's
+  `ConfigFromRequestParts` refuses a part in a delta's form. Parts that
+  cannot be written whole (one the path could not rebuild, a hash of
+  another text, a part with no ID or a repeated one, parts that do not
+  join to the instructions) no longer fail the conversion: the first
+  config carries the instructions string, reported as
+  `atif/continuation-parts`. Since agentsession v0.0.37 copies a part's
+  trust, which it dropped before, a continuation whose predecessor's
+  parts carry trust writes it in its first config, so that entry's ID,
+  and every ID after it, moves even where nothing is cleared.
+
 ## v0.0.1 - 2026-11-03
 
 - Added: derivation, opt-in (`-derive`, `Options.Derive` for every

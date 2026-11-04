@@ -1,6 +1,7 @@
 package convert
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -176,4 +177,50 @@ func TestNesting(t *testing.T) {
 			t.Errorf("codes %v, %d units", fam.report.Codes(), fam.report.Lines())
 		}
 	})
+}
+
+// TestSidechainSpawnID checks a host-started child a Claude Code
+// sub-agent's step references is linked by a spawn_id naming the step's
+// line in the document, as findings name it, not its place among the
+// sub-agent's own steps.
+func TestSidechainSpawnID(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("testdata", "claude-code", "trajectory.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+	// Step 5, the second of sub-agent a1's steps, references a helper
+	// with no call.
+	step := doc["steps"].([]any)[4].(map[string]any)
+	step["observation"] = map[string]any{"results": []any{map[string]any{
+		"content":                 "compacted",
+		"subagent_trajectory_ref": []any{map[string]any{"trajectory_path": "helper.json"}},
+	}}}
+	dir := t.TempDir()
+	helper := `{"schema_version":"ATIF-v1.7","session_id":"helper-1","agent":{"name":"helper","version":"1"},"steps":[{"step_id":1,"timestamp":"2026-09-30T01:00:05Z","source":"user","message":"Summarise."},{"step_id":2,"timestamp":"2026-09-30T01:00:06Z","source":"agent","message":"Done."}]}`
+	if err := os.WriteFile(filepath.Join(dir, "helper.json"), []byte(helper), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if raw, err = json.Marshal(doc); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "trajectory.json")
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	res := convertFixture(t, path, Options{})
+	var spawned []string
+	for _, s := range res.Sessions {
+		for _, e := range s.Entries() {
+			if l, ok := e.(*agentsession.LinkEntry); ok && l.SpawnID != "" {
+				spawned = append(spawned, l.SpawnID)
+			}
+		}
+	}
+	if !slices.Equal(spawned, []string{"step-5"}) {
+		t.Errorf("spawn_ids %v, want [step-5]", spawned)
+	}
 }

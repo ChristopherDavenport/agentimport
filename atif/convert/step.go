@@ -34,6 +34,9 @@ func (c *docConv) steps() error {
 		}
 		c.checkStepID(i, s)
 		if c.exporter {
+			if err := c.hostSpawns(i, s); err != nil {
+				return err
+			}
 			if n, ok, err := c.exporterStep(i); ok || err != nil {
 				i += n
 				if err != nil {
@@ -374,6 +377,7 @@ func (c *docConv) replace(i int, s *atif.Step) (int, error) {
 	rest := c.stepRest(i, s)
 	var parts openresponses.Contents
 	var links []agentsession.Entry
+	var leaves []agentsession.EntryRef
 	if o := s.Observation; o != nil && o.Err == nil {
 		for _, r := range o.Results {
 			if r == nil || r.Err != nil {
@@ -383,11 +387,12 @@ func (c *docConv) replace(i int, s *atif.Step) (int, error) {
 			if hasContent(r.Content) {
 				parts = append(parts, c.inputParts(i, r.Content)...)
 			}
-			more, err := c.calllessRefs(i, s, r)
+			more, at, err := c.calllessRefs(i, s, r)
 			if err != nil {
 				return 0, err
 			}
 			links = append(links, more...)
+			leaves = append(leaves, at...)
 		}
 	}
 	taken := 0
@@ -457,6 +462,8 @@ func (c *docConv) replace(i int, s *atif.Step) (int, error) {
 		settings = ctx.Settings
 	}
 	e := &agentsession.CompactionEntry{FirstKept: firstKept, Summary: openresponses.UserMessage(parts...), Pinned: pinned, Config: settings}
+	// The fold is the helpers' work: it names each one's leaf.
+	e.Parents = leaves
 	if hasContent(s.Message) {
 		if rest == nil {
 			rest = map[string]json.RawMessage{}
