@@ -178,7 +178,7 @@ func (c *docConv) output(i int, s *atif.Step, r *atif.Result, cl *call) ([]agent
 	}
 	for _, ref := range r.Refs.List {
 		if !linked {
-			child, leaf, ok, err := c.spawn(i, s, ref, cl.id)
+			child, leaf, ok, err := c.spawn(i, s, ref, cl.id, "")
 			if err != nil {
 				return nil, err
 			}
@@ -356,11 +356,13 @@ func (c *docConv) calllessRefs(i int, s *atif.Step, r *atif.Result) ([]agentsess
 }
 
 // calllessRef converts the sub-agent a reference with no call names,
-// and returns the link to it: a subsession link with no call_id, which
-// RFC 0001 does not define. A reference spawn could not convert is a
-// custom entry.
+// and returns the link to it: a child the host started (RFC 0001 0.19,
+// link), whose subsession link carries a spawn_id the conversion
+// chooses, since the document records none. A reference spawn could
+// not convert is a custom entry.
 func (c *docConv) calllessRef(i int, s *atif.Step, ref *atif.Ref) ([]agentsession.Entry, error) {
-	child, _, ok, err := c.spawn(i, s, ref, "")
+	spawnID := c.spawnID(i + 1)
+	child, _, ok, err := c.spawn(i, s, ref, "", spawnID)
 	if err != nil {
 		return nil, err
 	}
@@ -378,13 +380,26 @@ func (c *docConv) calllessRef(i int, s *atif.Step, ref *atif.Ref) ([]agentsessio
 		}
 		return []agentsession.Entry{&agentsession.CustomEntry{NS: Source, Data: data}}, nil
 	}
-	link := agentsession.NewLinkEntry(agentsession.RelSubsession, child)
+	c.spawnIDs[spawnID] = true
+	link := agentsession.NewSpawnLink(child, spawnID)
 	if err := c.refMembers(link, i, ref); err != nil {
 		return nil, err
 	}
-	c.addf(agentimport.Gap, "atif/callless-subagent", i+1,
-		"a sub-agent no tool call spawned (a harness's helper, such as a summariser) is session %s with parent_session and no spawned_by, linked by a subsession link with no call_id, which RFC 0001 does not define", child)
+	c.addf(agentimport.Lossy, "atif/callless-subagent", i+1,
+		"a sub-agent no tool call spawned (a harness's helper, such as a summariser) is a child the host started, session %s, linked by spawn_id %s, which the conversion chose: the document names none", child, spawnID)
 	return []agentsession.Entry{link}, nil
+}
+
+// spawnID is the spawn_id for a child the host started at the line
+// given: step-<line>, and -2, -3 and so on after it for a second and
+// later child of the same step, so no two links of the session carry
+// one, as RFC 0001 requires.
+func (c *docConv) spawnID(line int) string {
+	id := fmt.Sprintf("step-%d", line)
+	for n := 2; c.spawnIDs[id]; n++ {
+		id = fmt.Sprintf("step-%d-%d", line, n)
+	}
+	return id
 }
 
 // refMembers keeps what a reference holds beside the link made from it.
@@ -422,9 +437,10 @@ func (c *docConv) keepRef(e agentsession.Entry, i int, ref *atif.Ref) error {
 
 // spawn resolves a reference to an embedded trajectory or a file and
 // converts it into a session of its own, after this one: a subsession
-// of callID, or, with none, a sub-agent no call spawned. It returns the
-// child's session ID and leaf, or ok false with the reason reported.
-func (c *docConv) spawn(i int, s *atif.Step, ref *atif.Ref, callID string) (child, leaf string, ok bool, err error) {
+// of callID, or, with none, a child the host started, linked by
+// spawnID. It returns the child's session ID and leaf, or ok false
+// with the reason reported.
+func (c *docConv) spawn(i int, s *atif.Step, ref *atif.Ref, callID, spawnID string) (child, leaf string, ok bool, err error) {
 	line := i + 1
 	if ref == nil || ref.Err != nil {
 		c.addf(agentimport.Dropped, "atif/ref-unresolved", line, "a sub-agent reference that is not an object resolves nothing")
@@ -477,10 +493,14 @@ func (c *docConv) spawn(i int, s *atif.Step, ref *atif.Ref, callID string) (chil
 	if t.created.IsZero() {
 		t.created = c.last
 	}
-	if callID != "" {
+	switch {
+	case callID != "":
 		t.id = agentsession.SubsessionID(c.tgt.id, callID)
 		c.fam.ids[t.id] = true
-	} else {
+	case spawnID != "":
+		t.id, t.spawnedBy = agentsession.SpawnedSessionID(c.tgt.id, spawnID), spawnID
+		c.fam.ids[t.id] = true
+	default:
 		t.id, t.derived = c.fam.claim(in.t.SessionID, c.tgt.id, key)
 	}
 	sessions, leaf, cerr := c.fam.child(in, t, c.report, c.in.name)

@@ -200,7 +200,7 @@ result is read as a callee the call waited for:
 | Native | Session |
 | --- | --- |
 | a reference on a call's result, naming an embedded trajectory of the same document by `trajectory_id` or a file by `trajectory_path` | its own session with `parent_session` and `spawned_by`; the parent gets a `subsession` link before the output, whose `parents` names the child's leaf |
-| a reference on a result with no call (Terminus 2's summarisation helpers, RFC 0001's compaction example) | its own session with `parent_session` and no `spawned_by`; the parent gets a `subsession` link with no `call_id` |
+| a reference on a result with no call (Terminus 2's summarisation helpers, RFC 0001's compaction example) | a child the host started (RFC 0001 0.19, `link`): the parent gets a `subsession` link carrying `spawn_id` and no `call_id`, `step-<n>` for the step's line, `step-<n>-2` and on for a later one of the same step; the child's `spawned_by` is that `spawn_id`, its `parent_session` the parent and its ID derived over `["spawn",<parent>,<spawn_id>]` |
 | an embedded trajectory no reference names (Qwen Code's orphans, Muse Code's children) | its own session with `parent_session`, no link |
 | a reference that cannot be resolved (a URL, a missing file, `session_id` alone as before v1.7, a file outside the conversion's directory) | kept in `atif:refs` on the output, or a custom entry |
 | Claude Code steps with `extra.is_sidechain`, by `extra.agent_id` | its own session, out of the main one: a subsession of the call whose result's `extra.tool_result_metadata.tool_use_result.agentId` names the agent, linked as above, when its `status` is `completed` or absent; else a `peer` of that call, the link after its output and no `spawned_by`; with no such call, `parent_session` alone |
@@ -356,7 +356,6 @@ every converter can report are in [README.md](README.md).
 | `atif/step-not-rebuilt` | dropped | A step of a document carrying its entries names no entry the document carries, as a step appended after the export does not; it is not of the exported path, what it holds is left out, and the document does not hold the whole path. |
 | `atif/history-member` | kept, or dropped | A history member (`legacy_id`, `normalised`, `redacted`) of an entry that did not rebuild to its id is `atif:<name>`, since it is not true of a new entry; left out under Slim. |
 | `atif/redaction-not-restored` | lossy | A document of a redacted session whose entries do not all rebuild to their ids, or that does not hold the whole path (one built after a compaction), keeps the header's `redacted` and `redacted_from` in `atif:extra`; the session is not the redacted session. |
-| `atif/callless-subagent` | gap | A sub-agent no call spawned is linked by a `subsession` link with no `call_id`, which RFC 0001 does not define. |
 | `atif/compaction-unrecorded` | gap | A replace boundary records no summary, in its results or a user step after it; it is a custom entry and the context keeps what came before. |
 | `atif/context-pruning` | gap | A pruning or truncate boundary names nothing it removed; it is a custom entry and the context keeps everything. |
 | `atif/deterministic-dispatch` | gap | A step with `llm_call_count` 0: calls no model made are function calls marked `atif:llm_call_count`, with no response. |
@@ -374,6 +373,7 @@ every converter can report are in [README.md](README.md).
 | `atif/unreached` | dropped | The converter did not reach a step; a bug if it occurs. |
 | `atif/branch-summary` | lossy | An exporter's branch summary names an entry of the exported session as `from`. |
 | `atif/call-without-result` | lossy | A tool call no result answers is left without an output. |
+| `atif/callless-subagent` | lossy | A sub-agent no call spawned is a child the host started, linked by a `spawn_id` the conversion chose (`step-<n>`), since the document names none. |
 | `atif/compaction-summary-next` | lossy | A replace boundary's results hold no content; the user step after it, which carries no results, is the summary, as Vibe writes it. |
 | `atif/terminus-handoff` | lossy | Terminus 2's summarisation: the compaction's summary is its first message and its pinned items the questions helper's prompt and questions; without the helper's file they are missing. |
 | `atif/context-injection` | lossy | An append boundary's results are user messages. |

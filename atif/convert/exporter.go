@@ -486,7 +486,7 @@ func (c *docConv) exporterResults(i int, s *atif.Step, local map[string][]*call)
 				cl.answered = true
 				fo.CallID = cl.id
 				for _, ref := range r.Refs.List {
-					child, leaf, ok, err := c.spawn(i, s, ref, cl.id)
+					child, leaf, ok, err := c.spawn(i, s, ref, cl.id, "")
 					if err != nil {
 						return nil, nil, err
 					}

@@ -371,17 +371,23 @@ func TestSubagents(t *testing.T) {
 		t.Errorf("output = %+v, link %s", out, link.ID)
 	}
 
-	// Terminus 2's summarisation helpers: no call, a link with none.
+	// Terminus 2's summarisation helpers: no call, so children the host
+	// started, each linked by a spawn_id of its own that its header's
+	// spawned_by names, and its ID derived from it (RFC 0001 0.19).
 	res = convertFixture(t, fx["file-refs"], Options{})
-	check(t, res, []want{{-1, ""}, {0, ""}, {0, ""}, {0, ""}})
-	n := 0
+	check(t, res, []want{{-1, ""}, {0, "step-3"}, {0, "step-3-2"}, {0, "step-3-3"}})
+	parent := res.Sessions[0].ID()
+	var spawned []string
 	for _, e := range reread(t, res.Sessions[0]).Entries() {
-		if l, ok := e.(*agentsession.LinkEntry); ok && l.Rel == agentsession.RelSubsession && l.CallID == "" {
-			n++
+		if l, ok := e.(*agentsession.LinkEntry); ok && l.Rel == agentsession.RelSubsession {
+			if l.CallID != "" || l.SpawnID == "" || l.Session != agentsession.SpawnedSessionID(parent, l.SpawnID) {
+				t.Errorf("host-started link = %+v", l)
+			}
+			spawned = append(spawned, l.SpawnID)
 		}
 	}
-	if n != 3 {
-		t.Errorf("%d call-less links, want 3", n)
+	if strings.Join(spawned, " ") != "step-3 step-3-2 step-3-3" {
+		t.Errorf("spawn_ids %v", spawned)
 	}
 }
 

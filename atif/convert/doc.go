@@ -63,10 +63,11 @@ type target struct {
 func (fam *family) one(in docInput, tgt target, report *agentimport.Report) ([]*agentsession.Session, string, error) {
 	c := &docConv{
 		fam: fam, in: in, t: in.t, tgt: tgt, report: report,
-		disp:    map[int]agentimport.Disposition{},
-		byTID:   map[string]*atif.Trajectory{},
-		counts:  map[string]int{},
-		firstAt: map[string]int{},
+		disp:     map[int]agentimport.Disposition{},
+		byTID:    map[string]*atif.Trajectory{},
+		counts:   map[string]int{},
+		firstAt:  map[string]int{},
+		spawnIDs: map[string]bool{},
 	}
 	c.splitSidechains()
 	h, err := c.header()
@@ -165,6 +166,8 @@ type docConv struct {
 	sidechainOrder []*sidechain
 	moved          map[int]bool
 	spawnedBy      map[string]spawnRecord
+	// spawnIDs are the spawn_ids this session's links carry.
+	spawnIDs map[string]bool
 }
 
 // call is one tool call of the document.

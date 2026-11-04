@@ -5,6 +5,26 @@ All user-visible changes to this library. The format follows
 uses [Semantic Versioning](https://semver.org/); before v1.0.0 minor
 versions may break the API.
 
+## Unreleased
+
+- Dependencies: agentsession v0.0.35 to v0.0.37, format 0.18 to 0.20;
+  every converted session's header names `agentsession/0.20`, and the
+  goldens are regenerated. openresponses stays at v0.0.18.
+
+- **Fix: ATIF sub-agents no call spawned are children the host started
+  (format 0.19) (breaking: their session IDs, the links to them, and
+  every entry ID after a link, move).** A reference on a result with no
+  call, such as Terminus 2's summarisation helpers, was linked by a
+  `subsession` link with neither `call_id` nor `spawn_id`, which
+  agentsession v0.0.36 refuses, so such a document failed to convert.
+  The link now carries a `spawn_id` the conversion chooses, `step-<n>`
+  for the step's line and `step-<n>-2` on for a later one of the same
+  step; the child's `spawned_by` is that `spawn_id`, and its ID is
+  derived from the parent's and it, as a call's child's is from the
+  `call_id`, the native `session_id` kept in `atif:session_id`.
+  `atif/callless-subagent` is now `lossy`, no longer a gap, and leaves
+  `docs/incompatibilities.md`.
+
 ## v0.0.1 - 2026-11-03
 
 - Added: derivation, opt-in (`-derive`, `Options.Derive` for every
