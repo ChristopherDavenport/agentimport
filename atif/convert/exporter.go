@@ -485,6 +485,7 @@ func (c *docConv) exporterResults(i int, s *atif.Step, local map[string][]*call)
 			if cl := c.findCall(fo.CallID, i, local); cl != nil {
 				cl.answered = true
 				fo.CallID = cl.id
+				linked := false
 				for _, ref := range r.Refs.List {
 					child, leaf, ok, err := c.spawn(i, s, ref, cl.id, "")
 					if err != nil {
@@ -496,6 +497,11 @@ func (c *docConv) exporterResults(i int, s *atif.Step, local map[string][]*call)
 						}
 						continue
 					}
+					if linked {
+						c.addf(agentimport.Lossy, "atif/subagent-shared-call", i+1,
+							"call %s's result names more than one sub-agent; session %s is another subsession of the call, linked by its call_id, and its ID is not derived from the call's, which the first child holds", cl.id, child)
+					}
+					linked = true
 					link := agentsession.NewSubsessionLink(child, cl.id)
 					if err := c.refMembers(link, i, ref); err != nil {
 						return nil, nil, err

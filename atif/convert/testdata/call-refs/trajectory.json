@@ -1,0 +1,37 @@
+{
+  "schema_version": "ATIF-v1.7",
+  "session_id": "fan-run",
+  "trajectory_id": "main",
+  "agent": {"name": "toy-fan", "version": "1.0", "model_name": "m-large"},
+  "steps": [
+    {"step_id": 1, "timestamp": "2026-10-07T09:00:00Z", "source": "user", "message": "Review both packages."},
+    {"step_id": 2, "timestamp": "2026-10-07T09:00:02Z", "source": "agent", "message": "Fanning out.",
+     "tool_calls": [{"tool_call_id": "fan_1", "function_name": "parallel_tasks", "arguments": {"prompts": ["Review a.", "Review b."]}}],
+     "observation": {"results": [{"source_call_id": "fan_1", "content": "a: fine; b: one bug",
+       "subagent_trajectory_ref": [{"trajectory_id": "sub-a"}, {"trajectory_id": "sub-b", "session_id": "worker-b"}]}]},
+     "metrics": {"prompt_tokens": 40, "completion_tokens": 12}},
+    {"step_id": 3, "timestamp": "2026-10-07T09:00:09Z", "source": "agent", "message": "b has one bug.",
+     "metrics": {"prompt_tokens": 60, "completion_tokens": 5}}
+  ],
+  "subagent_trajectories": [
+    {
+      "schema_version": "ATIF-v1.7",
+      "trajectory_id": "sub-a",
+      "agent": {"name": "toy-fan", "version": "1.0", "model_name": "m-small"},
+      "steps": [
+        {"step_id": 1, "timestamp": "2026-10-07T09:00:03Z", "source": "user", "message": "Review a."},
+        {"step_id": 2, "timestamp": "2026-10-07T09:00:05Z", "source": "agent", "message": "a: fine"}
+      ]
+    },
+    {
+      "schema_version": "ATIF-v1.7",
+      "session_id": "worker-b",
+      "trajectory_id": "sub-b",
+      "agent": {"name": "toy-fan", "version": "1.0", "model_name": "m-small"},
+      "steps": [
+        {"step_id": 1, "timestamp": "2026-10-07T09:00:03Z", "source": "user", "message": "Review b."},
+        {"step_id": 2, "timestamp": "2026-10-07T09:00:06Z", "source": "agent", "message": "b: one bug"}
+      ]
+    }
+  ]
+}

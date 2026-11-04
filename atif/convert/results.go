@@ -176,34 +176,34 @@ func (c *docConv) output(i int, s *atif.Step, r *atif.Result, cl *call) ([]agent
 			after = append(after, link)
 		}
 	}
+	// Every sub-agent the call's result names is the call's: each is a
+	// subsession linked by its call_id before the output, which names
+	// each child's leaf (RFC 0001, link). The first child's ID derives
+	// from the call's; spawn gives a later one its own.
 	for _, ref := range r.Refs.List {
-		if !linked {
-			child, leaf, ok, err := c.spawn(i, s, ref, cl.id, "")
-			if err != nil {
-				return nil, err
-			}
-			if ok {
-				linked = true
-				link := agentsession.NewSubsessionLink(child, cl.id)
-				if err := c.refMembers(link, i, ref); err != nil {
-					return nil, err
-				}
-				entries = append(entries, link)
-				if leaf != "" {
-					e.Parents = []agentsession.EntryRef{{Session: child, Entry: leaf}}
-				}
-				continue
-			}
+		child, leaf, ok, err := c.spawn(i, s, ref, cl.id, "")
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
 			if err := c.keepRef(e, i, ref); err != nil {
 				return nil, err
 			}
 			continue
 		}
-		ents, err := c.calllessRef(i, s, ref)
-		if err != nil {
+		if linked {
+			c.addf(agentimport.Lossy, "atif/subagent-shared-call", line,
+				"call %s's result names more than one sub-agent; session %s is another subsession of the call, linked by its call_id, and its ID is not derived from the call's, which the first child holds", cl.id, child)
+		}
+		linked = true
+		link := agentsession.NewSubsessionLink(child, cl.id)
+		if err := c.refMembers(link, i, ref); err != nil {
 			return nil, err
 		}
-		entries = append(entries, ents...)
+		entries = append(entries, link)
+		if leaf != "" {
+			e.Parents = append(e.Parents, agentsession.EntryRef{Session: child, Entry: leaf})
+		}
 	}
 	if err := c.resultMembers(e, i, r); err != nil {
 		return nil, err
@@ -494,9 +494,13 @@ func (c *docConv) spawn(i int, s *atif.Step, ref *atif.Ref, callID, spawnID stri
 		t.created = c.last
 	}
 	switch {
-	case callID != "":
+	case callID != "" && !c.fam.ids[agentsession.SubsessionID(c.tgt.id, callID)]:
 		t.id = agentsession.SubsessionID(c.tgt.id, callID)
 		c.fam.ids[t.id] = true
+	case callID != "":
+		// Another child of the call holds the ID derived from it; this
+		// one keeps its own, as a child no call names does.
+		t.id, t.derived = c.fam.claim(in.t.SessionID, c.tgt.id, key)
 	case spawnID != "":
 		t.id, t.spawnedBy = agentsession.SpawnedSessionID(c.tgt.id, spawnID), spawnID
 		c.fam.ids[t.id] = true

@@ -306,3 +306,100 @@ func TestExporterRedacted(t *testing.T) {
 		doccheck.Check(t, Source, res.Report)
 	}
 }
+
+// TestExporterCallRefs exports a session whose call spawned two
+// sub-agents and imports the document mapped from its steps: each child
+// is a session of its own, under an ID of its own, linked by the call.
+func TestExporterCallRefs(t *testing.T) {
+	at := time.Date(2026, 10, 7, 9, 0, 0, 0, time.UTC)
+	tick := func() time.Time { at = at.Add(time.Second); return at }
+	add := func(s *agentsession.Session, e agentsession.Entry) {
+		t.Helper()
+		e.Base().Timestamp = tick()
+		if _, err := s.Append(e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h := &agentsession.Harness{Name: "rt", Version: "1"}
+	s := agentsession.New(agentsession.Header{ID: "fan-main", CreatedAt: at, Harness: h})
+	add(s, &agentsession.ConfigEntry{Model: "m-1"})
+	add(s, agentsession.NewItemEntry(openresponses.UserText("Review both.")))
+	call := agentsession.NewItemEntry(&openresponses.FunctionCall{CallID: "call_f", Name: "fan", Arguments: `{}`})
+	call.ResponseID = "resp_f"
+	add(s, call)
+	add(s, &agentsession.ResponseEntry{ResponseID: "resp_f", Model: "m-1", Status: openresponses.ResponseStatusCompleted})
+	children := map[string]*agentsession.Session{}
+	var parents []agentsession.EntryRef
+	for _, id := range []string{agentsession.SubsessionID("fan-main", "call_f"), "fan-b"} {
+		child := agentsession.New(agentsession.Header{ID: id, CreatedAt: tick(), ParentSession: "fan-main", SpawnedBy: "call_f", Harness: h})
+		add(child, &agentsession.ConfigEntry{Model: "m-2"})
+		add(child, agentsession.NewItemEntry(openresponses.UserText("Review "+id+".")))
+		answer := agentsession.NewItemEntry(openresponses.AssistantText("fine"))
+		answer.ResponseID = "resp_" + id
+		add(child, answer)
+		add(child, &agentsession.ResponseEntry{ResponseID: "resp_" + id, Model: "m-2", Status: openresponses.ResponseStatusCompleted})
+		children[id] = child
+		add(s, agentsession.NewSubsessionLink(id, "call_f"))
+		parents = append(parents, agentsession.EntryRef{Session: id, Entry: child.Leaf()})
+	}
+	out := agentsession.NewItemEntry(openresponses.NewFunctionCallOutput("call_f", "both fine"))
+	out.Parents = parents
+	add(s, out)
+
+	var main export.Trajectory
+	for tr, err := range export.Trajectories(s) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		if tr.Main {
+			main = tr
+		}
+	}
+	doc, err := export.ToATIF(main, export.Options{Subsessions: func(id string) (*agentsession.Session, error) {
+		return children[id], nil
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Mapped from its steps, as a document without its entries is.
+	strip := func(extra map[string]any) {
+		if as, ok := extra[export.ExtraAgentSession].(map[string]any); ok {
+			delete(as, export.ExtraEntries)
+		}
+	}
+	strip(doc.Extra)
+	for _, sub := range doc.SubagentTrajectories {
+		strip(sub.Extra)
+	}
+	path := filepath.Join(t.TempDir(), "agent", "trajectory.json")
+	if err := export.WriteDocument(path, doc); err != nil {
+		t.Fatal(err)
+	}
+	res := convertFixture(t, path, Options{})
+	if len(res.Sessions) != 3 {
+		t.Fatalf("%d sessions, want the main one and two children", len(res.Sessions))
+	}
+	ids := map[string]bool{}
+	for _, c := range res.Sessions[1:] {
+		h := c.Header()
+		if ids[h.ID] || h.ID == res.Sessions[0].ID() {
+			t.Errorf("session ID %s repeats", h.ID)
+		}
+		ids[h.ID] = true
+		if h.ParentSession != res.Sessions[0].ID() || h.SpawnedBy != "call_f" {
+			t.Errorf("child %s: parent %q spawned_by %q", h.ID, h.ParentSession, h.SpawnedBy)
+		}
+	}
+	n := 0
+	for _, e := range reread(t, res.Sessions[0]).Entries() {
+		if l, ok := e.(*agentsession.LinkEntry); ok && l.Rel == agentsession.RelSubsession {
+			if l.CallID != "call_f" || !ids[l.Session] {
+				t.Errorf("link = %+v", l)
+			}
+			n++
+		}
+	}
+	if n != 2 {
+		t.Errorf("%d subsession links, want 2", n)
+	}
+}

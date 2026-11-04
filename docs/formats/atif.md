@@ -199,7 +199,7 @@ result is read as a callee the call waited for:
 
 | Native | Session |
 | --- | --- |
-| a reference on a call's result, naming an embedded trajectory of the same document by `trajectory_id` or a file by `trajectory_path` | its own session with `parent_session` and `spawned_by`; the parent gets a `subsession` link before the output, whose `parents` names the child's leaf |
+| a reference on a call's result, naming an embedded trajectory of the same document by `trajectory_id` or a file by `trajectory_path` | its own session with `parent_session` and `spawned_by`; the parent gets a `subsession` link before the output, whose `parents` names the child's leaf; a result naming several gets a link to each, all with the call's `call_id`, and the output names every leaf; the first child's ID is derived from the call's, a later one keeps its own |
 | a reference on a result with no call (Terminus 2's summarisation helpers, RFC 0001's compaction example) | a child the host started (RFC 0001 0.19, `link`): the parent gets a `subsession` link carrying `spawn_id` and no `call_id`, `step-<n>` for the step's line, `step-<n>-2` and on for a later one of the same step; the child's `spawned_by` is that `spawn_id`, its `parent_session` the parent and its ID derived over `["spawn",<parent>,<spawn_id>]` |
 | an embedded trajectory no reference names (Qwen Code's orphans, Muse Code's children) | its own session with `parent_session`, no link |
 | a reference that cannot be resolved (a URL, a missing file, `session_id` alone as before v1.7, a file outside the conversion's directory) | kept in `atif:refs` on the output, or a custom entry |
@@ -375,6 +375,7 @@ every converter can report are in [README.md](README.md).
 | `atif/branch-summary` | lossy | An exporter's branch summary names an entry of the exported session as `from`. |
 | `atif/call-without-result` | lossy | A tool call no result answers is left without an output. |
 | `atif/callless-subagent` | lossy | A sub-agent no call spawned is a child the host started, linked by a `spawn_id` the conversion chose (`step-<n>`), since the document names none. |
+| `atif/subagent-shared-call` | lossy | A call's result names more than one sub-agent: each is a subsession of the call, linked by its `call_id` before the output, whose `parents` names every child's leaf; the first child's session ID is derived from the call's, and a later one keeps its own (its `session_id`, or one derived from the parent's and its trajectory). |
 | `atif/compaction-summary-next` | lossy | A replace boundary's results hold no content; the user step after it, which carries no results, is the summary, as Vibe writes it. |
 | `atif/terminus-handoff` | lossy | Terminus 2's summarisation: the compaction's summary is its first message and its pinned items the questions helper's prompt and questions; without the helper's file they are missing. |
 | `atif/context-injection` | lossy | An append boundary's results are user messages. |

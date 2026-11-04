@@ -25,6 +25,14 @@ versions may break the API.
   `atif/callless-subagent` is now `lossy`, no longer a gap, and leaves
   `docs/incompatibilities.md`.
 
+- Fix: every sub-agent an ATIF call's result names is a subsession of
+  that call. The second and later were linked as sub-agents no call
+  spawned (now host-started children), and a document agentsession's
+  exporter wrote gave every child of one call the same session ID. Each
+  is now linked by the call's `call_id` before the output, which names
+  every child's leaf in `parents`; the first child's ID derives from the
+  call's, and a later one keeps its own (`atif/subagent-shared-call`).
+
 - Fix: an ATIF continuation whose predecessor's instruction parts carry
   a keep, or a hash of their own text, keeps them, cleared of both, with
   their sources and trust, since agentsession v0.0.37's

@@ -389,6 +389,41 @@ func TestSubagents(t *testing.T) {
 	if strings.Join(spawned, " ") != "step-3 step-3-2 step-3-3" {
 		t.Errorf("spawn_ids %v", spawned)
 	}
+
+	// A call whose result names two sub-agents spawned both: each is a
+	// subsession of the call, linked by its call_id before the output,
+	// which names both children's leaves. The first's ID derives from
+	// the call; the second keeps its own.
+	res = convertFixture(t, fx["call-refs"], Options{})
+	check(t, res, []want{{-1, ""}, {0, "fan_1"}, {0, "fan_1"}})
+	if res.Sessions[1].ID() != agentsession.SubsessionID(res.Sessions[0].ID(), "fan_1") || res.Sessions[2].ID() != "worker-b" {
+		t.Errorf("children %s %s", res.Sessions[1].ID(), res.Sessions[2].ID())
+	}
+	var linked []string
+	var parents []agentsession.EntryRef
+	for _, e := range reread(t, res.Sessions[0]).Entries() {
+		switch e := e.(type) {
+		case *agentsession.LinkEntry:
+			if e.Rel != agentsession.RelSubsession || e.CallID != "fan_1" || e.SpawnID != "" {
+				t.Errorf("link = %+v", e)
+			}
+			linked = append(linked, e.Session)
+		case *agentsession.ItemEntry:
+			if _, ok := e.Item.(*openresponses.FunctionCallOutput); ok {
+				parents = e.Parents
+			}
+		}
+	}
+	if len(linked) != 2 || linked[0] != res.Sessions[1].ID() || linked[1] != res.Sessions[2].ID() {
+		t.Errorf("links to %v", linked)
+	}
+	wantParents := []agentsession.EntryRef{{Session: res.Sessions[1].ID(), Entry: res.Sessions[1].Leaf()}, {Session: res.Sessions[2].ID(), Entry: res.Sessions[2].Leaf()}}
+	if !slices.Equal(parents, wantParents) {
+		t.Errorf("output parents %v, want %v", parents, wantParents)
+	}
+	if slices.Contains(res.Report.Codes(), "atif/callless-subagent") {
+		t.Error("a call's second sub-agent is reported as one no call spawned")
+	}
 }
 
 func TestContinuation(t *testing.T) {
