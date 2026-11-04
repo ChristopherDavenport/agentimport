@@ -361,7 +361,7 @@ func (c *docConv) calllessRefs(i int, s *atif.Step, r *atif.Result) ([]agentsess
 // chooses, since the document records none. A reference spawn could
 // not convert is a custom entry.
 func (c *docConv) calllessRef(i int, s *atif.Step, ref *atif.Ref) ([]agentsession.Entry, error) {
-	spawnID := c.spawnID(i + 1)
+	spawnID := c.spawnID(c.line(i + 1))
 	child, _, ok, err := c.spawn(i, s, ref, "", spawnID)
 	if err != nil {
 		return nil, err
@@ -391,7 +391,9 @@ func (c *docConv) calllessRef(i int, s *atif.Step, ref *atif.Ref) ([]agentsessio
 }
 
 // spawnID is the spawn_id for a child the host started at the line
-// given: step-<line>, and -2, -3 and so on after it for a second and
+// given, the step's place in the document as findings name it, also in
+// a Claude Code sub-agent's session made from interleaved steps:
+// step-<line>, and -2, -3 and so on after it for a second and
 // later child of the same step, so no two links of the session carry
 // one, as RFC 0001 requires.
 func (c *docConv) spawnID(line int) string {

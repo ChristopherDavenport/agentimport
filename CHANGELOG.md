@@ -23,7 +23,9 @@ versions may break the API.
   derived from the parent's and it, as a call's child's is from the
   `call_id`, the native `session_id` kept in `atif:session_id`.
   `atif/callless-subagent` is now `lossy`, no longer a gap, and leaves
-  `docs/incompatibilities.md`.
+  `docs/incompatibilities.md`. The step's line is its place in the
+  document, as findings name it, also for a Claude Code sub-agent's
+  session made from interleaved steps.
 
 - Fix: every sub-agent an ATIF call's result names is a subsession of
   that call. The second and later were linked as sub-agents no call
