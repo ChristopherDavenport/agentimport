@@ -90,6 +90,9 @@ func (fam *family) one(in docInput, tgt target, report *agentimport.Report) ([]*
 			// The rebuilt entries are appended without the builder, which
 			// checks the usages of the others.
 			agentimport.CheckUsage(c.report, in.name, s)
+			if err := c.sidecarUnread(s); err != nil {
+				return nil, "", err
+			}
 			children, err := c.rebuildChildren()
 			if err != nil {
 				return nil, "", err
@@ -114,8 +117,34 @@ func (fam *family) one(in docInput, tgt target, report *agentimport.Report) ([]*
 	if err != nil {
 		return nil, "", fmt.Errorf("%s: converted session does not verify: %w", displayName(in.name), err)
 	}
+	if err := c.sidecarUnread(s); err != nil {
+		return nil, "", err
+	}
 	out := append([]*agentsession.Session{s}, c.children...)
 	return append(out, c.after...), c.b.Resume(), nil
+}
+
+// sidecarUnread reports that the sidecar blobs a sidecar session names,
+// which agentsession's exporter wrote beside the document under
+// sidecar/, are not carried: the result holds sessions alone, so the
+// references resolve only once the store the session is written to
+// holds the blobs.
+func (c *docConv) sidecarUnread(s *agentsession.Session) error {
+	if s.Header().Media != agentsession.MediaSidecar {
+		return nil
+	}
+	refs, err := agentsession.SessionBlobs(s)
+	if err != nil {
+		return fmt.Errorf("%s: %w", displayName(c.in.name), err)
+	}
+	switch n := len(refs); n {
+	case 0:
+	case 1:
+		c.addf(agentimport.Dropped, "atif/sidecar-unread", 0, "the 1 sidecar blob the session names, written beside the document under sidecar/, is not read; its reference resolves only once the store the session is written to holds it")
+	default:
+		c.addf(agentimport.Dropped, "atif/sidecar-unread", 0, "the %d sidecar blobs the session names, written beside the document under sidecar/, are not read; their references resolve only once the store the session is written to holds them", n)
+	}
+	return nil
 }
 
 func displayName(name string) string {

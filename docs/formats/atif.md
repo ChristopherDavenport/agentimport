@@ -280,7 +280,8 @@ leaves the kept extra: the raw items keep the `sidecar:` references
 the ids cover, which are references only in a sidecar session. The
 blobs the exporter wrote beside the document under `sidecar/` are not
 read: the references resolve only once the store the session is
-written to holds those blobs. Every step is
+written to holds those blobs, and each sidecar session that names any
+is reported with their number (`atif/sidecar-unread`). Every step is
 counted mapped, since the entries hold what it carried, but one that
 names no entry, which is dropped. The sub-agent trajectories a document
 embeds are rebuilt with it, each into the session its own
@@ -362,6 +363,7 @@ every converter can report are in [README.md](README.md).
 | `atif/continuation-parts` | lossy | The instruction parts in force where the session it continues ended cannot be written whole in the continuation's first `config`: a part the path could not rebuild, one whose hash is another text's, one with no ID or a repeated one, or parts that do not join to the instructions. The config carries the instructions string, without the parts' sources and trust. A keep, and a hash of the part's own text, are cleared and the parts kept. |
 | `atif/not-rebuilt` | lossy | A document agentsession's exporter wrote carries the entries it was exported from (`extra.agentsession.entries`), but its sub-agent trajectories are not a list, it continues in another document or it is cut short, so it is mapped from its steps and none of its entries keeps the document's id. |
 | `atif/entry-not-rebuilt` | lossy | An entry of a document carrying its entries does not rebuild to the id the document names: its members hash to another id (an edit after the export, a body stripped), its parent is not in the document, or its parent did not rebuild. It is a new entry, under the entry its parent became, and carries no history member as its own. Each such entry is listed. |
+| `atif/sidecar-unread` | dropped | A sidecar session names sidecar blobs, which agentsession's exporter wrote beside the document under `sidecar/`; they are not read, so the session's references dangle until the store it is written to holds them, and a re-export through agentsession refuses the blobs it cannot read. Once per session, with the number of blobs. |
 | `atif/step-not-rebuilt` | dropped | A step of a document carrying its entries names no entry the document carries, as a step appended after the export does not; it is not of the exported path, what it holds is left out, and the document does not hold the whole path. |
 | `atif/history-member` | kept, or dropped | A history member (`legacy_id`, `normalised`, `redacted`) of an entry that did not rebuild to its id is `atif:<name>`, since it is not true of a new entry; left out under Slim. |
 | `atif/redaction-not-restored` | lossy | A document of a redacted session whose entries do not all rebuild to their ids, or that does not hold the whole path (one built after a compaction), keeps the header's `redacted` and `redacted_from` in `atif:extra`; the session is not the redacted session. |

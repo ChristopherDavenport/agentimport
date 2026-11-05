@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ChristopherDavenport/agentimport"
 	"github.com/ChristopherDavenport/agentsession"
 	"github.com/ChristopherDavenport/agentsession/export"
 	"github.com/ChristopherDavenport/openresponses"
@@ -351,5 +352,17 @@ func TestRebuildSidecarMedia(t *testing.T) {
 		if _, ok := got.Entry(e.Base().ID); !ok {
 			t.Errorf("%T %s is not rebuilt to its id", e, e.Base().ID)
 		}
+	}
+	// The blobs under sidecar/ are not carried, and the report says so,
+	// once for the session, with the number of references left
+	// unresolved.
+	var unread []agentimport.Finding
+	for _, f := range res.Report.Findings {
+		if f.Code == "atif/sidecar-unread" {
+			unread = append(unread, f)
+		}
+	}
+	if len(unread) != 1 || unread[0].Kind != agentimport.Dropped || !strings.Contains(unread[0].Detail, "1 sidecar blob") {
+		t.Errorf("atif/sidecar-unread findings %+v, want one dropped naming 1 blob", unread)
 	}
 }

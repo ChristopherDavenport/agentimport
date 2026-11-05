@@ -26,6 +26,9 @@ versions may break the API.
   converter kept that member in `atif:extra`, so the rebuilt session's
   header said inline and its references read as text. The header's
   `media` is now `sidecar`, and the member leaves `atif:extra`.
+  The blobs the exporter wrote under `sidecar/` are still not carried,
+  and each such session reports it, with their number
+  (`atif/sidecar-unread`, dropped).
 
 - **Fix: cache writes are carried in the usage (#37) (breaking: the IDs
   of responses that wrote to the cache, and of every entry after one,
