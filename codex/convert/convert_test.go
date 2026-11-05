@@ -331,7 +331,7 @@ func TestResponses(t *testing.T) {
 		input []int
 		tied  []int
 	}{
-		{"plain", []string{"resp_1", "resp_2"}, []int{100, 130}, []int{3, 1}},
+		{"plain", []string{"resp_1", "resp_2"}, []int{100, 150}, []int{3, 1}},
 		{"batch", []string{"codex-line-8", "codex-line-15"}, []int{50, 70}, []int{3, 1}},
 		{"streamed", []string{"codex-line-4", "codex-line-10"}, []int{50, 70}, []int{3, 1}},
 		{"tools", []string{"resp_t1", "resp_t2", "resp_t3"}, []int{50, 100, 150}, []int{5, 1, 1}},
@@ -356,8 +356,8 @@ func TestResponses(t *testing.T) {
 	}
 	res := convertFixture(t, fx["plain"], Options{})
 	resps, _ := responses(t, res.Sessions[0])
-	if _, ok := resps[1].Unknown[Source+":usage"]; !ok || resps[1].Usage.InputTokensDetails.CachedTokens != 100 {
-		t.Error("the cache writes are not kept")
+	if n, ok := resps[1].Usage.InputTokensDetails.CacheWriteTokens(); !ok || n != 40 || resps[1].Usage.InputTokensDetails.CachedTokens != 100 {
+		t.Error("the cache writes are not carried")
 	}
 }
 

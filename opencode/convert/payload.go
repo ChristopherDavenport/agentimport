@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/ChristopherDavenport/agentimport"
 	"github.com/ChristopherDavenport/agentimport/opencode"
 	"github.com/ChristopherDavenport/openresponses"
 )
@@ -169,9 +170,10 @@ func arguments(raw json.RawMessage) string {
 
 // usage maps OpenCode's token counts to Responses usage. OpenCode's
 // input counts neither cache reads nor writes, so both are folded in,
-// as providers/anthropic does; its output counts reasoning up to 1.3.15
-// and leaves it out after. What Responses usage has no place for, the
-// cache writes, the cost and OpenCode's total, is returned apart.
+// as providers/anthropic does, the writes also counted in the
+// cache-write extension; its output counts reasoning up to 1.3.15 and
+// leaves it out after. What Responses usage has no place for, the cost
+// and OpenCode's total, is returned apart.
 func usage(t *opencode.Tokens, cost json.RawMessage, outputHasReasoning bool) (*openresponses.Usage, map[string]any) {
 	if t == nil {
 		return nil, nil
@@ -193,10 +195,8 @@ func usage(t *opencode.Tokens, cost json.RawMessage, outputHasReasoning bool) (*
 		InputTokensDetails:  openresponses.InputTokensDetails{CachedTokens: read},
 		OutputTokensDetails: openresponses.OutputTokensDetails{ReasoningTokens: reasoning},
 	}
+	agentimport.CacheWrites(&u.InputTokensDetails, int64(write), nil)
 	extra := map[string]any{}
-	if write > 0 {
-		extra["cache_write_tokens"] = write
-	}
 	if f, ok := opencode.Float(cost); ok && f != 0 {
 		extra["cost"] = json.RawMessage(bytes.TrimSpace(cost))
 	}

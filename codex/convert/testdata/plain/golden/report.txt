@@ -7,7 +7,6 @@ codex: 18 lines: mapped 14 kept 2 dropped 2 malformed 0
              session_meta.cwd                                1
              session_meta.id                                 1
   kept     agentimport/provenance                            1  the import is recorded in the header member agentimport:source
-  kept     agentimport/usage-detail                          1  usage has members Responses usage lacks (cache writes); the native usage is codex:usage (at 16)
   kept     codex/rate-limits                                 2  the rate limits reported with the usage are kept in codex:rate_limits (at 13, 17)
   kept     codex/repository-url                              1  the repository URL is the vcs member codex:repository_url (at 1)
   kept     codex/session-meta-members                        1  kept in the header member codex:session_meta: model_provider, originator, source (at 1)

@@ -352,8 +352,9 @@ are folded into `input_tokens`, `cached_tokens` the reads, as
 `providers/anthropic` does. `tokens.output` counts reasoning up to
 1.3.15 and leaves it out from 1.3.16 (and in OpenCode 2): `output_tokens`
 is `output`, or `output + reasoning`, by the session's `version`.
-Cache writes, the cost and OpenCode's `total` are `opencode:usage` (gap
-`agentimport/usage-detail` when there are cache writes). V1 usage is per
+The cache writes are also `openresponses-experimental.cache_write_tokens`, and the
+cost and OpenCode's `total` are `opencode:usage`
+(`opencode/usage-member`). V1 usage is per
 step, from `step-finish`; the message's own tokens and cost (the last
 step's, the steps' sum) stay in `opencode:message`.
 
@@ -447,7 +448,6 @@ every converter can report are in [README.md](README.md).
 | `agentimport/fold-head` | gap | OpenCode's compacted context starts with a message it sent verbatim; the compaction's summary is that message and the rest follows it. |
 | `agentimport/reasoning-provider` | gap | A reasoning signature or encrypted content is in `encrypted_content`, its provider in `opencode:provider`. |
 | `agentimport/tool-error` | lossy | A V1 call's error, which OpenCode sends as an error result, makes the output's entry `failed`; `function_call_output` has no error flag a request carries (Open Responses), so a rebuilt request does not send it. OpenCode 2 sends the error as JSON text, so its failed outputs report nothing. |
-| `agentimport/usage-detail` | kept | Cache writes, folded into input, and the cost are `opencode:usage`. |
 | `opencode/attachment-mime` | dropped | An OpenCode 2 attachment of a type it does not send. |
 | `opencode/attachment-repeated` | lossy | An image attached twice under one mention, sent once. |
 | `opencode/call-id` | repaired | A call ID that is empty, malformed or repeated is renamed; the native one is `opencode:call_id`. |

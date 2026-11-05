@@ -8,7 +8,7 @@ pi: 19 lines: mapped 14 kept 4 dropped 1 malformed 0
              session.cwd                                     1
              session.id                                      1
   kept     agentimport/provenance                            1  the import is recorded in the header member agentimport:source
-  kept     agentimport/usage-detail                          2  cache writes are folded into input_tokens; the native usage and its cost are pi:usage (at 10, 11)
+  kept     agentimport/usage-detail                          2  the native usage and its cost, which Responses usage has no place for, are pi:usage (at 10, 11)
   kept     pi/bash-excluded                                  1  a command the user ran and kept out of context is a custom entry (at 9)
   kept     pi/bash-execution                                 1  a command the user ran is the user message pi renders from it; the record is pi:bash_execution (at 8)
   kept     pi/custom                                         1  a custom entry (my-ext) is a custom entry of namespace pi holding the line (at 5)

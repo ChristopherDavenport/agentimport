@@ -125,6 +125,9 @@ type Builder struct {
 	ShellTools map[string]bool
 	// calls holds each function call appended, by call_id.
 	calls map[string]*openresponses.FunctionCall
+	// usage gathers the usages appended whose counts contradict each
+	// other.
+	usage usageTally
 }
 
 // NewBuilder starts a session with header h.
@@ -215,6 +218,7 @@ func (b *Builder) Append(parent string, e agentsession.Entry) (string, error) {
 				b.last = base.Timestamp
 			}
 			b.tail = r.ID
+			b.usage.note(b.Report, b.File, e)
 			return r.ID, nil
 		}
 		b.Report.Addf(Repaired, "agentimport/same-instant", b.File, 0,

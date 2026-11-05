@@ -7,6 +7,6 @@ pi: 18 lines: mapped 15 kept 1 dropped 2 malformed 0
              session.cwd                                     1
              session.id                                      1
   kept     agentimport/provenance                            1  the import is recorded in the header member agentimport:source
-  kept     agentimport/usage-detail                          4  cache writes are folded into input_tokens; the native usage and its cost are pi:usage (at 3, 5, 8, 12)
+  kept     agentimport/usage-detail                          4  the native usage and its cost, which Responses usage has no place for, are pi:usage (at 3, 5, 8, 12)
   kept     pi/details                                        1  the branch_summary's details, which pi does not send the model, are pi:details (at 6)
   kept     pi/message-members                                4  kept in pi:message: api, provider (at 3, 5, 8, 12)

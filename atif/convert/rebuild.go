@@ -223,7 +223,7 @@ func (c *docConv) rebuildEntries(h agentsession.Header, recs map[string]json.Raw
 }
 
 // rebuiltHeader is h with the document's extra kept without the entries,
-// which the session now holds, and, when restore says every entry
+// which the session now holds, nor the media the header names, and, when restore says every entry
 // rebuilt to its id over the whole path, with the redacted session's
 // redacted and redacted_from, which then leave the kept extra.
 func (c *docConv) rebuiltHeader(h agentsession.Header, as map[string]json.RawMessage, restore bool) (agentsession.Header, error) {
@@ -248,6 +248,9 @@ func (c *docConv) rebuiltHeader(h agentsession.Header, as map[string]json.RawMes
 	}
 	kept := object(ext["agentsession"])
 	delete(kept, "entries")
+	if h.Media == agentsession.MediaSidecar {
+		delete(kept, "media")
+	}
 	if restore {
 		delete(kept, "redacted")
 		delete(kept, "redacted_from")

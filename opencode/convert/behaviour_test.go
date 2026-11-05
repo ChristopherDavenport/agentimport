@@ -70,7 +70,8 @@ func TestErrorResult(t *testing.T) {
 	}
 }
 
-// TestUsage folds cache reads and writes into input, and counts
+// TestUsage folds cache reads and writes into input, carries the writes
+// in the cache-write extension, and counts
 // reasoning in output by the release's rule.
 func TestUsage(t *testing.T) {
 	tok := &opencode.Tokens{Input: json.RawMessage(`10`), Output: json.RawMessage(`20`), Reasoning: json.RawMessage(`5`),
@@ -79,7 +80,10 @@ func TestUsage(t *testing.T) {
 	if u.InputTokens != 117 || u.InputTokensDetails.CachedTokens != 100 || u.OutputTokens != 25 || u.TotalTokens != 142 || u.OutputTokensDetails.ReasoningTokens != 5 {
 		t.Errorf("usage %+v", u)
 	}
-	if extra["cache_write_tokens"] != 7 || string(extra["cost"].(json.RawMessage)) != "0.5" {
+	if n, ok := u.InputTokensDetails.CacheWriteTokens(); !ok || n != 7 {
+		t.Errorf("cache writes %d, %v", n, ok)
+	}
+	if _, ok := extra["cache_write_tokens"]; ok || string(extra["cost"].(json.RawMessage)) != "0.5" {
 		t.Errorf("extra %v", extra)
 	}
 	if u, _ := usage(tok, nil, true); u.OutputTokens != 20 {

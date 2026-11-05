@@ -5,6 +5,63 @@ All user-visible changes to this library. The format follows
 uses [Semantic Versioning](https://semver.org/); before v1.0.0 minor
 versions may break the API.
 
+## Unreleased
+
+- Dependencies: agentsession v0.0.37 to v0.0.38, format 0.20 to 0.21,
+  and openresponses v0.0.18 to v0.0.19; every converted session's
+  header names `agentsession/0.21`, and the goldens are regenerated.
+
+- **Fix (format 0.21): Claude Code's `human` is the person's words
+  only (agentturn#303's rule).** A prompt's `origin.kind` was the
+  item's source kind as written, so a message Claude Code composed
+  whose origin said `human` read as the person's. Such a message
+  (`isMeta`, a compact summary, or `promptSource` `system`) now has the
+  kind `system`, and its origin stays in `claudecode:line`
+  (`claudecode/composed-human`). Claude Code was not seen to write one.
+
+- **Fix (format 0.21): an ATIF document of a sidecar session imports
+  as a sidecar session.** agentsession v0.0.38's exporter names a
+  sidecar session's `media` under `extra.agentsession`, and its raw
+  items keep the `sidecar:` references the entry IDs hash over; the
+  converter kept that member in `atif:extra`, so the rebuilt session's
+  header said inline and its references read as text. The header's
+  `media` is now `sidecar`, and the member leaves `atif:extra`.
+  The blobs the exporter wrote under `sidecar/` are still not carried,
+  and each such session reports it, with their number
+  (`atif/sidecar-unread`, dropped).
+
+- **Fix: cache writes are carried in the usage (#37) (breaking: the IDs
+  of responses that wrote to the cache, and of every entry after one,
+  move).** Each converter folded a response's cache writes into
+  `input_tokens` and dropped the count, so a price table priced them as
+  plain input. The Claude Code, pi, Cline and Roo, Cline SDK, OpenHands,
+  OpenCode and Codex converters now set openresponses extensions §5's
+  `openresponses-experimental.cache_write_tokens`, and
+  `openresponses-experimental.cache_write_tokens_by_ttl` where the
+  source splits it (Claude Code's `cache_creation`, pi's
+  `cacheWrite1h`), as `providers/anthropic` does; the new
+  `agentimport.CacheWrites` sets them. OpenHands and OpenCode no longer
+  keep the count in their `:usage` member, Codex keeps its native usage
+  only for members it does not map, and `agentimport/usage-detail` no
+  longer says the writes have no place.
+
+- **Fix: a usage whose cache reads and writes exceed its input is
+  reported (#37).** openresponses extensions §5 counts both inside the
+  input, so such a usage prices its uncached input below zero. Every
+  converter keeps the counts as the source reported them and reports
+  `agentimport/usage-inconsistent` once per session, naming the first;
+  `agentimport.CheckUsage` checks a session built without a `Builder`.
+  Codex's synthetic fixture had one (input 130, 100 cached, 40
+  written); codex-rs counts the writes in `input_tokens`, so its input
+  is now 150 and the IDs of its last entries move.
+
+- **Fix: an OpenHands ACP usage that reports cache writes counts them
+  apart from its input (#37).** The input was taken to count the cache
+  unless the reads exceeded it, so an ACP turn with writes and few or
+  no reads understated its input. claude-agent-acp and codex-acp, the
+  adapters that report writes, count reads and writes apart, so both
+  are now folded into the input, as `providers/anthropic` does.
+
 ## v0.0.2 - 2026-11-04
 
 - Dependencies: agentsession v0.0.35 to v0.0.37, format 0.18 to 0.20;

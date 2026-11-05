@@ -7,7 +7,7 @@ pi: 8 lines: mapped 8 kept 0 dropped 0 malformed 0
              session.cwd                                     1
              session.id                                      1
   kept     agentimport/provenance                            1  the import is recorded in the header member agentimport:source
-  kept     agentimport/usage-detail                          5  cache writes are folded into input_tokens; the native usage and its cost are pi:usage (at 3, 4, 6, 7, 8)
+  kept     agentimport/usage-detail                          5  the native usage and its cost, which Responses usage has no place for, are pi:usage (at 3, 4, 6, 7, 8)
   kept     pi/message-members                                5  kept in pi:message: api, provider (at 3, 4, 6, 7, 8)
   kept     pi/redacted-thinking                              1  redacted thinking is an anthropic.redacted_thinking item, as openresponses' Anthropic provider writes it (at 3)
   kept     pi/thinking-signature                             1  a thinking signature from openai-completions is not a Responses encrypted_content; it is pi:thinking_signature (at 6)

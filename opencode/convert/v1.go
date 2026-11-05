@@ -1006,18 +1006,13 @@ func (v *v1walk) usageMembers(resp *agentsession.ResponseEntry, extra map[string
 }
 
 // usageMembers keeps on a response the usage Responses usage has no
-// place for: the cache writes, which are folded into input, the cost
-// and OpenCode's total.
+// place for: the cost and OpenCode's total.
 func (sc *sconv) usageMembers(resp *agentsession.ResponseEntry, extra map[string]any, unit string) error {
 	if extra == nil {
 		return nil
 	}
 	if err := sc.b.Member(resp, "usage", extra); err != nil {
 		return err
-	}
-	if _, ok := extra["cache_write_tokens"]; ok {
-		sc.addf(agentimport.Kept, "agentimport/usage-detail", unit, "cache writes have no place in Responses usage; they are folded into input tokens, and the count, with the cost, is in %s:usage", Source)
-		return nil
 	}
 	sc.addf(agentimport.Kept, "opencode/usage-member", unit, "the cost and the total OpenCode records with the usage are in %s:usage", Source)
 	return nil

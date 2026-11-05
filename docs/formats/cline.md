@@ -378,7 +378,7 @@ every converter can report are in [README.md](README.md).
 | `agentimport/fold-head` | gap | A Roo request sent a message ahead of the summary it folded the history into, or the summary as an assistant message; the compaction puts its summary, as a user message, first. |
 | `agentimport/reasoning-provider` | gap | A reasoning signature (Anthropic's, Gemini's, OpenAI's encrypted reasoning) is in `encrypted_content`, tagged `cline:provider`. |
 | `agentimport/tool-error` | lossy | A tool result's `is_error`, which the model was sent, makes the output's entry `failed`; `function_call_output` has no error flag a request carries (Open Responses), so a rebuilt request does not send it. |
-| `agentimport/usage-detail` | kept | Cache writes are folded into the input tokens; the request record's counts and cost are `cline:usage`. |
+| `agentimport/usage-detail` | kept | The request record's counts and cost are `cline:usage`; its cache writes are in the input tokens and `openresponses-experimental.cache_write_tokens`. |
 | `cline/checkpoints` | dropped | The task's checkpoint repository is not read. |
 | `cline/file-unread` | dropped | A file of the task directory the converter does not read: a hook's leftover transcript, a temporary file, a newer release's. |
 | `cline/null-block` | dropped | A content block that is not an object. |

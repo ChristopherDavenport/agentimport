@@ -118,7 +118,11 @@ converters.
   summary text plus the signature in `encrypted_content`; Gemini
   thought signatures: a reasoning item holding only `encrypted_content`
   just before the part; Anthropic usage: cache reads and writes folded
-  into input tokens, the rest in `<ns>:usage`.
+  into input tokens, the writes also `openresponses-experimental.cache_write_tokens` (with
+  `openresponses-experimental.cache_write_tokens_by_ttl` where the
+  source splits them; openresponses extensions §5, whose Writers rule
+  says a converter whose source reports cache writes MUST set it), the
+  rest in `<ns>:usage`.
 - **Sub-agents by lifetime.** A callee the call waited for is a
   `subsession`: its own session with `parent_session` and `spawned_by`,
   the link before the call's output, the output's `parents` naming the

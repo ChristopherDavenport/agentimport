@@ -88,7 +88,8 @@ func (x *usageIndex) take(resp string) *usageRef {
 
 // usageOf maps a token usage to Responses usage: prompt tokens are
 // litellm's, which count cache reads and writes, or for an ACPAgent
-// count them apart, so they are folded in as providers/anthropic does.
+// that reports cache writes, or reads above its input, count them
+// apart, so they are folded in as providers/anthropic does.
 // The counts Responses usage has no place for are returned apart.
 func (c *conv) usageOf(u *openhands.TokenUsage) (*openresponses.Usage, map[string]int) {
 	in := openhands.Count(u.PromptTokens)
@@ -98,8 +99,13 @@ func (c *conv) usageOf(u *openhands.TokenUsage) (*openresponses.Usage, map[strin
 		// An ACP agent passes on the wrapped agent's counts:
 		// Anthropic's leave the cache out of the input, OpenAI's count
 		// it in. A cache read larger than the input can only be apart,
-		// as OpenHands' cache_hit_rate reads it.
-		if read > in {
+		// as OpenHands' cache_hit_rate reads it. The adapters that
+		// report cache writes count both apart: claude-agent-acp sends
+		// Anthropic's input_tokens, and codex-acp, which reports writes
+		// from 2026-10-10 on, subtracts reads and writes from Codex's
+		// input (src/TokenCount.ts); ACP's own totalTokens is the sum
+		// of all four counts.
+		if read > in || write > 0 {
 			in += read + write
 		} else if read > 0 {
 			c.addf(agentimport.Lossy, "openhands/acp-usage", openhands.FileBaseState, 0, "an ACP agent's cache reads are not larger than its input, so the input is taken to count them, as an OpenAI-style agent's does; an Anthropic-style agent's would leave them out")
@@ -113,8 +119,9 @@ func (c *conv) usageOf(u *openhands.TokenUsage) (*openresponses.Usage, map[strin
 		InputTokensDetails:  openresponses.InputTokensDetails{CachedTokens: read},
 		OutputTokensDetails: openresponses.OutputTokensDetails{ReasoningTokens: openhands.Count(u.ReasoningTokens)},
 	}
+	agentimport.CacheWrites(&use.InputTokensDetails, int64(write), nil)
 	extra := map[string]int{}
-	for name, raw := range map[string]json.RawMessage{"cache_write_tokens": u.CacheWriteTokens, "context_window": u.ContextWindow, "per_turn_token": u.PerTurnToken} {
+	for name, raw := range map[string]json.RawMessage{"context_window": u.ContextWindow, "per_turn_token": u.PerTurnToken} {
 		if n := openhands.Count(raw); n > 0 {
 			extra[name] = n
 		}
@@ -156,11 +163,7 @@ func (c *conv) joinUsage(i int, e *agentsession.ResponseEntry, native string) er
 		if err := c.b.Member(e, "usage", extra); err != nil {
 			return err
 		}
-		if extra["cache_write_tokens"] > 0 {
-			c.at(agentimport.Kept, "agentimport/usage-detail", i, "cache writes have no place in Responses usage; OpenHands counts them in prompt tokens, and the count is in %s:usage", Source)
-		} else {
-			c.at(agentimport.Kept, "openhands/usage-member", i, "the context window and the per-turn tokens OpenHands records with the usage are in %s:usage", Source)
-		}
+		c.at(agentimport.Kept, "openhands/usage-member", i, "the context window and the per-turn tokens OpenHands records with the usage are in %s:usage", Source)
 	}
 	return nil
 }

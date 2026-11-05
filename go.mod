@@ -3,8 +3,8 @@ module github.com/ChristopherDavenport/agentimport
 go 1.25.0
 
 require (
-	github.com/ChristopherDavenport/agentsession v0.0.37
-	github.com/ChristopherDavenport/openresponses v0.0.18
+	github.com/ChristopherDavenport/agentsession v0.0.38
+	github.com/ChristopherDavenport/openresponses v0.0.19
 	modernc.org/sqlite v1.59.0
 )
 

@@ -7,8 +7,7 @@ opencode: 15 records: mapped 11 kept 0 dropped 3 malformed 1
              session.directory                               1
              session.id                                      1
   kept     agentimport/provenance                            1  the import is recorded in the header's agentimport:source member
-  kept     agentimport/usage-detail                          1  cache writes have no place in Responses usage; they are folded into input tokens, and the count, with the cost, is in opencode:usage
   kept     opencode/members                                  8  kept in opencode:message
   kept     opencode/session-record                           1  the session record's members the header has no place for are in the header's opencode:session member
-  kept     opencode/usage-member                             1  the cost and the total OpenCode records with the usage are in opencode:usage
+  kept     opencode/usage-member                             2  the cost and the total OpenCode records with the usage are in opencode:usage
   repaired opencode/malformed                                1  a message record that cannot be read is skipped: not JSON

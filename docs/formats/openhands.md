@@ -302,13 +302,20 @@ LLM's own) to every call's token usage, latency and cost. A response
 entry takes the token usage whose `response_id` is its
 `llm_response_id`, and its latency: `input_tokens` the prompt tokens,
 which are litellm's and count cache reads and writes, `cached_tokens`
-the cache reads, `output_tokens` and `reasoning_tokens`; cache writes
-(kept, `agentimport/usage-detail`), the context window and the per-turn
-tokens are `openhands:usage`. An `ACPAgent` passes on the wrapped
+the cache reads, `openresponses-experimental.cache_write_tokens` the cache writes,
+`output_tokens` and `reasoning_tokens`; the context window and the
+per-turn tokens are `openhands:usage` (`openhands/usage-member`). An
+`ACPAgent` passes on the wrapped
 agent's counts, which leave the cache out of the input (Anthropic's) or
 count it in (OpenAI's): cache reads larger than the input can only be
 apart, and then reads and writes are folded into the input as
-providers/anthropic does; otherwise the input is taken to count them
+providers/anthropic does. So are they when the usage reports cache
+writes: the adapters that report them count reads and writes apart
+from `inputTokens` (claude-agent-acp sends Anthropic's `input_tokens`;
+codex-acp, which reports writes from 2026-10-10, subtracts both from
+Codex's input, `src/TokenCount.ts` at agentclientprotocol/codex-acp
+519c267), and ACP's `totalTokens` is the sum of all the counts.
+Otherwise, cache reads with no writes, the input is taken to count them
 (`openhands/acp-usage`). The condenser's call is its compaction's `usage`. A token usage
 no event names (a title, a refused condensation, an ACP turn, whose
 usage carries the ACP session's ID) is a custom entry with a top-level
@@ -408,7 +415,6 @@ every converter can report are in [README.md](README.md).
 | --- | --- | --- |
 | `agentimport/fold-head` | gap | OpenHands put a condensation's summary after the events it kept at the head of the context; the compaction puts its summary first and pins the head after it. |
 | `agentimport/reasoning-provider` | gap | A reasoning signature (Anthropic's, OpenAI's encrypted reasoning) is in `encrypted_content`, tagged `openhands:provider`. |
-| `agentimport/usage-detail` | kept | Cache writes, counted in the prompt tokens, are `openhands:usage`. |
 | `openhands/bad-content` | dropped | A content part that is not an object or not text or an image, or extended content on an assistant message. |
 | `openhands/bad-file-name` | dropped | A file of `events/` whose name is not an event file's. |
 | `openhands/bad-metrics` | dropped | A usage ID's metrics that are not an object. |
@@ -424,7 +430,7 @@ every converter can report are in [README.md](README.md).
 | `openhands/subagent-unreadable` | dropped | A sub-agent directory, or the `subagents` directory, that cannot be read. |
 | `openhands/subagents-alone` | dropped | Sub-agents not converted, with `Options.Alone`. |
 | `openhands/unreached` | dropped | An event the converter did not reach; a bug if it occurs. |
-| `openhands/acp-usage` | lossy | An ACP agent's cache reads, not larger than its input, are taken as counted in it, as an OpenAI-style agent's are. |
+| `openhands/acp-usage` | lossy | An ACP agent's cache reads, not larger than its input and with no cache writes reported, are taken as counted in it, as an OpenAI-style agent's are. |
 | `openhands/acp-agent` | lossy | The agent is an `ACPAgent`, which records an external agent's tool calls rather than the model's context. |
 | `openhands/batch-reasoning` | lossy | OpenHands before 1.43 sent a response of several calls without its Responses reasoning item; in a file older than 1.31 the item is the response's output and an omit leaves it out of later requests. |
 | `openhands/bad-system-prompt` | lossy | A system prompt that is missing or not text; the instructions are empty. |

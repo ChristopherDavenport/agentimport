@@ -146,7 +146,13 @@ is the arguments and the model's is `claudecode:wire_input`.
 report), `source` `claudecode`, and the origin's other members as the
 trigger's own. A background agent reports back this way, after its
 call's output, so the report names the agent and the `peer` link names
-the agent's session.
+the agent's session. Kind `human` is the person's words (format 0.21),
+so it is written only on a prompt the person gave: one Claude Code
+composed (`isMeta`, a compact summary, or `promptSource` `system`)
+whose origin says `human` has the kind `system` instead, Claude Code's
+own term for it, and its `origin` stays in `claudecode:line`
+(`claudecode/composed-human`). A prompt with no `origin`, as Claude
+Code wrote before it had one, has no `source` and makes no claim.
 
 **Model switches.** A model change is a `config` delta with the new
 model and no `omit`. Claude Code keeps the earlier model's thinking in
@@ -160,8 +166,13 @@ the converter does not rebuild the request to name the entries.
 **Usage.** Anthropic's `input_tokens` excludes cached tokens. As the
 provider does, `input_tokens` is input + cache read + cache creation,
 `cached_tokens` is cache read and `reasoning_tokens` is
-`output_tokens_details.thinking_tokens`. The cache-write split, TTLs,
-server tool counts, service tier and the rest stay in `claudecode:usage`.
+`output_tokens_details.thinking_tokens`. The cache creation is
+`openresponses-experimental.cache_write_tokens`, and its split by TTL from
+`cache_creation` (`ephemeral_5m_input_tokens` the `5m` entry,
+`ephemeral_1h_input_tokens` the `1h`, an entry that wrote nothing left
+out) is `openresponses-experimental.cache_write_tokens_by_ttl`, when the
+split adds up to the count. Server tool counts, service tier and the
+rest stay in `claudecode:usage`, the native usage whole.
 
 ## Identity
 
@@ -227,7 +238,7 @@ the codes marked "kept, or dropped" are dropped instead.
 | `agentimport/provenance` | kept | Once per session: the import is recorded in the header member `agentimport:source`. |
 | `agentimport/reasoning-provider` | gap | A thinking signature is in `encrypted_content`, which says nothing of the provider that can replay it; the entry carries `claudecode:provider`. |
 | `agentimport/tool-error` | lossy | A tool result had `is_error`, which the model was sent; the output's entry is `failed`, and `function_call_output` has no error flag a request carries (Open Responses), so a rebuilt request does not send it. |
-| `agentimport/usage-detail` | kept | A response's usage has members Responses usage lacks; they are in `claudecode:usage`. |
+| `agentimport/usage-detail` | kept | A response's usage has members Responses usage lacks (the service tier, server tool use); the native usage is `claudecode:usage`. |
 | `agentimport/vcs-branch` | gap | The git branch is the vcs member `claudecode:branch`; the format's vcs records a revision, not a branch. |
 | `claudecode/instructions-layers` | lossy | An `instructions` attachment holds a file of a type Claude Code is not known to write, a file with no path, or a path twice, so `instructions_part` names no layer of it. |
 | `claudecode/extension-part` | kept | A user or tool-result block with no Open Responses input part (`tool_reference`, a block kept raw) is the extension part `anthropic.<type>` carrying it; see *Extension types*. |
@@ -273,6 +284,7 @@ the codes marked "kept, or dropped" are dropped instead.
 | `claudecode/system-line` | kept | A `system` line (`turn_duration`, `local_command`, `away_summary` and the like) is a custom entry. |
 | `claudecode/thinking-dropped` | lossy | The CLI left earlier thinking blocks out of a request (`input_transformations`); the path holds them, and the request the transformation names by index is not rebuilt to say which entries. |
 | `claudecode/thinking-empty` | lossy | A thinking block with neither text nor signature is an empty reasoning item. |
+| `claudecode/composed-human` | repaired | A message Claude Code composed (`isMeta`, a compact summary, or `promptSource` `system`) carries `origin.kind` `human`; its source kind is `system`, since `human` says the person wrote it, and the origin is kept in `claudecode:line`. |
 | `claudecode/transcript-only` | kept | A line marked `isVisibleInTranscriptOnly`, outside a compaction, was shown and not sent; it is a custom entry. |
 | `claudecode/tool-use-result` | kept, or dropped | The `toolUseResult` sidecar, the tool's structured output the model never saw, is `claudecode:tool_use_result`. |
 | `claudecode/undecodable-line` | kept | A line that is JSON but not of its type's shape is a custom entry. |

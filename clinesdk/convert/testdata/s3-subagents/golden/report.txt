@@ -11,7 +11,7 @@ clinesdk: 23 files and elements: mapped 23 kept 0 dropped 0 malformed 0
              cwd                                             5
              session_id                                      5
   kept     agentimport/provenance                            5  the import is recorded in the header member agentimport:source
-  kept     agentimport/usage-detail                          8  inputTokens counts cache reads and writes already; cacheReadTokens is cached_tokens, and the metrics with the cache writes and the cost are clinesdk:usage (at agent_7.messages.json:2, agent_9.messages.json:2, agent_8.messages.json:2, agent_8.messages.json:4, reviewer__Ab3dE9.messages.json:2)
+  kept     agentimport/usage-detail                          8  inputTokens counts cache reads and writes already; cacheReadTokens is cached_tokens, cacheWriteTokens the cache-write extension's, and the metrics with the cost are clinesdk:usage (at agent_7.messages.json:2, agent_9.messages.json:2, agent_8.messages.json:2, agent_8.messages.json:4, reviewer__Ab3dE9.messages.json:2)
   kept     clinesdk/index-row                                5  the session's row in Cline's index is the header member clinesdk:index_row
   kept     clinesdk/manifest                                 1  the manifest is the header member clinesdk:manifest
   kept     clinesdk/members                                 17  the message's members the session has no place for are clinesdk:message (at agent_7.messages.json:1, agent_7.messages.json:2, agent_9.messages.json:1, agent_9.messages.json:2, agent_8.messages.json:1)

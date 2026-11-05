@@ -620,8 +620,8 @@ func inRange(raws ...json.RawMessage) bool {
 }
 
 // recordUsage converts a usage record: input_tokens holds the cache,
-// as openresponses' Anthropic provider has it, and cached_tokens is
-// the cache reads.
+// as openresponses' Anthropic provider has it, cached_tokens is the
+// cache reads and the cache-write extension the writes.
 func recordUsage(info *cline.ReqInfo, inclusive bool) *openresponses.Usage {
 	in, out, cr, cw := count(info.TokensIn), count(info.TokensOut), count(info.CacheReads), count(info.CacheWrites)
 	if !inclusive {
@@ -629,6 +629,7 @@ func recordUsage(info *cline.ReqInfo, inclusive bool) *openresponses.Usage {
 	}
 	u := openresponses.Usage{InputTokens: int(in), OutputTokens: int(out)}
 	u.InputTokensDetails.CachedTokens = int(cr)
+	agentimport.CacheWrites(&u.InputTokensDetails, int64(cw), nil)
 	u.TotalTokens = u.InputTokens + u.OutputTokens
 	return &u
 }
@@ -687,7 +688,7 @@ func (c *conv) usage(k int, m *cline.Message, e *agentsession.ResponseEntry) err
 		if err := c.b.Member(e, "usage", json.RawMessage(raw)); err != nil {
 			return err
 		}
-		c.uiAt(agentimport.Kept, "agentimport/usage-detail", req.ui, "cache writes are folded into input_tokens; the request record's usage and cost are %s:usage", Source)
+		c.uiAt(agentimport.Kept, "agentimport/usage-detail", req.ui, "the request record's usage and cost are %s:usage", Source)
 		return nil
 	}
 	if m.Metrics != nil && m.Metrics.Tokens != nil {

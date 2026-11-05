@@ -512,7 +512,8 @@ func compactJSON(raw json.RawMessage) string {
 
 // usage converts pi's usage to the Responses shape: input counts the
 // cache reads and writes pi counts apart, cached tokens are the reads,
-// and reasoning tokens are already in the output.
+// the writes are the cache-write extension's, and reasoning tokens are
+// already in the output.
 func usage(u *pi.Usage) *openresponses.Usage {
 	if u == nil {
 		return nil
@@ -522,6 +523,13 @@ func usage(u *pi.Usage) *openresponses.Usage {
 		OutputTokens: int(u.Output),
 	}
 	ou.InputTokensDetails.CachedTokens = int(u.CacheRead)
+	var split map[string]int64
+	if u.CacheWrite1h != nil {
+		// pi's cacheWrite1h is the part of cacheWrite kept an hour,
+		// which only Anthropic reports; the rest is its 5-minute entry.
+		split = map[string]int64{"5m": u.CacheWrite - *u.CacheWrite1h, "1h": *u.CacheWrite1h}
+	}
+	agentimport.CacheWrites(&ou.InputTokensDetails, u.CacheWrite, split)
 	if u.Reasoning != nil {
 		ou.OutputTokensDetails.ReasoningTokens = int(*u.Reasoning)
 	}

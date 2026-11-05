@@ -60,6 +60,15 @@ func (c *converter) userLine(l *claudecode.Line, tail string) (string, error) {
 	if src := origin(l); src != nil {
 		e.Source = src
 		skip = append(skip, "origin")
+		if src.Kind == agentsession.TriggerHuman && composed(l) {
+			// Format 0.21: kind human is the person's words, and a writer
+			// marks a message it composed with another kind. The origin
+			// as written stays in the line's members.
+			src.Kind = composedKind
+			skip = skip[:len(skip)-1]
+			c.addf(agentimport.Repaired, "claudecode/composed-human", l,
+				"a message Claude Code composed (isMeta, a compact summary or promptSource system) whose origin says human has the source kind %s; its origin is kept in %s:line", composedKind, Source)
+		}
 	}
 	if !l.Message.Content.IsText {
 		if err := c.blockMembers(e, l, l.Message.Content.Blocks...); err != nil {
@@ -130,6 +139,23 @@ func (c *converter) skillRead(l *claudecode.Line, tail string) (string, error) {
 		return "", err
 	}
 	return id, nil
+}
+
+// composedKind is the source kind of a message Claude Code composed
+// whose origin says human, Claude Code's own promptSource for such a
+// message.
+const composedKind = "system"
+
+// composed reports whether Claude Code composed the prompt l rather
+// than took it from the person: a message it marks isMeta, a compact
+// summary, or one whose promptSource is system.
+func composed(l *claudecode.Line) bool {
+	if l.IsMeta || l.IsCompactSummary {
+		return true
+	}
+	var ps string
+	_ = json.Unmarshal(l.Extra["promptSource"], &ps)
+	return ps == "system"
 }
 
 // origin maps how a prompt arrived to the item's source trigger: kind

@@ -3,4 +3,4 @@ claudecode: 8 lines: mapped 8 kept 0 dropped 0 malformed 0
              cwd                                             1
              sessionId                                       1
   kept     agentimport/provenance                            1  the import is recorded in the header member agentimport:source
-  kept     agentimport/usage-detail                          4  cache writes are folded into input_tokens; the native usage is claudecode:usage (at 2, 4, 6, 8)
+  kept     agentimport/usage-detail                          4  the native usage, with what Responses usage has no place for (the service tier, server tool use), is claudecode:usage (at 2, 4, 6, 8)
