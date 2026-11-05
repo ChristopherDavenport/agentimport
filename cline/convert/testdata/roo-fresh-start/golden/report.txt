@@ -7,7 +7,7 @@ cline: 18 elements and files: mapped 15 kept 2 dropped 1 malformed 0
              history item cwd                                1
              task id                                         1
   kept     agentimport/provenance                            1  the import is recorded in the header member agentimport:source
-  kept     agentimport/usage-detail                          4  cache writes are folded into input_tokens; the request record's usage and cost are cline:usage (at ui_messages.json:2, ui_messages.json:3, ui_messages.json:6, ui_messages.json:7)
+  kept     agentimport/usage-detail                          4  the request record's usage and cost are cline:usage (at ui_messages.json:2, ui_messages.json:3, ui_messages.json:6, ui_messages.json:7)
   kept     cline/compaction-marker                           1  the requests keep nothing written before this point, so a custom marker written before the compaction is its first_kept, which puts nothing in context (at api_conversation_history.json:6)
   kept     cline/history-item                                1  the task's index entry is the header member cline:history_item
   kept     cline/members                                     6  the message's members condenseParent are cline:message (at api_conversation_history.json:1, api_conversation_history.json:2, api_conversation_history.json:3, api_conversation_history.json:4, api_conversation_history.json:5)

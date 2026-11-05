@@ -113,8 +113,9 @@ func (c *conv) usageOf(u *openhands.TokenUsage) (*openresponses.Usage, map[strin
 		InputTokensDetails:  openresponses.InputTokensDetails{CachedTokens: read},
 		OutputTokensDetails: openresponses.OutputTokensDetails{ReasoningTokens: openhands.Count(u.ReasoningTokens)},
 	}
+	agentimport.CacheWrites(&use.InputTokensDetails, int64(write), nil)
 	extra := map[string]int{}
-	for name, raw := range map[string]json.RawMessage{"cache_write_tokens": u.CacheWriteTokens, "context_window": u.ContextWindow, "per_turn_token": u.PerTurnToken} {
+	for name, raw := range map[string]json.RawMessage{"context_window": u.ContextWindow, "per_turn_token": u.PerTurnToken} {
 		if n := openhands.Count(raw); n > 0 {
 			extra[name] = n
 		}
@@ -156,11 +157,7 @@ func (c *conv) joinUsage(i int, e *agentsession.ResponseEntry, native string) er
 		if err := c.b.Member(e, "usage", extra); err != nil {
 			return err
 		}
-		if extra["cache_write_tokens"] > 0 {
-			c.at(agentimport.Kept, "agentimport/usage-detail", i, "cache writes have no place in Responses usage; OpenHands counts them in prompt tokens, and the count is in %s:usage", Source)
-		} else {
-			c.at(agentimport.Kept, "openhands/usage-member", i, "the context window and the per-turn tokens OpenHands records with the usage are in %s:usage", Source)
-		}
+		c.at(agentimport.Kept, "openhands/usage-member", i, "the context window and the per-turn tokens OpenHands records with the usage are in %s:usage", Source)
 	}
 	return nil
 }

@@ -356,8 +356,8 @@ func TestResponses(t *testing.T) {
 	}
 	res := convertFixture(t, fx["plain"], Options{})
 	resps, _ := responses(t, res.Sessions[0])
-	if _, ok := resps[1].Unknown[Source+":usage"]; !ok || resps[1].Usage.InputTokensDetails.CachedTokens != 100 {
-		t.Error("the cache writes are not kept")
+	if n, ok := resps[1].Usage.InputTokensDetails.CacheWriteTokens(); !ok || n != 40 || resps[1].Usage.InputTokensDetails.CachedTokens != 100 {
+		t.Error("the cache writes are not carried")
 	}
 }
 

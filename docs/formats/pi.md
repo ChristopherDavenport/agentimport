@@ -162,7 +162,9 @@ parts in order; each part is an item, tied to the response by
   completed, `length` incomplete, `error` failed with `errorMessage`),
   and the usage: pi's `input` excludes cache reads and writes, so
   `input_tokens` is input + cache read + cache write, `cached_tokens`
-  cache read and `reasoning_tokens` `reasoning`. Native usage and its
+  cache read, `openresponses-experimental.cache_write_tokens` cache write, split by
+  TTL when pi gives `cacheWrite1h` (the `1h` entry, the rest `5m`), and
+  `reasoning_tokens` `reasoning`. Native usage and its
   dollar cost are `pi:usage`; `api`, `provider`, `rawStopReason` and the
   rest are `pi:message`.
 - An attempt that stopped with `error` or `aborted` is written, then
@@ -272,7 +274,7 @@ every converter can report are in [README.md](README.md).
 | --- | --- | --- |
 | `agentimport/reasoning-provider` | gap | An Anthropic, Bedrock or Gemini signature is in `encrypted_content`, which says nothing of the provider that can replay it; the entry carries `pi:provider`. |
 | `agentimport/tool-error` | lossy | A tool result had `isError`, which pi sends a provider that takes it; the output's entry is `failed`, and `function_call_output` has no error flag a request carries (Open Responses), so a rebuilt request does not send it. |
-| `agentimport/usage-detail` | kept | Usage has members Responses usage lacks (cache writes, the dollar cost); they are in `pi:usage`. |
+| `agentimport/usage-detail` | kept | Usage has members Responses usage lacks (the dollar cost); the native usage is `pi:usage`. |
 | `agentimport/context-replace` | gap | A context edit replaced a message's content: a user or extension message is omitted and its replacement written after; an assistant message or tool result stays and the edit is a custom entry. |
 | `agentimport/omit-summary` | gap | A context edit left a branch summary out of context; `omit` names items alone, so it stays. |
 | `agentimport/info-clear` | gap | A `session_info` with an empty name cleared pi's session name; the format cannot clear one, so nothing is written. |

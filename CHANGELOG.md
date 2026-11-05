@@ -27,6 +27,21 @@ versions may break the API.
   header said inline and its references read as text. The header's
   `media` is now `sidecar`, and the member leaves `atif:extra`.
 
+- **Fix: cache writes are carried in the usage (#37) (breaking: the IDs
+  of responses that wrote to the cache, and of every entry after one,
+  move).** Each converter folded a response's cache writes into
+  `input_tokens` and dropped the count, so a price table priced them as
+  plain input. The Claude Code, pi, Cline and Roo, Cline SDK, OpenHands,
+  OpenCode and Codex converters now set openresponses extensions §5's
+  `openresponses-experimental.cache_write_tokens`, and
+  `openresponses-experimental.cache_write_tokens_by_ttl` where the
+  source splits it (Claude Code's `cache_creation`, pi's
+  `cacheWrite1h`), as `providers/anthropic` does; the new
+  `agentimport.CacheWrites` sets them. OpenHands and OpenCode no longer
+  keep the count in their `:usage` member, Codex keeps its native usage
+  only for members it does not map, and `agentimport/usage-detail` no
+  longer says the writes have no place.
+
 ## v0.0.2 - 2026-11-04
 
 - Dependencies: agentsession v0.0.35 to v0.0.37, format 0.18 to 0.20;

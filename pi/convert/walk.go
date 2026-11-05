@@ -182,7 +182,7 @@ func (c *converter) usageEntry(l *pi.Line, tail string) (string, error) {
 	if l.Usage != nil {
 		data[Source+":usage"] = l.Usage
 		c.addf(agentimport.Kept, "agentimport/usage-detail", l,
-			"cache writes are folded into input_tokens and the cost is the data member %s:usage", Source)
+			"the usage, with its cost, is the data member %s:usage", Source)
 	}
 	raw, err := json.Marshal(data)
 	if err != nil {

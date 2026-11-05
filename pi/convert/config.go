@@ -427,7 +427,7 @@ func (c *converter) summaryMembers(e agentsession.Entry, l *pi.Line) error {
 			return err
 		}
 		c.addf(agentimport.Kept, "agentimport/usage-detail", l,
-			"cache writes are folded into input_tokens; the native usage and its cost are %s:usage", Source)
+			"the native usage and its cost are %s:usage", Source)
 	}
 	if len(l.Details) > 0 && string(l.Details) != "null" {
 		if c.opts.Slim {

@@ -507,6 +507,7 @@ func (c *converter) responseEntry(r *claudecode.Response, stop string) (*agentse
 			ou.InputTokensDetails.CachedTokens = int(u.CacheReadInputTokens)
 			ou.OutputTokensDetails.ReasoningTokens = int(thinking)
 			ou.TotalTokens = ou.InputTokens + ou.OutputTokens
+			agentimport.CacheWrites(&ou.InputTokensDetails, u.CacheCreationInputTokens, cacheSplit(usage))
 			e.Usage = &ou
 		}
 		if err := c.b.Member(e, "usage", usage); err != nil {
@@ -514,7 +515,7 @@ func (c *converter) responseEntry(r *claudecode.Response, stop string) (*agentse
 		}
 		if !copied {
 			c.addf(agentimport.Kept, "agentimport/usage-detail", last,
-				"cache writes are folded into input_tokens; the native usage is %s:usage", Source)
+				"the native usage, with what Responses usage has no place for (the service tier, server tool use), is %s:usage", Source)
 		}
 		if len(usages) > 1 {
 			c.addf(agentimport.Lossy, "claudecode/usage-snapshots", last,
@@ -722,4 +723,19 @@ func waitedFor(a *claudecode.Agent, result *claudecode.Line) bool {
 		}
 	}
 	return a.Meta != nil && a.Meta.RequestShape == "foreground"
+}
+
+// cacheSplit is the native usage's cache_creation as a split by TTL,
+// nil when it has none, as providers/anthropic reads it.
+func cacheSplit(usage json.RawMessage) map[string]int64 {
+	var u struct {
+		CacheCreation *struct {
+			FiveMinutes int64 `json:"ephemeral_5m_input_tokens"`
+			OneHour     int64 `json:"ephemeral_1h_input_tokens"`
+		} `json:"cache_creation"`
+	}
+	if json.Unmarshal(usage, &u) != nil || u.CacheCreation == nil {
+		return nil
+	}
+	return map[string]int64{"5m": u.CacheCreation.FiveMinutes, "1h": u.CacheCreation.OneHour}
 }

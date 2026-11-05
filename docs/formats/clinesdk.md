@@ -241,7 +241,7 @@ and nothing before it survives.
 | `tool_use` | `function_call`, arguments the input as JSON.stringify writes it; a Gemini `signature` a `reasoning` before it |
 | `media`, any other block | `cline.<type>` item carrying the block |
 | assistant message | a `response` after its items: `response_id` made from its position, `model`, `usage`, status completed |
-| `metrics` | `usage`: `input_tokens` is `inputTokens`, the whole input already; `cached_tokens` `cacheReadTokens`; the metrics, cache writes and cost included, `clinesdk:usage` |
+| `metrics` | `usage`: `input_tokens` is `inputTokens`, the whole input already; `cached_tokens` `cacheReadTokens`; `openresponses-experimental.cache_write_tokens` `cacheWriteTokens`; the metrics, cost included, `clinesdk:usage` |
 | a message's other members (`id`, `metadata`, …) | `clinesdk:message` on its first entry |
 | refused call (`… -- NOT a tool or system failure. …`, or a tool its policy disables) | a `reject` `decision` before the output, by `human`, or `policy` when no approval callback or the policy refused |
 | `metadata.importedFrom` | header member `clinesdk:imported_from` |
@@ -341,7 +341,7 @@ The report lists the session's ID and working directory (`agentimport/identity`)
 | `agentimport/context-replace` | gap | Cline sends an item rewritten from a request on: an outdated read, a cut assistant text. The item stays as first sent; the rewrite is a custom entry. |
 | `agentimport/reasoning-provider` | gap | A thinking or Gemini thought signature is in `encrypted_content`, the message's provider in `clinesdk:provider`. |
 | `agentimport/tool-error` | lossy | A tool result's `is_error`, which the model was sent, makes the output's entry `failed`; `function_call_output` has no error flag a request carries (Open Responses), so a rebuilt request does not send it. |
-| `agentimport/usage-detail` | kept | Cache writes, in the input already, and the cost are `clinesdk:usage`. |
+| `agentimport/usage-detail` | kept | The metrics, with the cost, are `clinesdk:usage`; the cache writes, in the input already, are also `openresponses-experimental.cache_write_tokens`. |
 | `clinesdk/child-failed` | dropped | A sub-agent's or team task's history that could not be converted. |
 | `clinesdk/children-alone` | dropped | A child not converted, with `Options.Alone`. |
 | `clinesdk/compaction-copy` | dropped | The sidecar's copy of a history message, which the compaction keeps from `first_kept`. |

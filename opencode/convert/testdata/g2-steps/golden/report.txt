@@ -11,7 +11,6 @@ opencode: 39 records: mapped 32 kept 7 dropped 0 malformed 0
              session.directory                               1
              session.id                                      1
   kept     agentimport/provenance                            1  the import is recorded in the header's agentimport:source member
-  kept     agentimport/usage-detail                          1  cache writes have no place in Responses usage; they are folded into input tokens, and the count, with the cost, is in opencode:usage
   kept     opencode/empty-text                               1  an empty text part, which the provider is not sent, is no item; it is kept in opencode:parts
   kept     opencode/file-expanded                            1  a text/plain file part, which OpenCode expands into synthetic text when the prompt is made and does not send itself; it is kept in opencode:unsent
   kept     opencode/ignored-text                             2  an ignored text part, which OpenCode does not send; it is kept in opencode:unsent
@@ -20,4 +19,4 @@ opencode: 39 records: mapped 32 kept 7 dropped 0 malformed 0
   kept     opencode/step-part                                2  a part of type patch is not sent; it is kept in opencode:parts
   kept     opencode/synthetic-text                           1  text OpenCode wrote into the user's message, which it sends with it; the item entry carries opencode:synthetic
   kept     opencode/unsent-part                              1  a part of type agent, which OpenCode does not send in a user message; it is kept in opencode:unsent
-  kept     opencode/usage-member                             1  the cost and the total OpenCode records with the usage are in opencode:usage
+  kept     opencode/usage-member                             2  the cost and the total OpenCode records with the usage are in opencode:usage

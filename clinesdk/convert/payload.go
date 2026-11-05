@@ -803,7 +803,7 @@ func (sc *sconv) response(k int, m *clinesdk.Message, respID string, ts time.Tim
 			if err := sc.b.Member(e, "usage", m.Metrics); err != nil {
 				return nil, err
 			}
-			sc.at(agentimport.Kept, "agentimport/usage-detail", k, "inputTokens counts cache reads and writes already; cacheReadTokens is cached_tokens, and the metrics with the cache writes and the cost are %s:usage", Source)
+			sc.at(agentimport.Kept, "agentimport/usage-detail", k, "inputTokens counts cache reads and writes already; cacheReadTokens is cached_tokens, cacheWriteTokens the cache-write extension's, and the metrics with the cost are %s:usage", Source)
 		}
 	}
 	rest, err := messageRest(m, "modelInfo", "metrics")
@@ -845,7 +845,8 @@ func copyWhose(why string) string {
 }
 
 // usage is the Responses usage of Cline's metrics: inputTokens is the
-// whole input already, cache reads included.
+// whole input already, cache reads and writes included; the writes are
+// the cache-write extension's.
 func usage(x *clinesdk.Metrics) *openresponses.Usage {
 	n := func(raw json.RawMessage) int {
 		v, exact, ok := clinesdk.Int(raw)
@@ -856,6 +857,7 @@ func usage(x *clinesdk.Metrics) *openresponses.Usage {
 	}
 	u := &openresponses.Usage{InputTokens: n(x.InputTokens), OutputTokens: n(x.OutputTokens)}
 	u.InputTokensDetails.CachedTokens = n(x.CacheReadTokens)
+	agentimport.CacheWrites(&u.InputTokensDetails, int64(n(x.CacheWriteTokens)), nil)
 	u.TotalTokens = u.InputTokens + u.OutputTokens
 	return u
 }

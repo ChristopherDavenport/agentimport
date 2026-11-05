@@ -7,7 +7,7 @@ clinesdk: 6 files and elements: mapped 6 kept 0 dropped 0 malformed 0
              cwd                                             1
              session_id                                      1
   kept     agentimport/provenance                            1  the import is recorded in the header member agentimport:source
-  kept     agentimport/usage-detail                          2  inputTokens counts cache reads and writes already; cacheReadTokens is cached_tokens, and the metrics with the cache writes and the cost are clinesdk:usage (at session #1.messages.json:2, session #1.messages.json:4)
+  kept     agentimport/usage-detail                          2  inputTokens counts cache reads and writes already; cacheReadTokens is cached_tokens, cacheWriteTokens the cache-write extension's, and the metrics with the cost are clinesdk:usage (at session #1.messages.json:2, session #1.messages.json:4)
   kept     clinesdk/manifest                                 1  the manifest is the header member clinesdk:manifest
   kept     clinesdk/members                                  4  the message's members the session has no place for are clinesdk:message (at session #1.messages.json:1, session #1.messages.json:2, session #1.messages.json:3, session #1.messages.json:4)
 clinesdk: 8 files and elements: mapped 8 kept 0 dropped 0 malformed 0
@@ -20,7 +20,7 @@ clinesdk: 8 files and elements: mapped 8 kept 0 dropped 0 malformed 0
              cwd                                             1
              session_id                                      1
   kept     agentimport/provenance                            1  the import is recorded in the header member agentimport:source
-  kept     agentimport/usage-detail                          1  inputTokens counts cache reads and writes already; cacheReadTokens is cached_tokens, and the metrics with the cache writes and the cost are clinesdk:usage (at session #1.messages.json:6)
+  kept     agentimport/usage-detail                          1  inputTokens counts cache reads and writes already; cacheReadTokens is cached_tokens, cacheWriteTokens the cache-write extension's, and the metrics with the cost are clinesdk:usage (at session #1.messages.json:6)
   kept     clinesdk/copied-usage                             2  the response is a copy of the forked session's history, whose usage is clinesdk:copied_usage, so it is not counted twice (at session #1.messages.json:2, session #1.messages.json:4)
   kept     clinesdk/manifest                                 1  the manifest is the header member clinesdk:manifest
   kept     clinesdk/members                                  6  the message's members the session has no place for are clinesdk:message (at session #1.messages.json:1, session #1.messages.json:2, session #1.messages.json:3, session #1.messages.json:4, session #1.messages.json:5)

@@ -622,12 +622,12 @@ func (c *converter) responseEntry(p *pending, respID string) (*agentsession.Resp
 				"the response was copied from the parent thread; its usage, which the parent's session counts, is %s:usage and not the entry's", Source)
 		default:
 			e.Usage = usage(p.usage)
-			if p.usage.CacheWriteInputTokens != 0 || len(nonNull(p.usage.Extra)) > 0 {
+			if len(nonNull(p.usage.Extra)) > 0 {
 				if err := c.b.Member(e, "usage", p.usage); err != nil {
 					return nil, nil, err
 				}
 				c.addf(agentimport.Kept, "agentimport/usage-detail", src,
-					"usage has members Responses usage lacks (cache writes); the native usage is %s:usage", Source)
+					"usage has members Responses usage lacks (%s); the native usage is %s:usage", memberNames(nonNull(p.usage.Extra)), Source)
 			}
 		}
 	} else {
@@ -666,6 +666,7 @@ func usage(u *codex.TokenUsage) *openresponses.Usage {
 		TotalTokens:  int(u.TotalTokens),
 	}
 	ou.InputTokensDetails.CachedTokens = int(u.CachedInputTokens)
+	agentimport.CacheWrites(&ou.InputTokensDetails, u.CacheWriteInputTokens, nil)
 	ou.OutputTokensDetails.ReasoningTokens = int(u.ReasoningOutputTokens)
 	if ou.TotalTokens == 0 {
 		ou.TotalTokens = ou.InputTokens + ou.OutputTokens

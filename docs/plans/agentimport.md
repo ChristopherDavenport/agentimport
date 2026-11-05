@@ -261,8 +261,10 @@ session replays through the same provider adapter:
   `redacted_thinking`, server tools and blocks newer than the converter
   → `anthropic.<block type>` items carrying the block.
 - Anthropic usage → Responses usage: `input_tokens` is input + cache
-  read + cache creation, `cached_tokens` is cache read; the cache-write
-  split, server tool counts and service tier are kept, `lossy`.
+  read + cache creation, `cached_tokens` is cache read, the cache
+  creation is `openresponses-experimental.cache_write_tokens` split by TTL in
+  `openresponses-experimental.cache_write_tokens_by_ttl` (openresponses
+  extensions §5); server tool counts and service tier are kept, `lossy`.
 - A tool call's arguments are its input re-encoded as a JSON string.
 - Images stay inline as data URLs.
 
