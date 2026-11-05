@@ -87,6 +87,9 @@ func (fam *family) one(in docInput, tgt target, report *agentimport.Report) ([]*
 			if s, err = agentimport.Finish(s); err != nil {
 				return nil, "", fmt.Errorf("%s: rebuilt session does not verify: %w", displayName(in.name), err)
 			}
+			// The rebuilt entries are appended without the builder, which
+			// checks the usages of the others.
+			agentimport.CheckUsage(c.report, in.name, s)
 			children, err := c.rebuildChildren()
 			if err != nil {
 				return nil, "", err

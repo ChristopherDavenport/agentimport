@@ -150,7 +150,15 @@ item's line.
 Codex's usage is the Responses shape already: `input_tokens` counts the
 cached input, as OpenAI counts it. `cache_write_input_tokens` is
 `openresponses-experimental.cache_write_tokens` (openresponses extensions §5),
-counted in `input_tokens` too.
+counted in `input_tokens` too: Codex copies `input_tokens` and
+`input_tokens_details.cache_write_tokens` from the Responses API's usage
+unchanged (codex-rs `codex-api/src/sse/responses.rs`, whose
+`parses_cache_write_token_usage` test reads input 100 as 40 cached and
+60 written, at openai/codex b93a7b1), and codex-acp subtracts both from
+it to get the fresh input (`src/TokenCount.ts`, at
+agentclientprotocol/codex-acp 519c267). A usage whose cache reads and
+writes come to more than its input is kept as recorded and reported
+(`agentimport/usage-inconsistent`).
 
 ### What Codex sends that the session holds as it was recorded
 

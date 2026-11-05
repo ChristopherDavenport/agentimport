@@ -42,6 +42,16 @@ versions may break the API.
   only for members it does not map, and `agentimport/usage-detail` no
   longer says the writes have no place.
 
+- **Fix: a usage whose cache reads and writes exceed its input is
+  reported (#37).** openresponses extensions §5 counts both inside the
+  input, so such a usage prices its uncached input below zero. Every
+  converter keeps the counts as the source reported them and reports
+  `agentimport/usage-inconsistent` once per session, naming the first;
+  `agentimport.CheckUsage` checks a session built without a `Builder`.
+  Codex's synthetic fixture had one (input 130, 100 cached, 40
+  written); codex-rs counts the writes in `input_tokens`, so its input
+  is now 150 and the IDs of its last entries move.
+
 ## v0.0.2 - 2026-11-04
 
 - Dependencies: agentsession v0.0.35 to v0.0.37, format 0.18 to 0.20;
