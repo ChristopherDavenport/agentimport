@@ -285,3 +285,71 @@ func TestRebuildLeaf(t *testing.T) {
 		}
 	}
 }
+
+// TestRebuildSidecarMedia imports the document of a sidecar session,
+// whose raw items keep the sidecar: references the entry IDs hash over
+// and whose extra names the media (RFC 0001, Projections/ATIF, 0.21):
+// every entry rebuilds to its id, and the header's media is sidecar
+// again, out of the kept extra, so the references read as references.
+func TestRebuildSidecarMedia(t *testing.T) {
+	at := time.Date(2026, 9, 3, 10, 0, 0, 0, time.UTC)
+	png := []byte("\x89PNG\r\n\x1a\nsidecar test image")
+	hash := agentsession.HashBytes(png)
+	s := agentsession.New(agentsession.Header{ID: "rb-side", CreatedAt: at, Media: agentsession.MediaSidecar,
+		Harness: &agentsession.Harness{Name: "rb", Version: "1"}})
+	for _, e := range []agentsession.Entry{
+		&agentsession.ConfigEntry{Model: "m-1"},
+		agentsession.NewItemEntry(openresponses.UserMessage(&openresponses.InputText{Text: "Look."},
+			&openresponses.InputImage{ImageURL: "sidecar:" + hash})),
+		&agentsession.ItemEntry{Item: openresponses.AssistantText("A test image."), ResponseID: "resp_1"},
+		&agentsession.ResponseEntry{ResponseID: "resp_1", Model: "m-1", Status: openresponses.ResponseStatusCompleted},
+	} {
+		at = at.Add(time.Second)
+		e.Base().Timestamp = at
+		if _, err := s.Append(e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	blobs := func(session, h string) ([]byte, string, error) {
+		if session != "rb-side" || h != hash {
+			return nil, "", os.ErrNotExist
+		}
+		return png, "image/png", nil
+	}
+	tr, err := export.At(s, s.Leaf())
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, err := export.ToATIF(tr, export.Options{Blobs: blobs})
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "agent", "trajectory.json")
+	if err := export.WriteDocument(path, doc, export.WithBlobs(blobs)); err != nil {
+		t.Fatal(err)
+	}
+	res := convertFixture(t, path, Options{})
+	for _, f := range res.Report.Findings {
+		if f.Code == "atif/entry-not-rebuilt" || f.Code == "atif/not-rebuilt" {
+			t.Errorf("%+v", f)
+		}
+	}
+	got := reread(t, res.Sessions[0])
+	if m := got.Header().Media; m != agentsession.MediaSidecar {
+		t.Errorf("media %q, want %q", m, agentsession.MediaSidecar)
+	}
+	var ext map[string]map[string]json.RawMessage
+	_ = json.Unmarshal(got.Header().Extra[Source+":extra"], &ext)
+	if v, ok := ext["agentsession"]["media"]; ok {
+		t.Errorf("the media is still kept in %s:extra: %s", Source, v)
+	}
+	refs, err := agentsession.SessionBlobs(got)
+	if err != nil || !slices.Equal(refs, []string{hash}) {
+		t.Errorf("blobs %v (%v), want %s", refs, err, hash)
+	}
+	for _, e := range s.Path(s.Leaf()) {
+		if _, ok := got.Entry(e.Base().ID); !ok {
+			t.Errorf("%T %s is not rebuilt to its id", e, e.Base().ID)
+		}
+	}
+}

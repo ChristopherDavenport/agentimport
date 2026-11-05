@@ -273,7 +273,14 @@ document holds the whole path: from a first entry to the leaf its
 `extra.agentsession.leaf` names (its `trajectory_id` when absent), every step naming an entry of the document (a
 step that names none is left out, `atif/step-not-rebuilt`), and the
 root's `redacted` `true`; otherwise they stay in `atif:extra`
-and the report says why (`atif/redaction-not-restored`). Every step is
+and the report says why (`atif/redaction-not-restored`). The header's
+`media` is `sidecar` when the document's `extra.agentsession.media`
+says so, as format 0.21's exporter writes for a sidecar session, and
+leaves the kept extra: the raw items keep the `sidecar:` references
+the ids cover, which are references only in a sidecar session. The
+blobs the exporter wrote beside the document under `sidecar/` are not
+read: the references resolve only once the store the session is
+written to holds those blobs. Every step is
 counted mapped, since the entries hold what it carried, but one that
 names no entry, which is dropped. The sub-agent trajectories a document
 embeds are rebuilt with it, each into the session its own

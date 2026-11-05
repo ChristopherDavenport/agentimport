@@ -273,6 +273,12 @@ func (c *docConv) header() (agentsession.Header, error) {
 	if as := object(ext["agentsession"]); strings.HasPrefix(str(as["format"]), "agentsession/") {
 		c.exporter = true
 		h.CWD = str(as["cwd"])
+		// A sidecar session's projection names its media (0.21), and its
+		// raw items keep the sidecar: references, which read as
+		// references only under a header that says sidecar.
+		if str(as["media"]) == agentsession.MediaSidecar {
+			h.Media = agentsession.MediaSidecar
+		}
 	}
 	if c.in.synthetic {
 		return h, nil

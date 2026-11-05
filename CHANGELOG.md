@@ -19,6 +19,14 @@ versions may break the API.
   kind `system`, and its origin stays in `claudecode:line`
   (`claudecode/composed-human`). Claude Code was not seen to write one.
 
+- **Fix (format 0.21): an ATIF document of a sidecar session imports
+  as a sidecar session.** agentsession v0.0.38's exporter names a
+  sidecar session's `media` under `extra.agentsession`, and its raw
+  items keep the `sidecar:` references the entry IDs hash over; the
+  converter kept that member in `atif:extra`, so the rebuilt session's
+  header said inline and its references read as text. The header's
+  `media` is now `sidecar`, and the member leaves `atif:extra`.
+
 ## v0.0.2 - 2026-11-04
 
 - Dependencies: agentsession v0.0.35 to v0.0.37, format 0.18 to 0.20;
