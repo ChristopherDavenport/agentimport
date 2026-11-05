@@ -52,6 +52,13 @@ versions may break the API.
   written); codex-rs counts the writes in `input_tokens`, so its input
   is now 150 and the IDs of its last entries move.
 
+- **Fix: an OpenHands ACP usage that reports cache writes counts them
+  apart from its input (#37).** The input was taken to count the cache
+  unless the reads exceeded it, so an ACP turn with writes and few or
+  no reads understated its input. claude-agent-acp and codex-acp, the
+  adapters that report writes, count reads and writes apart, so both
+  are now folded into the input, as `providers/anthropic` does.
+
 ## v0.0.2 - 2026-11-04
 
 - Dependencies: agentsession v0.0.35 to v0.0.37, format 0.18 to 0.20;
