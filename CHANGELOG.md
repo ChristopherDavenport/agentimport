@@ -11,6 +11,14 @@ versions may break the API.
   and openresponses v0.0.18 to v0.0.19; every converted session's
   header names `agentsession/0.21`, and the goldens are regenerated.
 
+- **Fix (format 0.21): Claude Code's `human` is the person's words
+  only (agentturn#303's rule).** A prompt's `origin.kind` was the
+  item's source kind as written, so a message Claude Code composed
+  whose origin said `human` read as the person's. Such a message
+  (`isMeta`, a compact summary, or `promptSource` `system`) now has the
+  kind `system`, and its origin stays in `claudecode:line`
+  (`claudecode/composed-human`). Claude Code was not seen to write one.
+
 ## v0.0.2 - 2026-11-04
 
 - Dependencies: agentsession v0.0.35 to v0.0.37, format 0.18 to 0.20;

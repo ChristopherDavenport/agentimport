@@ -626,3 +626,58 @@ func TestPublished(t *testing.T) {
 		}
 	}
 }
+
+// TestHumanOnlyTyped: a prompt's origin kind human is the item's
+// source kind human only on input the person typed (format 0.21). A
+// message Claude Code composed, one marked isMeta, a compact summary or
+// one whose promptSource is system, is marked composed with the kind
+// system, though its origin says human, and its origin stays in the
+// line's members.
+func TestHumanOnlyTyped(t *testing.T) {
+	const sid = "22222222-2222-4222-8222-000000000001"
+	env := `"isSidechain":false,"userType":"external","entrypoint":"cli","cwd":"/work/demo","version":"2.1.290","sessionId":"` + sid + `"`
+	lines := []string{
+		`{"type":"user","uuid":"u1","parentUuid":null,"timestamp":"2026-09-01T10:00:01Z","message":{"role":"user","content":"typed"},"promptSource":"typed","origin":{"kind":"human"},` + env + `}`,
+		`{"type":"user","uuid":"u2","parentUuid":"u1","timestamp":"2026-09-01T10:00:02Z","message":{"role":"user","content":"meta"},"isMeta":true,"origin":{"kind":"human"},` + env + `}`,
+		`{"type":"user","uuid":"u3","parentUuid":"u2","timestamp":"2026-09-01T10:00:03Z","message":{"role":"user","content":"system"},"promptSource":"system","origin":{"kind":"human"},` + env + `}`,
+		`{"type":"user","uuid":"u4","parentUuid":"u3","timestamp":"2026-09-01T10:00:04Z","message":{"role":"user","content":"accepted"},"promptSource":"suggestion_accepted","origin":{"kind":"human"},` + env + `}`,
+		`{"type":"user","uuid":"u5","parentUuid":"u4","timestamp":"2026-09-01T10:00:05Z","message":{"role":"user","content":"report"},"isMeta":true,"origin":{"kind":"peer","from":"a1"},` + env + `}`,
+	}
+	path := filepath.Join(t.TempDir(), sid+".jsonl")
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, res := convertFixture(t, path, Options{})
+	var got []string
+	for _, e := range res.Sessions[0].Entries() {
+		it, ok := e.(*agentsession.ItemEntry)
+		if !ok {
+			continue
+		}
+		m, ok := it.Item.(*openresponses.Message)
+		if !ok || m.Role != openresponses.RoleUser {
+			continue
+		}
+		kind := "-"
+		if it.Source != nil {
+			kind = it.Source.Kind
+		}
+		var line map[string]json.RawMessage
+		_ = json.Unmarshal(it.Unknown[Source+":line"], &line)
+		_, kept := line["origin"]
+		got = append(got, fmt.Sprintf("%s:%s:%v:%d", m.Content.Text(), kind, kept, agentsession.WordsOf(it)))
+	}
+	want := []string{
+		"typed:human:false:" + fmt.Sprint(agentsession.WordsPerson),
+		"meta:system:true:" + fmt.Sprint(agentsession.WordsComposed),
+		"system:system:true:" + fmt.Sprint(agentsession.WordsComposed),
+		"accepted:human:false:" + fmt.Sprint(agentsession.WordsPerson),
+		"report:peer:false:" + fmt.Sprint(agentsession.WordsComposed),
+	}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("sources:\n%q\nwant\n%q", got, want)
+	}
+	if !slices.Contains(res.Report.Codes(), "claudecode/composed-human") {
+		t.Errorf("no claudecode/composed-human: %v", res.Report.Codes())
+	}
+}

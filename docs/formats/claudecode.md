@@ -146,7 +146,13 @@ is the arguments and the model's is `claudecode:wire_input`.
 report), `source` `claudecode`, and the origin's other members as the
 trigger's own. A background agent reports back this way, after its
 call's output, so the report names the agent and the `peer` link names
-the agent's session.
+the agent's session. Kind `human` is the person's words (format 0.21),
+so it is written only on a prompt the person gave: one Claude Code
+composed (`isMeta`, a compact summary, or `promptSource` `system`)
+whose origin says `human` has the kind `system` instead, Claude Code's
+own term for it, and its `origin` stays in `claudecode:line`
+(`claudecode/composed-human`). A prompt with no `origin`, as Claude
+Code wrote before it had one, has no `source` and makes no claim.
 
 **Model switches.** A model change is a `config` delta with the new
 model and no `omit`. Claude Code keeps the earlier model's thinking in
@@ -273,6 +279,7 @@ the codes marked "kept, or dropped" are dropped instead.
 | `claudecode/system-line` | kept | A `system` line (`turn_duration`, `local_command`, `away_summary` and the like) is a custom entry. |
 | `claudecode/thinking-dropped` | lossy | The CLI left earlier thinking blocks out of a request (`input_transformations`); the path holds them, and the request the transformation names by index is not rebuilt to say which entries. |
 | `claudecode/thinking-empty` | lossy | A thinking block with neither text nor signature is an empty reasoning item. |
+| `claudecode/composed-human` | repaired | A message Claude Code composed (`isMeta`, a compact summary, or `promptSource` `system`) carries `origin.kind` `human`; its source kind is `system`, since `human` says the person wrote it, and the origin is kept in `claudecode:line`. |
 | `claudecode/transcript-only` | kept | A line marked `isVisibleInTranscriptOnly`, outside a compaction, was shown and not sent; it is a custom entry. |
 | `claudecode/tool-use-result` | kept, or dropped | The `toolUseResult` sidecar, the tool's structured output the model never saw, is `claudecode:tool_use_result`. |
 | `claudecode/undecodable-line` | kept | A line that is JSON but not of its type's shape is a custom entry. |
