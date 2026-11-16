@@ -13,7 +13,7 @@ decisions they settled, and what is known of the candidates.
 ## Module
 
 - Module path: `github.com/ChristopherDavenport/agentimport`.
-- Go 1.25 is the floor.
+- Go 1.26 is the floor.
 - Packages: `agentimport` (the report, `Builder`, `CallIDs`) at the
   root; per source, `<source>` (the native format) and
   `<source>/convert`; `cmd/agentimport`.

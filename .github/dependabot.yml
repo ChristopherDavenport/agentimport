@@ -1,0 +1,14 @@
+version: 2
+updates:
+  # One module and no go.work, so this entry updates the root go.mod
+  # alone. If a go.work or a nested module is ever added, give each
+  # module its own entry and limit / with allow, as openresponses and
+  # agentsession do (openresponses#85, agentsession#302).
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

@@ -18,7 +18,7 @@ time on it.
 
 ## Development
 
-Go 1.25 or later is required. The full local check is:
+Go 1.26 or later is required. The full local check is:
 
 ```sh
 make check        # gofmt, tidy, vet, deps, staticcheck, govulncheck, race tests
