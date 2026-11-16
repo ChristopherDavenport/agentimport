@@ -57,7 +57,7 @@ found defects the step before had passed.
 
 Run a fuzz target with `-fuzzminimizetime` bounded (a few seconds):
 minimising a multi-kilobyte seed otherwise takes minutes and looks
-like a hang. CI runs on Go 1.25 and stable; a golden that holds Go's
+like a hang. CI runs on Go 1.26 and stable; a golden that holds Go's
 own error text fails on one of them.
 
 Stacked pull requests land on their base branch, not on `main`, unless

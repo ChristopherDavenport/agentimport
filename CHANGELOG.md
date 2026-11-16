@@ -5,6 +5,16 @@ All user-visible changes to this library. The format follows
 uses [Semantic Versioning](https://semver.org/); before v1.0.0 minor
 versions may break the API.
 
+## Unreleased
+
+- Dependencies: modernc.org/sqlite v1.59.0 to v1.62.0, the version
+  agentsession's and agentmemory's sqlite stores are on, so a program
+  importing them with this module runs the tested version. v1.62
+  needs Go 1.26, so **the Go floor moves from 1.25 to 1.26**: the
+  module's go line reads `go 1.26.0` and CI tests 1.26.x and stable.
+  Dependabot now opens weekly updates for the module and the
+  workflows' actions (#39).
+
 ## v0.0.3 - 2026-11-05
 
 - Dependencies: agentsession v0.0.37 to v0.0.38, format 0.20 to 0.21,
