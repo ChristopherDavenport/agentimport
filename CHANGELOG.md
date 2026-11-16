@@ -13,7 +13,7 @@ versions may break the API.
   needs Go 1.26, so **the Go floor moves from 1.25 to 1.26**: the
   module's go line reads `go 1.26.0` and CI tests 1.26.x and stable.
   Dependabot now opens weekly updates for the module and the
-  workflows' actions. Closes #39.
+  workflows' actions (#39).
 
 ## v0.0.3 - 2026-11-05
 
