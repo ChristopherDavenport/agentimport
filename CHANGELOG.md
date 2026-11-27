@@ -5,7 +5,7 @@ All user-visible changes to this library. The format follows
 uses [Semantic Versioning](https://semver.org/); before v1.0.0 minor
 versions may break the API.
 
-## Unreleased
+## v0.0.5 - 2026-11-26
 
 - Dependencies: agentsession v0.0.38 to v0.0.42, format 0.21 to 0.22,
   and openresponses v0.0.19 to v0.0.20, which agentsession requires;
