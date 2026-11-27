@@ -1,7 +1,7 @@
 codex: 19 lines: mapped 7 kept 8 dropped 1 malformed 3
-  gap      agentimport/vcs-branch                            1  the git branch is the vcs member codex:branch; the format's vcs has no branch (at 1)
   dropped  codex/token-count-repeat                          1  a token count identical to the one before it (at 14)
   lossy    codex/call-without-output                         2  call bad_id__1 has no output; Codex sends later requests an output it makes up for it, which the rollout does not record (at 18, 18)
+  lossy    codex/checkout-at-cwd                             1  the git state is the checkout's at the session's working directory, listed at .; Codex records no repository root, so a session started below the root lists its working directory as the checkout's top (at 1)
   lossy    codex/no-model                                    1  no turn context named the model before this response (older rollouts record none); the response has no model (at 10)
   lossy    codex/response-id                                 1  the rollout names no response ids (only the token usage records of newer rollouts do); a response is named codex-line-<n> after its first item's line (at 10)
   lossy    codex/tools-unrecorded                            1  Codex does not record the tool definitions it sends the model; the session's config has none (at 1)
@@ -14,7 +14,7 @@ codex: 19 lines: mapped 7 kept 8 dropped 1 malformed 3
   kept     codex/mistyped-member                             1  members whose value is not of the type Codex defines are kept as written beside the object's other members: payload.status (at 19)
   kept     codex/orphan-output                               1  an output whose call is not on its path, which Codex drops from what it sends, is a custom entry (at 9)
   kept     codex/rate-limits                                 1  the rate limits reported with the usage are kept in codex:rate_limits (at 13)
-  kept     codex/repository-url                              1  the repository URL is the vcs member codex:repository_url (at 1)
+  kept     codex/repository-url                              1  the repository URL is the env member codex:repository_url (at 1)
   kept     codex/session-meta-members                        1  kept in the header member codex:session_meta: model_provider, originator, source (at 1)
   kept     codex/system-message                              1  a system message, which Codex never keeps in the history it sends, is a custom entry (at 6)
   kept     codex/token-count                                 1  the thread's running total and context window are kept in codex:token_count (at 13)

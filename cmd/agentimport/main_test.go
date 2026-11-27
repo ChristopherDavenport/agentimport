@@ -345,7 +345,7 @@ func TestStrictFails(t *testing.T) {
 		return outcome{res: &agentimport.Result{Report: r}}
 	}
 	unreached := agentimport.Finding{Code: "claudecode/unreached", Kind: agentimport.Dropped, Line: 3}
-	documented := agentimport.Finding{Code: "agentimport/vcs-branch", Kind: agentimport.Gap}
+	documented := agentimport.Finding{Code: "agentimport/fold-head", Kind: agentimport.Gap}
 	undocumented := agentimport.Finding{Code: "claudecode/nowhere", Kind: agentimport.Gap}
 	kept := agentimport.Finding{Code: "agentimport/provenance", Kind: agentimport.Kept}
 	for _, tc := range []struct {

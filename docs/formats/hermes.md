@@ -292,7 +292,7 @@ session row.
 | session row | header: `id` the session's ID, `created_at` from `started_at`, `cwd`, harness `hermes`; `agentimport:source`; the row's other columns in `hermes:session`, `session_model_usage`'s rows in `hermes:model_usage`, the schema version in `hermes:schema_version` |
 | `model`, system prompt | the first `config`: `model`, `instructions` from `system_prompts` by hash, else the row's column; `model_config` in `hermes:model_config` |
 | `title` | `info` name |
-| `git_branch`, `git_repo_root` | `env` with `vcs.system` git, the branch in `vcs.hermes:branch`, the root in `hermes:repo_root` |
+| `git_branch`, `git_repo_root` | `env` with `vcs.system` git and one checkout whose top is the root: at `.` when the root is the working directory, its relative name below it, its absolute path otherwise (`hermes/checkout-at-cwd` when the root is not a path a checkout takes), with the branch (git's `HEAD` is no branch); the root also in `hermes:repo_root` |
 | user row | `message` item, role user; `visible: false` for `display_kind` hidden or `display_metadata.model_only`; a delegation's delivered report has `source` kind `delegation`, `ref` its `display_metadata.delegation_id` |
 | system row | `message` item, role system, where it stands |
 | assistant row | reasoning items, a `message` item, `function_call` items, then a `response` (`response_id` `row-<id>`); `finish_reason` length or content_filter make it incomplete |
@@ -486,12 +486,12 @@ The report lists the session's ID and working directory (`agentimport/identity`)
 | --- | --- | --- |
 | `agentimport/fold-head` | gap | An in-place compaction that kept a head: the compaction's summary is the head's first item, verbatim; see [incompatibilities](../incompatibilities.md). |
 | `agentimport/reasoning-provider` | gap | Encrypted reasoning names no provider; the item entry carries `hermes:provider`. |
-| `agentimport/vcs-branch` | gap | The session's git branch, in the `env` entry's `vcs.hermes:branch`. |
 | `hermes/alternation` | lossy | User messages follow one another in the context at the leaf; a resume merges them, which is not reproduced. |
 | `hermes/api-content` | lossy | The row's `api_content`, what Hermes sent, is the item; the content it shows is in the row's columns. |
 | `hermes/branch-copy` | lossy | A branch starts with rows copied from its parent; they are its own entries, their responses marked `hermes:copied`. |
 | `hermes/call-id` | repaired | A call ID empty, malformed or used before in the session was renamed; the native ID is in `hermes:call_id`. |
 | `hermes/call-malformed` | repaired | Entries of `tool_calls` that are not objects; they are kept in the row's columns. |
+| `hermes/checkout-at-cwd` | lossy | The session's repository root is empty or not a path a checkout takes; the checkout is listed at `.`, the working directory. |
 | `hermes/child-alone` | lossy | A child session converted on its own, by `Alone`, the bound on nesting or its parent's failure; no link names it. |
 | `hermes/codex-messages` | lossy | The turn is the message items of `codex_message_items`, as the Codex route replays them, not its content, which is kept in `hermes:columns`. |
 | `hermes/compaction` | lossy | An in-place compaction, a `compaction` entry whose summary is its generation's first item; when that item is no message (a call, an output), no compaction is written, and the items before it are left out by `omit`. |

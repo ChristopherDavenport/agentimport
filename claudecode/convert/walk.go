@@ -351,11 +351,18 @@ func (c *converter) env(l *claudecode.Line, tail string, st *pathState) (string,
 	}
 	e := agentsession.NewEnvEntry(l.CWD)
 	if l.GitBranch != "" {
+		// The branch is the checkout's (RFC 0001, env, since 0.22). Claude
+		// Code records no repository root, so the checkout is the one at
+		// cwd, and its vcs is the entry's, as the format has a "." checkout
+		// carry.
 		e.VCS = &agentsession.VCS{System: "git"}
-		if err := e.VCS.SetMember(Source+":branch", l.GitBranch); err != nil {
-			return "", err
-		}
-		c.addf(agentimport.Gap, "agentimport/vcs-branch", l, "the git branch is the vcs member %s:branch; the format's vcs has no branch", Source)
+		e.Checkouts = []agentsession.Checkout{{
+			Path:   ".",
+			VCS:    &agentsession.VCS{System: "git"},
+			Branch: agentimport.CheckoutBranch(l.GitBranch),
+		}}
+		c.addf(agentimport.Lossy, "claudecode/checkout-at-cwd", l,
+			"the git branch is the branch of the checkout at the working directory, listed at .; Claude Code records no repository root, so a session run below the root lists its working directory as the checkout's top")
 	}
 	if l.Version != "" {
 		if err := c.b.Member(e, "version", l.Version); err != nil {

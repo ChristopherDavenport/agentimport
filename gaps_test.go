@@ -4,7 +4,8 @@ import "testing"
 
 func TestDocumentedGap(t *testing.T) {
 	for code, want := range map[string]bool{
-		"agentimport/vcs-branch":     true,
+		"agentimport/fold-head":      true,
+		"agentimport/vcs-branch":     false,
 		"atif/context-pruning":       true,
 		"agentimport/provenance":     false,
 		"agentimport/usage-detail":   false,

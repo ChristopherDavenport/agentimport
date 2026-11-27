@@ -1,5 +1,5 @@
 codex: 10 lines: mapped 10 kept 0 dropped 0 malformed 0
-  gap      agentimport/vcs-branch                            1  the git branch is the vcs member codex:branch; the format's vcs has no branch (at 1)
+  lossy    codex/checkout-at-cwd                             1  the git state is the checkout's at the session's working directory, listed at .; Codex records no repository root, so a session started below the root lists its working directory as the checkout's top (at 1)
   lossy    codex/no-status                                   3  no token count or usage record went with the response, which Codex writes when one completes; it has no status and no usage (at 4, 7, 10)
   lossy    codex/response-id                                 1  the rollout names no response ids (only the token usage records of newer rollouts do); a response is named codex-line-<n> after its first item's line (at 4)
   lossy    codex/tools-unrecorded                            1  Codex does not record the tool definitions it sends the model; the session's config has none (at 1)
@@ -10,6 +10,6 @@ codex: 10 lines: mapped 10 kept 0 dropped 0 malformed 0
              session_meta.id                                 1
   kept     agentimport/provenance                            1  the import is recorded in the header member agentimport:source
   kept     codex/git-members                                 1  git members x_upstream are vcs members under codex: (at 1)
-  kept     codex/repository-url                              1  the repository URL is the vcs member codex:repository_url (at 1)
+  kept     codex/repository-url                              1  the repository URL is the env member codex:repository_url (at 1)
   kept     codex/session-meta-members                        1  kept in the header member codex:session_meta: model_provider, originator, source (at 1)
   kept     codex/turn-context                                1  the turn's other settings (approval and sandbox policy and the like), which reach the model as messages the rollout records, are kept in codex:turn_context (at 2)

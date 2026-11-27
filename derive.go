@@ -186,6 +186,14 @@ func CommitRevision(command, output string) string {
 // after a commit and is left out, and so are the file hashes, which say
 // what the tree held before it. With no env in force it holds cwd and a
 // git vcs alone.
+//
+// The checkouts in force are repeated too (RFC 0001, env, since 0.22).
+// The checkout at "." takes the new vcs, which RFC 0001 has it carry,
+// and an absolute checkout holding the working directory takes the
+// revision, since the commit was made in its tree; the others are
+// repeated as they were. With no checkouts in force none is listed: the
+// commit says which revision the tree at cwd is on, not where its
+// checkout's top is.
 func RevisionEnv(base *agentsession.EnvEntry, cwd, rev string) *agentsession.EnvEntry {
 	env := agentsession.NewEnvEntry(cwd)
 	if base != nil {
@@ -205,6 +213,18 @@ func RevisionEnv(base *agentsession.EnvEntry, cwd, rev string) *agentsession.Env
 		env.VCS = &v
 	}
 	env.VCS.Revision, env.VCS.Dirty = rev, false
+	if base != nil && base.Checkouts != nil {
+		env.Checkouts = CloneCheckouts(base.Checkouts)
+		for i := range env.Checkouts {
+			c := &env.Checkouts[i]
+			switch {
+			case c.Path == ".":
+				c.VCS = cloneVCS(env.VCS)
+			case c.VCS != nil && holdsDir(c.Path, env.CWD):
+				c.VCS.Revision, c.VCS.Dirty = rev, false
+			}
+		}
+	}
 	return env
 }
 

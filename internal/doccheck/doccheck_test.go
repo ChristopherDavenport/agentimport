@@ -26,7 +26,7 @@ func TestSharedCodes(t *testing.T) {
 			t.Errorf("%s is in incompatibilities.md", c)
 		}
 	}
-	if !gaps["agentimport/vcs-branch"] {
-		t.Error("agentimport/vcs-branch is not in incompatibilities.md")
+	if !gaps["agentimport/fold-head"] {
+		t.Error("agentimport/fold-head is not in incompatibilities.md")
 	}
 }

@@ -193,6 +193,13 @@ func (c *converter) item(l *codex.Line) error {
 		}
 		for _, d := range ds {
 			d.Entry.Base().Timestamp = e.Timestamp
+			// A derived env repeats the one in force, and so its
+			// repository URL, which is an env member of this source's.
+			if env, ok := d.Entry.(*agentsession.EnvEntry); ok && c.st.env != nil {
+				if raw, ok := c.st.env.Unknown[Source+":repository_url"]; ok {
+					env.Unknown[Source+":repository_url"] = raw
+				}
+			}
 			if err := c.emit(d.Entry, l); err != nil {
 				return err
 			}
@@ -961,6 +968,14 @@ func (c *converter) turnContext(l *codex.Line) error {
 		if c.metaVCS != nil {
 			if under(c.metaCWD, tc.CWD) {
 				env.VCS = cloneVCS(c.metaVCS)
+				// The checkout is the session directory's, which is this
+				// directory or one above it: "." or its absolute path.
+				if p, ok := agentimport.CheckoutPath(tc.CWD, c.metaCWD); ok {
+					env.Checkouts = []agentsession.Checkout{{Path: p, VCS: cloneVCS(c.metaVCS), Branch: c.metaBranch}}
+				}
+				if c.metaURL != nil {
+					env.Unknown = map[string]json.RawMessage{Source + ":repository_url": c.metaURL}
+				}
 				c.addf(agentimport.Lossy, "codex/vcs-carried", l,
 					"the working directory moved inside the session's; the session meta's git state is repeated, which a nested repository would make wrong")
 			} else {

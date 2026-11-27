@@ -62,7 +62,7 @@ func TestRevisionEnv(t *testing.T) {
 	base := agentsession.NewEnvEntry("/work/demo")
 	base.Workspace = &agentsession.Workspace{Kind: "local"}
 	base.VCS = &agentsession.VCS{System: "git", Revision: "0000000", Dirty: true}
-	if err := base.VCS.SetMember("codex:branch", "main"); err != nil {
+	if err := base.VCS.SetMember("codex:x_upstream", "origin/main"); err != nil {
 		t.Fatal(err)
 	}
 	ds, err := DerivedEntries("call_1", "git commit -m wip", "[main abc1234] wip", base, "/elsewhere")
@@ -71,7 +71,7 @@ func TestRevisionEnv(t *testing.T) {
 	}
 	env := ds[0].Entry.(*agentsession.EnvEntry)
 	if env.CWD != "/work/demo" || env.Workspace == nil || env.Workspace.Kind != "local" || env.VCS == nil ||
-		env.VCS.Revision != "abc1234" || env.VCS.Dirty || string(env.VCS.Unknown["codex:branch"]) != `"main"` {
+		env.VCS.Revision != "abc1234" || env.VCS.Dirty || string(env.VCS.Unknown["codex:x_upstream"]) != `"origin/main"` {
 		t.Errorf("env %+v, vcs %+v", env, env.VCS)
 	}
 	if base.VCS.Revision != "0000000" || !base.VCS.Dirty {
