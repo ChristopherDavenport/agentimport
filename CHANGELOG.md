@@ -5,6 +5,13 @@ All user-visible changes to this library. The format follows
 uses [Semantic Versioning](https://semver.org/); before v1.0.0 minor
 versions may break the API.
 
+## Unreleased
+
+- Dependencies: agentsession v0.0.38 to v0.0.42, format 0.21 to 0.22,
+  and openresponses v0.0.19 to v0.0.20, which agentsession requires;
+  every converted session's header names `agentsession/0.22`, and the
+  goldens are regenerated. No entry changes from the bump alone.
+
 ## v0.0.4 - 2026-11-16
 
 - Dependencies: modernc.org/sqlite v1.59.0 to v1.62.0, the version
