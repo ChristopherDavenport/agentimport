@@ -109,7 +109,7 @@ the parent's response that spawned it.
 | sub-agent no call spawned | session, `parent_session` alone, no link | |
 | first model below a root | `config` with `model`, first entry of the root | `requestedModel` when the line has it |
 | model change between responses | `config` delta with `model` | |
-| `cwd`, `gitBranch`, `version` | `env` with `cwd`; branch in vcs member `claudecode:branch`, version in `claudecode:version` | written at a root and where any changes |
+| `cwd`, `gitBranch`, `version` | `env` with `cwd`; the branch on the checkout at `.` (`checkouts`, with a `vcs` of system git and no revision, which the entry's `vcs` repeats; git's `HEAD` for a detached HEAD is no branch), version in `claudecode:version` | written at a root and where any changes |
 | user prompt | `item`, user `message` | `isMeta` lines are `visible: false`; `origin` is the item's `source` (below) |
 | `isVisibleInTranscriptOnly` line, outside a compaction | `custom` | shown in the transcript, not sent |
 | assistant `text` block | `item`, assistant `message` with `output_text` | one per block, as the provider replays them |
@@ -239,7 +239,7 @@ the codes marked "kept, or dropped" are dropped instead.
 | `agentimport/reasoning-provider` | gap | A thinking signature is in `encrypted_content`, which says nothing of the provider that can replay it; the entry carries `claudecode:provider`. |
 | `agentimport/tool-error` | lossy | A tool result had `is_error`, which the model was sent; the output's entry is `failed`, and `function_call_output` has no error flag a request carries (Open Responses), so a rebuilt request does not send it. |
 | `agentimport/usage-detail` | kept | A response's usage has members Responses usage lacks (the service tier, server tool use); the native usage is `claudecode:usage`. |
-| `agentimport/vcs-branch` | gap | The git branch is the vcs member `claudecode:branch`; the format's vcs records a revision, not a branch. |
+| `claudecode/checkout-at-cwd` | lossy | The git branch is the branch of the checkout listed at `.`, the working directory: Claude Code records no repository root, so a session run below the root lists its working directory as the checkout's top. |
 | `claudecode/instructions-layers` | lossy | An `instructions` attachment holds a file of a type Claude Code is not known to write, a file with no path, or a path twice, so `instructions_part` names no layer of it. |
 | `claudecode/extension-part` | kept | A user or tool-result block with no Open Responses input part (`tool_reference`, a block kept raw) is the extension part `anthropic.<type>` carrying it; see *Extension types*. |
 | `claudecode/agent-meta` | kept, or dropped | A sub-agent's meta file is the header member `claudecode:agent_meta`. |

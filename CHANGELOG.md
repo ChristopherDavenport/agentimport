@@ -5,6 +5,36 @@ All user-visible changes to this library. The format follows
 uses [Semantic Versioning](https://semver.org/); before v1.0.0 minor
 versions may break the API.
 
+## Unreleased
+
+- Dependencies: agentsession v0.0.38 to v0.0.42, format 0.21 to 0.22,
+  and openresponses v0.0.19 to v0.0.20, which agentsession requires;
+  every converted session's header names `agentsession/0.22`, and the
+  goldens are regenerated. No entry changes from the bump alone.
+
+- **The git branch is a checkout's (format 0.22).** Claude Code's
+  `gitBranch`, Codex's session meta `git` and Hermes Agent's
+  `git_branch` and `git_repo_root` become an `env` entry's `checkouts`,
+  and the `agentimport/vcs-branch` gap is closed: the vcs members
+  `claudecode:branch`, `codex:branch` and `hermes:branch` are no longer
+  written. Claude Code and Codex record no repository root, so their
+  checkout is the one at `.` (`claudecode/checkout-at-cwd`,
+  `codex/checkout-at-cwd`, lossy); Hermes places it from its root
+  (`hermes/checkout-at-cwd` when the root is not a path a checkout
+  takes). git's `HEAD`, printed for a detached HEAD, is no branch.
+- **Codex's repository URL is an env member, without userinfo.**
+  `codex:repository_url` moves from the `vcs` to the `env` entry, since
+  the vcs is also the `.` checkout's and RFC 0001 puts no remote URL in
+  a checkout, and any userinfo, which can be a credential, is removed
+  (`codex/repository-url-userinfo`, dropped). A move inside the
+  session's directory, and a derived env, repeat the checkout and the
+  URL.
+- **`RevisionEnv` repeats the checkouts in force.** After a commit the
+  checkout at `.` takes the new vcs and an absolute checkout holding
+  the working directory the revision; with no checkouts in force it
+  lists none. Added: `CheckoutPath`, `CheckoutBranch`,
+  `CloneCheckouts`, `WithoutUserinfo`.
+
 ## v0.0.4 - 2026-11-16
 
 - Dependencies: modernc.org/sqlite v1.59.0 to v1.62.0, the version

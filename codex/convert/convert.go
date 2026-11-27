@@ -289,6 +289,11 @@ type converter struct {
 	// inside that directory repeats: an env entry is a whole snapshot.
 	metaCWD string
 	metaVCS *agentsession.VCS
+	// metaBranch is the checkout's branch, and metaURL the env member
+	// codex:repository_url as written, which the same env entries
+	// repeat.
+	metaBranch string
+	metaURL    json.RawMessage
 	// toolNames maps a recorded call id to its tool's name, so only a
 	// shell tool's output is read for an exit code.
 	toolNames map[string]string
@@ -650,18 +655,20 @@ func (c *converter) start() error {
 		env.Timestamp = ts
 		if g := m.Git; g != nil && (g.CommitHash != "" || g.Branch != "" || g.RepositoryURL != "") {
 			env.VCS = &agentsession.VCS{System: "git", Revision: g.CommitHash}
-			if g.Branch != "" {
-				if err := env.VCS.SetMember(Source+":branch", g.Branch); err != nil {
-					return err
-				}
-				c.addf(agentimport.Gap, "agentimport/vcs-branch", c.meta,
-					"the git branch is the vcs member %s:branch; the format's vcs has no branch", Source)
-			}
 			if g.RepositoryURL != "" {
-				if err := env.VCS.SetMember(Source+":repository_url", g.RepositoryURL); err != nil {
+				// An env member, not a vcs one: the vcs is the "." checkout's
+				// too, and RFC 0001 (env, since 0.22) puts no remote URL in
+				// a checkout, and has a URL kept elsewhere lose its userinfo.
+				u, stripped := agentimport.WithoutUserinfo(g.RepositoryURL)
+				if err := c.b.Member(env, "repository_url", u); err != nil {
 					return err
 				}
-				c.addf(agentimport.Kept, "codex/repository-url", c.meta, "the repository URL is the vcs member %s:repository_url", Source)
+				c.addf(agentimport.Kept, "codex/repository-url", c.meta, "the repository URL is the env member %s:repository_url", Source)
+				if stripped {
+					c.addf(agentimport.Dropped, "codex/repository-url-userinfo", c.meta,
+						"the repository URL carried userinfo, which can be a credential; it is left out of %s:repository_url", Source)
+				}
+				c.metaURL = env.Unknown[Source+":repository_url"]
 			}
 			if extra := nonNull(g.Extra); len(extra) > 0 {
 				for k, v := range extra {
@@ -671,6 +678,12 @@ func (c *converter) start() error {
 				}
 				c.addf(agentimport.Kept, "codex/git-members", c.meta, "git members %s are vcs members under %s:", memberNames(extra), Source)
 			}
+			// The git state is the checkout's at the session's directory
+			// (RFC 0001, env, since 0.22), its vcs the entry's.
+			c.metaBranch = agentimport.CheckoutBranch(g.Branch)
+			env.Checkouts = []agentsession.Checkout{{Path: ".", VCS: cloneVCS(env.VCS), Branch: c.metaBranch}}
+			c.addf(agentimport.Lossy, "codex/checkout-at-cwd", c.meta,
+				"the git state is the checkout's at the session's working directory, listed at .; Codex records no repository root, so a session started below the root lists its working directory as the checkout's top")
 			c.metaCWD, c.metaVCS = m.CWD, env.VCS
 		}
 		if err := c.appendNow(env, c.meta); err != nil {

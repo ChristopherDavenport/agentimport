@@ -1,6 +1,6 @@
 codex: 8 lines: mapped 6 kept 2 dropped 0 malformed 0
   gap      agentimport/reasoning-provider                    1  the encrypted reasoning is in encrypted_content, which says nothing of the provider that can replay it; the entry carries codex:provider (at 4)
-  gap      agentimport/vcs-branch                            1  the git branch is the vcs member codex:branch; the format's vcs has no branch (at 1)
+  lossy    codex/checkout-at-cwd                             1  the git state is the checkout's at the session's working directory, listed at .; Codex records no repository root, so a session started below the root lists its working directory as the checkout's top (at 1)
   lossy    codex/legacy-instructions                         1  the legacy session meta's user instructions are the header member codex:instructions; how they reached the model is not recorded (at 1)
   lossy    codex/legacy-layout                               1  the rollout predates the envelope (before September 2025): its items carry no timestamps, so entries take the time of the last line that had one
   lossy    codex/no-base-instructions                        1  the session meta records no base instructions (older rollouts); Codex rendered the model's default, which is not recorded, so the session has none (at 1)

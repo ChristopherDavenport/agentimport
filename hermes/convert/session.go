@@ -419,12 +419,16 @@ func (sc *sconv) start() error {
 		env := agentsession.NewEnvEntry(s.CWD)
 		env.VCS = &agentsession.VCS{System: "git"}
 		env.Timestamp = ts
-		if s.GitBranch != "" {
-			if err := env.VCS.SetMember(Source+":branch", s.GitBranch); err != nil {
-				return err
-			}
-			sc.addf(agentimport.Gap, "agentimport/vcs-branch", "", "the session's git branch is in the vcs member %s:branch", Source)
+		// The git state is the checkout's whose top is the repository
+		// root (RFC 0001, env, since 0.22): "." when that is the working
+		// directory, its relative name below it, its absolute path above.
+		p, ok := agentimport.CheckoutPath(s.CWD, s.GitRepoRoot)
+		if !ok {
+			p = "."
+			sc.addf(agentimport.Lossy, "hermes/checkout-at-cwd", "",
+				"the session records no repository root in the form a checkout path takes; the checkout is listed at ., the working directory")
 		}
+		env.Checkouts = []agentsession.Checkout{{Path: p, VCS: &agentsession.VCS{System: "git"}, Branch: agentimport.CheckoutBranch(s.GitBranch)}}
 		if err := sc.b.Member(env, "repo_root", s.GitRepoRoot); err != nil {
 			return err
 		}

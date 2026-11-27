@@ -708,12 +708,24 @@ func TestVCSCarried(t *testing.T) {
 	if first == nil || first.Revision != "abc123def4567890abc123def4567890abc12345" || string(first.Unknown["codex:x_upstream"]) != `"origin/main"` {
 		t.Fatalf("session meta vcs = %+v", first)
 	}
+	// The session meta's git state is the checkout at "." (format 0.22),
+	// its vcs the entry's, and the repository URL an env member.
+	if co := envs[0].Checkout("."); co == nil || co.Branch != "main" || co.VCS == nil || co.VCS.Revision != first.Revision ||
+		string(envs[0].Unknown["codex:repository_url"]) != `"https://example.com/demo.git"` || first.Unknown["codex:repository_url"] != nil {
+		t.Fatalf("session meta checkouts = %+v, members %v", envs[0].Checkouts, envs[0].Unknown)
+	}
 	in := envs[1]
 	if in.CWD != "/work/demo/pkg" || in.VCS == nil || in.VCS.Revision != first.Revision ||
-		string(in.VCS.Unknown["codex:branch"]) != `"main"` || string(in.VCS.Unknown["codex:x_upstream"]) != `"origin/main"` {
+		string(in.VCS.Unknown["codex:x_upstream"]) != `"origin/main"` {
 		t.Errorf("env inside the session's directory = %+v, vcs %+v", in, in.VCS)
 	}
-	if out := envs[2]; out.CWD != "/work/demo-other" || out.VCS != nil {
+	// From below it, the checkout is the session directory's, by its
+	// absolute path, and the URL is repeated.
+	if co := in.Checkout("/work/demo"); len(in.Checkouts) != 1 || co == nil || co.Branch != "main" || co.VCS == nil || co.VCS.Revision != first.Revision ||
+		string(in.Unknown["codex:repository_url"]) != `"https://example.com/demo.git"` {
+		t.Errorf("env inside the session's directory: checkouts %+v, members %v", in.Checkouts, in.Unknown)
+	}
+	if out := envs[2]; out.CWD != "/work/demo-other" || out.VCS != nil || out.Checkouts != nil {
 		t.Errorf("env outside the session's directory = %+v, vcs %+v", out, out.VCS)
 	}
 	want := map[string]agentimport.Kind{"codex/vcs-carried": agentimport.Lossy, "codex/vcs-after-cwd": agentimport.Lossy, "codex/git-members": agentimport.Kept}
@@ -852,5 +864,43 @@ func TestInstructionLayers(t *testing.T) {
 	want := []string{"agentskill ", "agentsmd /work/demo", "-", "-"}
 	if strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Errorf("instructions_part %q, want %q", got, want)
+	}
+}
+
+// TestRepositoryURLUserinfo: a repository URL carrying userinfo, which
+// can be a credential, is kept without it, and reported dropped
+// (RFC 0001, env, since 0.22).
+func TestRepositoryURLUserinfo(t *testing.T) {
+	src := fixtures(t)["vcs"]
+	data, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = bytes.Replace(data, []byte(`"https://example.com/demo.git"`), []byte(`"https://bob:ghp_secret@example.com/demo.git"`), 1)
+	dst := filepath.Join(t.TempDir(), filepath.Base(src))
+	if err := os.WriteFile(dst, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res := convertFixture(t, dst, Options{})
+	for _, e := range res.Sessions[0].Entries() {
+		if raw, err := json.Marshal(e); err != nil || bytes.Contains(raw, []byte("ghp_secret")) || bytes.Contains(raw, []byte("bob")) {
+			t.Errorf("entry carries the userinfo: %s (%v)", raw, err)
+		}
+		if env, ok := e.(*agentsession.EnvEntry); ok && env.Unknown["codex:repository_url"] != nil &&
+			string(env.Unknown["codex:repository_url"]) != `"https://example.com/demo.git"` {
+			t.Errorf("repository URL = %s", env.Unknown["codex:repository_url"])
+		}
+	}
+	n := 0
+	for _, f := range res.Report.Findings {
+		if f.Code == "codex/repository-url-userinfo" {
+			n++
+			if f.Kind != agentimport.Dropped {
+				t.Errorf("%+v; want dropped", f)
+			}
+		}
+	}
+	if n != 1 {
+		t.Errorf("%d codex/repository-url-userinfo findings, want 1", n)
 	}
 }

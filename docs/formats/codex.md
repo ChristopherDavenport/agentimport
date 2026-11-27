@@ -90,7 +90,7 @@ rollouts' session meta lines instead (see Sub-agents and forks).
 
 | Native | Session |
 | --- | --- |
-| `session_meta` | the header: `id` the thread id, `created_at`, `cwd`, `harness` `{codex, cli_version}`, `parent_session` the parent or fork origin; `base_instructions` a first `config`; `git` an `env` with `vcs` (`commit_hash` the revision; `branch`, `repository_url` and any member Codex adds as `codex:<name>` vcs members); the rest the header member `codex:session_meta` |
+| `session_meta` | the header: `id` the thread id, `created_at`, `cwd`, `harness` `{codex, cli_version}`, `parent_session` the parent or fork origin; `base_instructions` a first `config`; `git` an `env` with `vcs` (`commit_hash` the revision; any member Codex adds as a `codex:<name>` vcs member) and the checkout at `.` carrying that `vcs` and `branch` (`codex/checkout-at-cwd`; git's `HEAD` is no branch), and `repository_url`, its userinfo removed, the env member `codex:repository_url`; the rest the header member `codex:session_meta` |
 | `forked_from_id` | a `fork_of` link, the session's first entry |
 | a `spawn_agent` call's output, or the record naming the thread it started | a `peer` link to the thread's session after the output; the thread's rollout converts into that session, after this one (see below) |
 | `response_item` that is model output (assistant message, reasoning, calls, compaction items) | `item` entries tied to a `response` entry written after them |
@@ -101,7 +101,7 @@ rollouts' session meta lines instead (see Sub-agents and forks).
 | a type it does not | an extension item; see below |
 | `token_count` event | the response's `usage` (its `last_token_usage`) and `status: completed`; the running total in `codex:token_count`, rate limits in `codex:rate_limits` |
 | `token_usage_record` | the response's `response_id`, and its usage when no token count gave one |
-| `turn_context` | a `config` delta of what changed: `model`, `reasoning`; other settings in `codex:turn_context`; an `env` when `cwd` moved, repeating the session meta's `vcs` when the new directory is the session's or below it (`codex/vcs-carried`), with none outside it (`codex/vcs-after-cwd`), since an `env` entry is a whole snapshot |
+| `turn_context` | a `config` delta of what changed: `model`, `reasoning`; other settings in `codex:turn_context`; an `env` when `cwd` moved, repeating the session meta's `vcs`, its checkout (at `.`, or at the session directory's absolute path from below it) and `codex:repository_url` when the new directory is the session's or below it (`codex/vcs-carried`), with none outside it (`codex/vcs-after-cwd`), since an `env` entry is a whole snapshot |
 | `compacted` | a `custom` entry holding the record, then a `compaction` entry (see below) |
 | `thread_rolled_back` | a branch (see below) whose first entry is a `custom` entry holding the event |
 | `inter_agent_communication` | the `codex.agent_message` item Codex sends for it |
@@ -336,7 +336,7 @@ harvest the values from the original and check its output for them
 | --- | --- | --- |
 | `session_meta.id` | the header's `id` | the native thread |
 | `session_meta.cwd` | the header's `cwd` and the first `env` | the user's home directory, through the project path |
-| `session_meta.git.repository_url` | the vcs member `codex:repository_url` | the repository's owner |
+| `session_meta.git.repository_url` | the env member `codex:repository_url`, its userinfo removed | the repository's owner |
 | `session_meta.originator` | the header's `codex:session_meta` | the client |
 | `AGENTS.md instructions directory` | an AGENTS.md message's `instructions_part` `id` | the home directory, through the project path |
 
@@ -377,10 +377,10 @@ every converter can report are in [README.md](README.md).
 | --- | --- | --- |
 | `agentimport/reasoning-provider` | gap | Encrypted reasoning is in `encrypted_content`, which says nothing of the provider that can replay it; the entry carries `codex:provider`, the session's model provider. |
 | `agentimport/usage-detail` | kept | A response's usage has members Responses usage has no place for, ones Codex added after this converter; the native usage is `codex:usage`. |
-| `agentimport/vcs-branch` | gap | The git branch is the vcs member `codex:branch`; the format's vcs has no branch. |
 | `codex/assistant-input` | kept | An assistant message the harness wrote (a delivered or inherited message, compaction output, another agent's instruction as JSON) is input, not a response's output; it is marked `codex:input`. |
 | `codex/call-id-renamed` | repaired | A call id another call of the session holds, an empty one, or one with characters providers refuse, was renamed; the native one is `codex:call_id`. |
 | `codex/call-without-output` | lossy | A call on the path had no output when a new user turn began; Codex sends later requests an output it makes up, which the rollout does not record. |
+| `codex/checkout-at-cwd` | lossy | The session meta's git state is the checkout listed at `.`, the session's working directory: Codex records no repository root, so a session started below the root lists its working directory as the checkout's top. |
 | `codex/codex-item` | kept | An item of Codex's own is a `codex.<type>` extension item, its body verbatim. |
 | `codex/compaction` | kept | A compaction is a custom entry holding its record and a compaction entry over the window Codex installed; see Compaction. |
 | `codex/compaction-alias` | repaired | A `compaction_summary` item, which Codex reads as `compaction`, is a compaction item. |
@@ -422,7 +422,8 @@ every converter can report are in [README.md](README.md).
 | `codex/reasoning-raw` | kept | Raw reasoning text that only the `agent_reasoning_raw_content` events carry (Codex writes a reasoning item's content only when it is `reasoning_text`) is a custom entry; Codex does not send it. |
 | `codex/record-order` | lossy | The rollout names no version this can read; the order of its records was judged by where its first token count falls. |
 | `codex/record` | kept | A record the model does not see (world state, retained context, a risk score, realtime state, inter-agent metadata, a legacy state record, an unplaceable usage record) is a custom entry. |
-| `codex/repository-url` | kept | The repository URL is the vcs member `codex:repository_url`. |
+| `codex/repository-url` | kept | The repository URL is the env member `codex:repository_url`, not a vcs member, since the vcs is the checkout at `.`'s too and RFC 0001 puts no remote URL in a checkout. |
+| `codex/repository-url-userinfo` | dropped | The repository URL carried userinfo, which can be a credential; it is left out of `codex:repository_url`, as RFC 0001 asks of a URL kept in an entry. |
 | `codex/response-id` | lossy | The rollout names no response ids; a response is named `codex-line-<n>` after its first item's line. |
 | `codex/rollback` | kept | A rollback is a branch from the entry before the first dropped turn; the dropped turns stay on the branch left, and the event is a custom entry. |
 | `codex/rollback-first-turn` | lossy | A rollback dropped every user turn; Codex also strips model-switch and mode notices from the first turn's developer messages, which the conversion does not. |

@@ -1,7 +1,7 @@
-github.com/ChristopherDavenport/agentsession v0.0.38 h1:F9QK5eIoxDzk55TPh57gBXN3e3BZJdsA31uDbhOqDAg=
-github.com/ChristopherDavenport/agentsession v0.0.38/go.mod h1:SEJEvLEVVKBGUyML5Kr6SMmoU2v1dBPzbQPPTkAN2T4=
-github.com/ChristopherDavenport/openresponses v0.0.19 h1:IxoOr9QUOtKPN8GXGI7pQPvbN1qC4NZY4SVKz7UbEbw=
-github.com/ChristopherDavenport/openresponses v0.0.19/go.mod h1:oZT6GCySXw3+vL5LzrJrRI5qagBumqvwDZdp6Kr++a8=
+github.com/ChristopherDavenport/agentsession v0.0.42 h1:cTGj0SGW5FI2FYouDFt7cV9k4MYd6c7R3zI/jmf7n8U=
+github.com/ChristopherDavenport/agentsession v0.0.42/go.mod h1:p1YUil1k6AlU0R5d8TogaYBuHQRNRSD5gN4ALAX2TWY=
+github.com/ChristopherDavenport/openresponses v0.0.20 h1:YQdzzI+q4UDYR5EFUeypd2lIOPDKKSYQ6ZGoQw7gCN4=
+github.com/ChristopherDavenport/openresponses v0.0.20/go.mod h1:oZT6GCySXw3+vL5LzrJrRI5qagBumqvwDZdp6Kr++a8=
 github.com/dustin/go-humanize v1.1.0 h1:dbKTrvD0klcbBV/h4AWJdMuZogJACoMlvWIWZ5b2xWg=
 github.com/dustin/go-humanize v1.1.0/go.mod h1:hc1CvRkJMsgxqjmjMQF3QNRAZBwY8AXBAzKYoSX9sFI=
 github.com/google/pprof v0.0.0-20261016150608-1facf8f91b50 h1:PlNWJRxu5APSV0pWqfIsZ0qt9OOGHSWfZQ4zvx+WgWs=
